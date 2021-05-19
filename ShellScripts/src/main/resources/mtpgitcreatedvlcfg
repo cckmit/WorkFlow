@@ -1,0 +1,3265 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcreatedvlcfg                                           #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to generate the configuration file and compile/build in         #
+#      DVL Workspace for TPF Project                                          #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation plan with load date info                          #
+#      $2  - PUT Level of the plan                                            #
+#      $3  - DVL Dependancy                                                   #
+#      $4  - STG Dependancy                                                   #
+#      $5  - PDDDS zLinux Library lst                                         #
+#      $6  - PDDDS zOS Library list                                           #
+#      $7  - Rebuilt status                                                   #
+#      $8  - Changed files list                                               #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   06092017    NARASHIMAN   created the script                               #
+#   11092017    ARUL         Update with local support                        #
+#   12052017    ARUL         Update with dependancy reference                 #
+#   01262018    ARUL         Update C and CPP FALG requirement change         #
+#   05022018    ARUL         Update FCTB force compule .MAK exception         #
+#   05112018    ARUL         Derived macro in .gen file make it unique        #
+#   05152018    VINOTH       Sabre Talk Compilation                           #
+#   07132018    ARUL         Sabre Talk Compilation warning excluded          #
+#   08032018    ARUL         Update FCTB force compile to all systems         #
+#   08302018    ARUL         Update same load date dependancy fix             #
+#   09122018    VINOTH       Handle Lock with ImplPlan num for cancel button  #
+#   09132018    ARUL         Handle no MAK or no CNTL entry                   #
+#   12102018    ARUL         OCO NON-IBM Support enabled                      #
+#   02182019    VINOTH       Updated dvl build code for DEVL and PROD         #
+#   04052019    VINOTH       Multiple sabre-talk complie                      #
+#   04092019    VINOTH       Removing lock which used to run sequence process #
+#   05102019    VINOTH       Unresolved reference compilation change          #
+#   04252019    GOWTHAM      Updated with logger support                      #
+#   08052019    GOWTHAM      Updated to remove .err files on dvl workspace    #
+#   08212019    VINOTH       DVL build compile only for changed files         #
+#   09032019    VINOTH       log functionality added for rebuilt part files   #
+#   09052019    VINOTH       lock to handle one at the one time for build     #
+#   09132019    ARUL         Updated to support MAKETPF compilation CPU limit #
+#   09242019    VINOTH       Dont delete err files and process for missed dir #
+#   09262019    VINOTH       Error file ignorance corrected                   #
+#   09302019    VINOTH       Improved error message at JSON response          #
+#   10112019    VINOTH       Added warning list when checking final errolist  #
+#   11022019    ARUL         timestamp enabled for build and echo messg       #
+#   11042019    VINOTH       failed files send to java for partical rebuild   #
+#   02042020    ARUL         Updated to support invalid HFS at first line     #
+#   03172020    VINOTH       Update HFS at first line issue to check null data#
+#   03182020    VINOTH       put TPF_ROOT not updated := due to not validate  #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=9;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+implementation="$1";
+implPutLevel="$2";                     #Plan PUT Level
+putStatus="$3";                        #Check Put status for confirm dev or prod
+implDependancyDvl="$4";                #Devl path modernization tools dependacy
+implDependancyStg="$5";                #Staging path modernization tools dependacy
+pdddsSystemsLib="$6";                  #PDDDS zLinux Library list
+sabreIncLib="$7";                      #PDDDS zOS Library list
+reBuildAll="$8";                       #reBuildAll status True or false
+changedFiles="$9";                     #File after checkin for simple-reBuildAll
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+startDate=$(date +%Y%m%d%H%M%S);
+minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${implementation} ${implPutLevel} ${putStatus} ${implDependancyDvl} ${implDependancyStg} ${pdddsSystemsLib} ${sabreIncLib} ${reBuildAll} ${changedFiles} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function autoFixConfig {
+  local _RC=0;
+  local _execDate;
+  local _taskDate;
+  local _syslineNo;
+  local _applineNo;
+  local _sysPtr;
+  local _appPtr;
+  local _sysDir;
+  local _appDir;
+  if [ -f "maketpf.cfg" ]; then
+    _execDate=$(date +%-S)
+    _taskDate=$(date +%-S)
+    _syslineNo=($(grep -n '^TPF_ROOT :\|#TPF_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+    _sysPtr="${_syslineNo[0]}"
+    _sysDir=($(grep -n '^TPF_ROOT :\|#TPF_ROOT ' maketpf.cfg | cut -d : -f 3 | cut -d ' ' -f 2))
+    if [ ! -d "${_sysDir}" ] && [ -n "${_syslineNo}" ]; then
+      sed -i "${_sysPtr}s/./#T/1" maketpf.cfg      #Replace exiting + symbol
+      sed -i "$((_sysPtr=_sysPtr + 1))s/./:/10" maketpf.cfg      #Replace exiting + symbol
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Configured file updated by removing invalid first TPF_ROOT HFS - $(($(date +%-S)-_taskDate))s"
+    fi
+    _taskDate=$(date +%-S)
+    _applineNo=($(grep -n '^APPL_ROOT :\|#APPL_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+    _appPtr="${_applineNo[0]}"
+    _appDir=($(grep -n '^APPL_ROOT :\|#APPL_ROOT ' maketpf.cfg | cut -d : -f 3 | cut -d ' ' -f 2))
+    if [ ! -d "${_appDir}" ] && [ -n "${_applineNo}" ] ; then
+      sed -i "${_appPtr}s/./#T/1" maketpf.cfg      #Replace exiting + symbol
+      sed -i "$((_appPtr=_appPtr + 1))s/./:/10" maketpf.cfg      #Replace exiting + symbol
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Configured file updated by removing invalid first APPL_ROOT HFS - $(($(date +%-S)-_taskDate))s"
+    fi
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf.cfg configured file updated by removing invalid first HFS - $(($(date +%-S)-_execDate))s"
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf.cfg not found for HFS validation RC:$EC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found for HFS validation";
+    _RC="${EC}";
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+function unResolved {
+  local _RC=0;
+  local _unresolveFiles;
+  local _unresolveVaribs;
+  local _resolveMaks;
+  local _execDate;                     #Execution block timestamp
+  local _taskDate;                     #Execution task execution timestamp
+  local _submDate;                     #Subtask execution timestamp
+  _execDate=$(date +%-S)
+  _unresolveFiles=($(find . -type f | grep unresolved_references))     #unresolved files
+  if [ -n "${_unresolveFiles[0]// /}" ]; then
+    if [ -f "unresolved_mak" ]; then
+      rm -f unresolved_mak;
+    fi
+    for _errReso in "${_unresolveFiles[@]}";
+    do
+      _unsrcName=${_errReso##*/};
+      _unResName=${_unsrcName%%.*};
+      _unresolveFile=($(sort -u "${_errReso}"))  #list of issue variables files
+      for _unresVar in "${_unresolveFile[@]}";
+      do
+        _unRefCmpl=($(find . -type f \( -name "*.c" -o -name "*.cpp" -o -name "*.asm" \) -exec grep -l "${_unresVar}" {} + | grep -v "${_unResName,,}"))
+        for _unResmak in "${_unRefCmpl[@]}";
+        do
+          _makunRes="${_unResmak##*/}";          #ignore source make file.
+          _makeFile=($(find . -type f -iname "*.mak" -exec grep -l "${_makunRes}" {} + ))
+          echo -e "${_makeFile[*]}" >> unresolved_mak
+        done
+        if [ -f "unresolved_mak" ]; then
+          _taskDate=$(date +%-S)
+          _resolveMak=($(uniq "unresolved_mak" | tr '\n' ' '))
+          for _makUnlink in "${_resolveMak[@]}"
+          do
+            _submDate=$(date +%-S)
+            makeSeg="${_makUnlink##*/}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Unresolved reference found for ${makeSeg} file"
+            if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+              nice -"${TPF_CPU_NICE}" maketpf "${makeSeg}" link TPF_VERIFY_LINK_REFS=NO; _RC=$?;
+              if [ "${_RC}" -eq 20 ]; then
+                autoFixConfig;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf ${makeSeg} link TPF_VERIFY_LINK_REFS=NO"
+                nice -"${TPF_CPU_NICE}" maketpf "${makeSeg}" link TPF_VERIFY_LINK_REFS=NO; _RC=$?;
+              fi
+            else
+              maketpf "${makeSeg}" link TPF_VERIFY_LINK_REFS=NO; _RC=$?;
+              if [ "${_RC}" -eq 20 ]; then
+                autoFixConfig;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf ${makeSeg} link TPF_VERIFY_LINK_REFS=NO"
+                maketpf "${makeSeg}" link TPF_VERIFY_LINK_REFS=NO; _RC=$?;
+              fi
+            fi
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-recompilation ${makeSeg} with TPF_VERIFY_LINK_REFS=NO flag completed RC:${_RC} - $(($(date +%-S)-_submDate))s"
+          done
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-recompilation for all unresolved reference source completed RC:${_RC} - $(($(date +%-S)-_taskDate))s"
+          if [ "${_RC}" -eq 0 ]; then
+            _taskDate=$(date +%-S)
+            if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+              nice -"${TPF_CPU_NICE}" maketpf "${_unResName,,}.mak" link TPF_VERIFY_LINK_REFS=NO; _RC=$?;
+              if [ "${_RC}" -eq 20 ]; then
+                autoFixConfig;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf ${_unResName,,}.mak link TPF_VERIFY_LINK_REFS=NO"
+                nice -"${TPF_CPU_NICE}" maketpf "${_unResName,,}.mak" link TPF_VERIFY_LINK_REFS=NO; _RC=$?;
+              fi
+            else
+              maketpf "${_unResName,,}.mak" link TPF_VERIFY_LINK_REFS=NO; _RC=$?;
+              if [ "${_RC}" -eq 20 ]; then
+                autoFixConfig;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf ${_unResName,,}.mak link TPF_VERIFY_LINK_REFS=NO"
+                maketpf "${_unResName,,}.mak" link TPF_VERIFY_LINK_REFS=NO; _RC=$?;
+              fi
+            fi
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-recompilation ${_unResName,,}.mak with TPF_VERIFY_LINK_REFS=NO flag completed RC:${_RC} - $(($(date +%-S)-_taskDate))s"
+            if [ "${_RC}" -eq 0 ]; then
+              _taskDate=$(date +%-S)
+              for _makUnlink in "${_resolveMak[@]}"
+              do
+                _submDate=$(date +%-S)
+                makeSeg="${_makUnlink##*/}"
+                if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+                  nice -"${TPF_CPU_NICE}" maketpf "${makeSeg}" link; _RC=$?;
+                  if [ "${_RC}" -eq 20 ]; then
+                    autoFixConfig;
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf ${makeSeg} link"
+                    nice -"${TPF_CPU_NICE}" maketpf "${makeSeg}" link; _RC=$?;
+                  fi
+                else
+                  maketpf "${makeSeg}" link; _RC=$?;
+                  if [ "${_RC}" -eq 20 ]; then
+                    autoFixConfig;
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf ${makeSeg} link"
+                    maketpf "${makeSeg}" link; _RC=$?;
+                  fi
+                fi
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Post-recompilation ${makeSeg} without TPF_VERIFY_LINK_REFS=NO flag completed RC:${_RC} - $(($(date +%-S)-_submDate))s"
+              done
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Post-recompilation for all source without TPF_VERIFY_LINK_REFS=NO flag completed RC:${_RC} - $(($(date +%-S)-_taskDate))s"
+              _taskDate=$(date +%-S)
+              if [ "${_RC}" -eq 0 ]; then
+                if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+                  nice -"${TPF_CPU_NICE}" maketpf "${_unResName,,}.mak" link; _RC=$?
+                  if [ "${_RC}" -eq 20 ]; then
+                    autoFixConfig;
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf ${_unResName,,}.mak link"
+                    nice -"${TPF_CPU_NICE}" maketpf "${_unResName,,}.mak" link; _RC=$?
+                  fi
+                else
+                  maketpf "${_unResName,,}.mak" link; _RC=$?
+                  if [ "${_RC}" -eq 20 ]; then
+                    autoFixConfig;
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf ${_unResName,,}.mak link"
+                    maketpf "${_unResName,,}.mak" link; _RC=$?
+                  fi
+                fi
+              fi
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Post-recompilation ${_unResName,,}.mak without TPF_VERIFY_LINK_REFS=NO flag completed RC:${_RC} - $(($(date +%-S)-_taskDate))s"
+            fi
+          fi
+          if [ "${_RC}" -ne 0 ]; then
+            errorMesUn+="${_errReso} "
+          fi
+          rm -f unresolved_mak;
+        fi
+      done
+    done
+  fi
+  if [ -n "${errorMesUn[0]// /}" ]; then
+    errorMesUnres="Unresolved references have been detected and can not be handled ${errorMesUn[*]}"
+    _RC=${EC};
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Post-process analysis of unresolved compilation references failed RC:${_RC} - $(($(date +%-S)-_execDate))s"
+  else
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Post-process analysis of unresolved compilation references completed RC:${_RC} - $(($(date +%-S)-_execDate))s"
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+function sabrCompile {
+  declare -a _sabreIncLib;             #sabre zos libs assign as array
+  local _RC=0;
+  local sbtList;
+  local sabreSeg;
+  local _RcValue;
+  local _Inclibs;                      #sabre zos libs selected
+  local _sabreInc;                     #colon seprated values
+  local _sabreInccomp;                 #removed : sabre zos libs
+  local _execDate;                     #Execution block timestamp
+  local _taskDate;                     #Execution task execution timestamp
+  local _submDate;                     #Subtask execution timestamp
+  _execDate=$(date +%-S)
+  #Searching sabre Segments in Dvl WorkSpace
+  if [[ "${reBuildAll}" == "true" ]] && [[ "${changedFiles}" == "NULL" ]] || [[ "${reBuildAll}" == "true" ]] && [[ -n "${changedFiles[0]// /}" ]]; then
+    sbtList=( $(find . -type f -name "*.sbt") )
+    if [ -n "${sbtList[0]// /}" ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Rebuild all the source segment with SBT found in this plan RC:$_RC"
+      #Process Sabre Talk Segments
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild all the source segment with SBT found in this plan"
+    else
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild all source segment initiated but no SBT source found in this plan to skip this process RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild all source segment initiated but no SBT source found in this plan to skip this process"
+    fi
+  elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.inc ]] || [[ "${changedFiles}" =~ \.mac ]]; then
+    sbtList=( $(find . -type f -name "*.sbt") )
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles} is inc/mac so compilation for ${sbtList[*]} RC:$_RC"
+    # mac also full complie
+    delSbtDer=($(find . -type f -name "*.sbt" | sed "s|^\./src/||"))
+    for delsbt in "${delSbtDer[@]}"
+    do
+      dervSegmt="${delsbt%%.*}";
+      if [ -n "${dervSegmt// /}" ]; then
+        find . -type f -iname "${dervSegmt}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+      fi
+    done
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles} is inc/mac so compilation for ${sbtList[*]}"
+  elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.sbt ]]; then
+    IFS=',' read -r -a sbtRebuilt <<< "${changedFiles[@]}";
+    for sbtRe in "${sbtRebuilt[@]}";
+    do
+      if [ -f "${DvlPath}${sbtRe}" ]; then
+        sbtRebldexe="${sbtRe##*.}";
+        if [[ "${sbtRebldexe}" == "sbt" ]]; then
+          sbtList+="${sbtRe##*/},"
+        fi
+      fi
+    done
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles} is .sbt so compilation for ${sbtList[*]} RC:$_RC"
+    unset IFS
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles} is .sbt so compilation for ${sbtList[*]}"
+  fi
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-process for compiling source references for SabreTalk operation completed - $(($(date +%-S)-_execDate))s"
+  if [ -n "${sbtList[0]// /}" ]; then
+    if [ ! -d lst ] && [ ! -d sbtasm ]; then
+      mkdir -m 777 lst sbtasm
+      #chmod -R 777 lst sbtasm         #Creating corresponding lst and sbtasm folders
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-process to create LST and SBTASM directory with Global Read-Write permission completed"
+    fi
+    if [[ "${sabreIncLib}" != NULL ]]; then
+      sabreIncLib="${sabreIncLib//\,/ }";        #Sabre include value
+      _Inclibs=(${sabreIncLib});
+      IFS=' '
+      if [ -n "${_Inclibs[0]// /}" ]; then
+        for (( i=0; i<${#_Inclibs[*]}; i++));
+        do
+          _sabreInc="${_sabreInc}:${_Inclibs[i]}"; #Append selected values in sabre incs
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: zOS library ${_Inclibs[i]} verified and apended to DevOps compilation utility";
+        done
+        _sabreInccomp="${_sabreInc#:*}";         #remove ':' from beginning
+      fi
+      unset IFS
+    fi
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Sabre Talk compilation started RC:$_RC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Sabre Talk compilation started.";
+    if [ -f "${SAB_DEV_COM}" ]; then
+      if [[ "${reBuildAll}" == "false" ]] && [[ ! "${changedFiles}" =~ \.inc ]]; then
+        if [[ "${reBuildAll}" == "false" ]] && [[ ! "${changedFiles}" =~ \.mac ]]; then
+          if [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.sbt ]]; then
+            sbtFinalLst="${sbtList%*,}"
+          fi
+        else
+          for sabreMul in "${sbtList[@]}";
+          do
+            if [[ "${sabreMul}" =~ ./src ]]; then
+              sbtSegms="${sabreMul##*/}";
+              sbtSegcom+="${sbtSegms},";
+            fi
+            sbtFinalLst="${sbtSegcom%*,}";
+          done
+        fi
+      else
+        for sabreMul in "${sbtList[@]}";
+        do
+          if [[ "${sabreMul}" =~ ./src ]]; then
+            sbtSegms="${sabreMul##*/}";
+            sbtSegcom+="${sbtSegms},";
+          fi
+          sbtFinalLst="${sbtSegcom%*,}";
+        done
+      fi
+      _execDate=$(date +%-S)
+      if [[ "${sabreIncLib[0]}" != NULL ]]; then
+        "${SAB_DEV_COM}" "${USR_IMPL_CORE,,}" "${DvlPath}src/${sbtFinalLst}" "${DvlPath}" "TEST" "${_sabreInccomp}" | tee sabre.tmp
+      else
+        "${SAB_DEV_COM}" "${USR_IMPL_CORE,,}" "${DvlPath}src/${sbtFinalLst}" "${DvlPath}" | tee sabre.tmp
+      fi
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: All the SBT files submitted to z/OS for compilation - $(($(date +%-S)-_execDate))s"
+      if [ -f "sabre.tmp" ]; then
+        _RcValue="$(tail -1 sabre.tmp)";
+        if [[ "${_RcValue}" =~  "OUTPUT:" ]]; then
+          _RcValue="${_RcValue#OUTPUT:*}";
+          #RC=ABCD.sbt=0,EFGH.sbt=0,AB12.sbt=12,AJAH.sbt=8,JKHD.sbt=0,OIOK.sbt=12,JHSS.sbt=0,JHS4.sbt=4
+          if [[ "${_RcValue}" =~  =12|=8|=20|=-255 ]]; then
+            IFS=',' read -r -a _rcuniq <<< "${_RcValue}"
+            for ((i=0;i<"${#_rcuniq[@]}";i++))
+            do
+              if [[ "${_rcuniq[i]}" =~ =8|=12|=20|=-255 ]]; then
+                errorsbt+="${_rcuniq[i]},";
+                srcErrSbr+="src/${_rcuniq[i]%=*},";
+              fi
+            done
+            unset IFS
+            sabreErr="Sabretalk Compilation failed in zOS ${errorsbt} Refer to lst(s) for more details"
+            echo -e "ERROR:$(date +"%Y-%m-%d %H:%M:%S") ${sabreErr} - $(($(date +%-S)-_execDate))s";
+            buildMSG="${USR_IMPL_PLAN^^}: Sabretalk pre-compile in zOS has failed for ${errorsbt} from ${USR_IMPL_CORE}. Refer to lst(s) for more details"
+            sendBLDWSMSG "${buildMSG}" "${USR_IMPL_PLAN}" "SH_BUILD_STATUS"
+            _RC=${EC};
+            [ -f sabre.tmp ] && rm -f sabre.tmp;
+          else
+            buildMSG="${USR_IMPL_PLAN^^}: Sabretalk pre-compile in zOS has completed for ${USR_IMPL_CORE}"
+            sendBLDWSMSG "${buildMSG}" "${USR_IMPL_PLAN}" "SH_BUILD_STATUS"
+            _RC="$RC";
+            [ -f sabre.tmp ] && rm -f sabre.tmp;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Sabretalk pre-compile at zOS has completed ${_RcValue} for ${USR_IMPL_CORE} - $(($(date +%-S)-_execDate))s"
+          fi
+        else
+          sabreErr="${USR_IMPL_PLAN^^}: Sabretalk pre-compile in zOS has failed for ${errorsbt} from ${USR_IMPL_CORE}. Refer to lst(s) for more details"
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${sabreErr} RC:$EC"
+          echo -e "ERROR:$(date +"%Y-%m-%d %H:%M:%S") ${sabreErr} - $(($(date +%-S)-_execDate))s";
+          buildMSG="${USR_IMPL_PLAN^^}: Sabretalk pre-compile in zOS has failed for ${errorsbt} from ${USR_IMPL_CORE}. Refer to lst(s) for more details"
+          sendBLDWSMSG "${buildMSG}" "${USR_IMPL_PLAN}" "SH_BUILD_STATUS"
+          _RC=${EC};
+        fi
+      else
+        sabreErr="Sabretalk Compilation output comes with invalid format form zOS for ${USR_IMPL_PLAN}-${USR_IMPL_CORE}"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${sabreErr} RC:$EC"
+        echo -e "ERROR:$(date +"%Y-%m-%d %H:%M:%S") ${sabreErr} - $(($(date +%-S)-_execDate))s";
+        buildMSG="${USR_IMPL_PLAN^^}: Sabretalk compilation output comes with invalid format form zOS for ${USR_IMPL_CORE}"
+        sendBLDWSMSG "${buildMSG}" "${USR_IMPL_PLAN}" "SH_BUILD_STATUS"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Sabretalk compilation output comes with invalid format form zOS ${DvlPath} RC:$EC"
+        _RC=${EC};
+      fi
+    else
+      sabreErr="Sabretalk Compilation Utility (${SAB_DEV_COM}) is not available in zlinux. Please contact zTPF DevOps Support."
+      echo -e "ERROR:$(date +"%Y-%m-%d %H:%M:%S") ${sabreErr}";
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${sabreErr} RC:$EC"
+      _RC=${EC};
+    fi
+    [ -f sabre.tmp ] && rm -f sabre.tmp;
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+function tpfBuild {
+  local _RC=0;
+  local _tpfarEr=0;
+  local cpList;
+  local _cpFile;
+  local _cpName;
+  local cppList;
+  local _cppFile;
+  local _cppName;
+  local asmList;
+  local _asmFile;
+  local _asmName;
+  local compList;
+  local _compFile;
+  local _compName;
+  local makList;
+  local fdt;
+  local cpListFinal="";
+  local makListFinal="";
+  local cppListFinal="";
+  local asmListFinal="";
+  local makPresnt="";
+  local _execDate;                     #Execution block timestamp
+  local _taskDate;                     #Execution task execution timestamp
+  local _submDate;                     #Subtask execution timestamp
+  local _libsFile=();                  #LIBS Error files
+  #Load warning exclude list
+  warningExclude
+  #Force complie .CPP segmentss
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:TPF Build process initiated RC:$_RC"
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: TPF build process initiated..."
+   #cpList=( $(find . -type f -name "*.c") )
+  #Process WSP TPFAR segments-------------------------------------------------#
+  if [[ "${USR_IMPL_CORE,,}" == "wsp" ]]; then
+    _execDate=$(date +%-S)
+    if [[ "${reBuildAll}" == "true" ]] && [[ "${changedFiles}" == "NULL" ]] || [[ "${reBuildAll}" == "true" ]] && [[ -n "${changedFiles[0]// /}" ]]; then
+      cpList=( $(find . -type f -name "*.c" | sed "s|^\./src/||") )
+      if [ -n "${cpList[0]// /}" ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Rebuild all the C source segment with SBT found in this plan ${cpList[*]} RC:$_RC"
+        #Process Sabre Talk Segments
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild true and ${changedFiles[*]} is NULL so compilation for ${cpList[*]}"
+      fi
+    elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.h ]] || [[ "${changedFiles}" =~ .hpp ]]; then
+      cpList=( $(find . -type f -name "*.c" | sed "s|^\./src/||") )
+      for delCp in "${cpList[@]}";
+      do
+        delCpDer="${delCp%%.*}"
+        if [ -n "${delCpDer// /}" ]; then
+          find . -type f -iname "${delCpDer}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+        fi
+        makPresnt+=($(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${delCp}\b" {} + 2>&1 | sed "s|^\./||"))
+      done
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} is .h or .hpp so compilation for ${cpList[*]} RC:$_RC"
+      #Process Sabre Talk Segments
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} is .h or .hpp so compilation for ${cpList[*]}"
+    elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.c ]]; then
+      IFS=',' read -r -a cRebuilt <<< "${changedFiles[@]}";
+      for cRe in "${cRebuilt[@]}";
+      do
+        if [ -f "${DvlPath}${cRe}" ]; then
+          cRebldexe="${cRe##*.}";
+          if [[ "${cRebldexe}" == "c" ]]; then
+            cpListFinal+="${cRe##*/} "
+          fi
+        fi
+      done
+      unset IFS
+      cpList=(${cpListFinal[@]})
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} is .c so compilation for ${cpList[*]} RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} is .c so compilation for ${cpList[*]}"
+    fi
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-process to collect source references to be compile completed - $(($(date +%-S)-_execDate))s"
+    #cpList=( $(find . -type f -name "*.c" | sed "s|^\./src/||") )
+    if [ "${cpList[0]}" != '' ]; then  #Check if it's not empty
+      _execDate=$(date +%-S)
+      for((i=0; i<${#cpList[*]}; i++));
+      do
+        if [[ ! "${cpList[i]}" =~ derived/ ]] && [[ ! "${cpList[i]}" =~ tpfarc/ ]]; then #Exclude if it's from derived
+          _cpFile="${cpList[i]##*/}"
+          _cpName="${_cpFile%%.*}"
+          _arSegment=($(grep -w "${_cpName^^}" "${TPF_TPS}/tpfar.segments" | cut -d" " -f1 ))
+          _arNomore=($(grep -w "${_cpName^^}" "${TPF_TPS}/tpfar.no_more" | cut -d" " -f1 ))
+          if [[ "${_arSegment[0]}" != '' ]] && [[ "${_arNomore[0]}" == '' ]]; then
+            _taskDate=$(date +%-S)
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:REXX ${SUP_TPF_TPFAR} - PRE-COMPILE RC:$_RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: REXX ${SUP_TPF_TPFAR} - PRE-COMPILE";
+            rexec -l "${TPFAR_WSP_USER}" -p "${TPFAR_WSP_SSAL}" "${TPFAR_WSP_HOST}" "${SUP_TPF_TPFAR}" -P"${APP_DVL_IMPL_CWRK}src/${cpList[i]#*./}" -L"${APP_DVL_IMPL_CWRK}" -U"${MTP_SUSR}" -Z"$(hostname)" -DDB2T -RY -V"${implementation%%_*}" -FTK; _RC=$?;
+            if [ "${_RC}" -le 4 ]; then
+              echo -e "\\INFO:$(date +"%Y-%m-%d %H:%M:%S") Pre-compile REXX DB2T TPFAR success for ${APP_DVL_IMPL_CWRK}src/${cpList[i]} - $(($(date +%-S)-_taskDate))s"
+              buildMSG="${USR_IMPL_PLAN^^}: TPFAR Pre-compile in zOS has completed for ${USR_IMPL_CORE}"
+              sendBLDWSMSG "${buildMSG}" "${USR_IMPL_PLAN}" "SH_BUILD_STATUS"
+              compList=($(find . -type f -name "*.mak" -exec grep -l "${cpList[i]##*/}" {} +))
+              if [ "${compList[0]}" != '' ]; then          #For component segments
+                _submDate=$(date +%-S)
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+                if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o with CPU priority - POST-COMPILE RC:$_RC"
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} ${_cpName}.o with CPU priority - POST-COMPILE";
+                  cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?;
+                  echo -e "${cPresult}\\n";
+                  if [ "${_RC}" -eq 20 ]; then
+                    autoFixConfig;
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f ${_cpFile} ${_cpName}.o"
+                    cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?;
+                    echo -e "${cPresult}\\n";
+                  fi
+                else
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o - POST-COMPILE RC:$_RC"
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} ${_cpName}.o - POST-COMPILE";
+                  cPresult=$(maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?;
+                  echo -e "${cPresult}\\n";
+                  if [ "${_RC}" -eq 20 ]; then
+                    autoFixConfig;
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_cpFile} ${_cpName}.o"
+                    cPresult=$(maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?;
+                    echo -e "${cPresult}\\n";
+                  fi
+                fi
+                if [ "${_RC}" -eq 0 ]; then
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o - POST-COMPILE RC:${_RC}"
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: POST-COMPILE maketpf -f ${_cpFile} ${_cpName}.o completed - $(($(date +%-S)-_submDate))s"
+                elif [ "${_RC}" -gt 4 ] && [[ "${_cpFile}" != +($BLD_EXCL_CPP) ]]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o - POST-COMPILE >> ${_cpName^^}.err RC:$EC"
+                  echo -e "${cPresult}" | tee "${_cpName^^}.err";
+                  echo -e "\\nERROR: maketpf -f ${_cpFile} ${_cpName}.o - POST-COMPILE" >> "${_cpName^^}.err"
+                  _RC="${EC}";
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: POST-COMPILE maketpf -f ${_cpFile} ${_cpName}.o failed - $(($(date +%-S)-_submDate))s"
+                elif [ "${_RC}" -eq 4 ] && [[ "${_cpFile}" == +($BLD_EXCL_CPP) ]]; then
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n RC:$_RC"
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+                  rm -f "${_cpName^^}.err"       #DEBUG Exclude warning file
+                  warnList="${warnList} -not -name ${_cpName^^}.err" #Include error Skip List
+                  _RC="${RC}";
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_cpFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+                elif [ "${_RC}" -gt 0 ]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cPresult} RC:$EC"
+                  echo -e "${cPresult}" | tee "${_cpName^^}.err";
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o - POST-COMPILE >> ${_cpName^^}.err RC:$EC"
+                  echo -e "ERROR: maketpf -f ${_cpFile} ${_cpName}.o - POST-COMPILE" >> "${_cpName^^}.err"
+                  _RC="${EC}";
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Post-compile maketpf -f ${_cpFile} ${_cpName}.o failed - $(($(date +%-S)-_submDate))s"
+                fi
+              else #For generic and stand-along segments
+                _submDate=$(date +%-S)
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+                if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link with CPU priority - POST-COMPILE RC:$RC"
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} link with CPU priority - POST-COMPILE";
+                  cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" link); _RC=$?;
+                  echo -e "${cPresult}\\n";
+                  if [ "${_RC}" -eq 20 ]; then
+                    autoFixConfig;
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f ${_cpFile} link"
+                    cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" link); _RC=$?;
+                    echo -e "${cPresult}\\n";
+                  fi
+                else
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link - POST-COMPILE RC:$RC"
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} link - POST-COMPILE";
+                  cPresult=$(maketpf -f "${_cpFile}" link); _RC=$?;
+                  echo -e "${cPresult}\\n";
+                  if [ "${_RC}" -eq 20 ]; then
+                    autoFixConfig;
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_cpFile} link"
+                    cPresult=$(maketpf -f "${_cpFile}" link); _RC=$?;
+                    echo -e "${cPresult}\\n";
+                  fi
+                fi
+                if [ "${_RC}" -eq 0 ]; then
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link - POST-COMPILE RC:${_RC}"
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Post-compile maketpf -f ${_cpFile} link completed - $(($(date +%-S)-_submDate))s"
+                elif [ "${_RC}" -gt 4 ] && [[ "${_cpFile}" != +($BLD_EXCL_CPP) ]]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link - POST-COMPILE >> ${_cpName^^}.err RC:$EC"
+                  echo -e "${cPresult}"| tee "${_cpName^^}.err";
+                  echo -e "\\nERROR: maketpf -f ${_cpFile} link - POST-COMPILE" >> "${_cpName^^}.err"
+                  _RC="${EC}";
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Post-compile maketpf -f ${_cpFile} link failed - $(($(date +%-S)-_submDate))s"
+                elif [ "${_RC}" -eq 4 ] && [[ "${_cpFile}" == +($BLD_EXCL_CPP) ]]; then
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n RC:$_RC"
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+                  rm -f "${_cpName^^}.err"       #DEBUG Exclude warning file
+                  warnList="${warnList} -not -name ${_cpName^^}.err" #Include error Skip List
+                  _RC="${RC}";
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_cpFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+                elif [ "${_RC}" -gt 0 ]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cPresult} RC:$EC"
+                  echo -e "${cPresult}"| tee "${_cpName^^}.err";
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link - POST-COMPILE >> ${_cpName^^}.err RC:$EC"
+                  echo -e "ERROR: maketpf -f ${_cpFile} link - POST-COMPILE" >> "${_cpName^^}.err"
+                  _RC="${EC}";
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Post-compile maketpf -f ${_cpFile} link failed - $(($(date +%-S)-_submDate))s"
+                fi
+              fi
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:REXX DB2T TPFAR failed for ${APP_DVL_IMPL_CWRK}src/${cpList[i]} - PRE COMPILE >> ${_cpName^^}P.err RC:$EC"
+              echo -e "ERROR: REXX DB2T TPFAR failed for ${APP_DVL_IMPL_CWRK}src/${cpList[i]} - PRE COMPILE" >> "${_cpName^^}P.err"
+              _RC="${EC}";
+              _tpfarEr=$((_tpfarEr + 1));
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Pre-compile REXX DB2T TPFAR failed for ${APP_DVL_IMPL_CWRK}src/${cpList[i]} - $(($(date +%-S)-_taskDate))s"
+            fi
+          elif [ "${_arSegment[0]}" == '' ] && [ "${_arNomore[0]}" == '' ]; then
+            compList=($(find . -type f -name "*.mak" -exec grep -l "${cpList[i]##*/}" {} +))
+            if [ "${compList[0]}" != '' ]; then  #For component segments
+              _submDate=$(date +%-S)
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+              if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o with CPU priority RC:$RC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} ${_cpName}.o with CPU priority"
+                cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?;
+                echo -e "${cPresult}\\n";
+                if [ "${_RC}" -eq 20 ]; then
+                  autoFixConfig;
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f ${_cpFile} ${_cpName}.o"
+                  cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?;
+                  echo -e "${cPresult}\\n";
+                fi
+              else
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o RC:$RC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} ${_cpName}.o"
+                cPresult=$(maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?;
+                echo -e "${cPresult}\\n";
+                if [ "${_RC}" -eq 20 ]; then
+                  autoFixConfig;
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_cpFile} ${_cpName}.o"
+                  cPresult=$(maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?;
+                  echo -e "${cPresult}\\n";
+                fi
+              fi
+              if [ "${_RC}" -eq 0 ]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o RC:${_RC}"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} ${_cpName}.o completed - $(($(date +%-S)-_submDate))s"
+              elif [ "${_RC}" -gt 4 ] && [[ "${_cpFile}" != +($BLD_EXCL_CPP) ]]; then
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o >> ${_cpName^^}.err RC:$EC"
+                echo -e "${cPresult}"| tee "${_cpName^^}.err";
+                echo -e "\\nERROR: maketpf -f ${_cpFile} ${_cpName}.o" >> "${_cpName^^}.err"
+                _RC="${EC}";
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cpFile} ${_cpName}.o failed - $(($(date +%-S)-_submDate))s"
+              elif [ "${_RC}" -eq 4 ] && [[ "${_cpFile}" == +($BLD_EXCL_CPP) ]]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n RC:$_RC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+                rm -f "${_cpName^^}.err"         #DEBUG Exclude warning file
+                warnList="${warnList} -not -name ${_cpName^^}.err" #Include error Skip List
+                _RC="${RC}";
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_cpFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+              elif [ "${_RC}" -gt 0 ]; then
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cPresult} RC:$EC"
+                echo -e "${cPresult}"| tee "${_cpName^^}.err";
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o >> ${_cpName^^}.err RC:$EC"
+                echo -e "ERROR: maketpf -f ${_cpFile} ${_cpName}.o" >> "${_cpName^^}.err"
+                _RC="${EC}";
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cpFile} ${_cpName}.o failed - $(($(date +%-S)-_submDate))s"
+              fi
+            else #For generic and stand-along segments
+              _submDate=$(date +%-S)
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+              if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link with CPU priority RC:$RC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} link with CPU priority"
+                cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" link); _RC=$?;
+                echo -e "${cPresult}\\n";
+                if [ "${_RC}" -eq 20 ]; then
+                  autoFixConfig;
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f ${_cpFile} link"
+                  cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" link); _RC=$?;
+                  echo -e "${cPresult}\\n";
+                fi
+              else
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link RC:$RC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} link"
+                cPresult=$(maketpf -f "${_cpFile}" link); _RC=$?;
+                echo -e "${cPresult}\\n";
+                if [ "${_RC}" -eq 20 ]; then
+                  autoFixConfig;
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_cpFile} link"
+                  cPresult=$(maketpf -f "${_cpFile}" link); _RC=$?;
+                  echo -e "${cPresult}\\n";
+                fi
+              fi
+              if [ "${_RC}" -eq 0 ]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link RC:${_RC}"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} link completed - $(($(date +%-S)-_submDate))s"
+              elif [ "${_RC}" -gt 4 ] && [[ "${_cpFile}" != +($BLD_EXCL_CPP) ]]; then
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link >> ${_cpName}.err RC:$EC"
+                echo -e "${cPresult}"| tee "${_cpName^^}.err";
+                echo -e "\\nERROR: maketpf -f ${_cpFile} link" >> "${_cpName}.err"
+                _RC="${EC}";
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cpFile} link completed - $(($(date +%-S)-_submDate))s"
+              elif [ "${_RC}" -eq 4 ] && [[ "${_cpFile}" == +($BLD_EXCL_CPP) ]]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n RC:$RC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+                rm -f "${_cpName^^}.err"         #DEBUG Exclude warning file
+                warnList="${warnList} -not -name ${_cpName^^}.err" #Include error Skip List
+                _RC="${RC}";
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_cpFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+              elif [ "${_RC}" -gt 0 ]; then
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cPresult} RC:$EC"
+                echo -e "${cPresult}"| tee "${_cpName^^}.err";
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link >> ${_cpName}.err RC:$EC"
+                echo -e "ERROR: maketpf -f ${_cpFile} link" >> "${_cpName}.err"
+                _RC="${EC}";
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cpFile} link failed - $(($(date +%-S)-_submDate))s"
+              fi
+            fi
+          elif [[ "${_arSegment[0]}" != '' ]] && [[ "${_arNomore[0]}" != '' ]]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${cpList[i]} is included in tpfar no more list - SKIP RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: ${cpList[i]} is included in tpfar no more list - SKIP"
+            _RC="${RC}"
+          fi
+        fi
+      done
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: TPFAR compliation process completed - $(($(date +%-S)-_execDate))s"
+    fi
+  else
+#Process C segments-----------------------------------------------------------#
+    _execDate=$(date +%-S)
+    if [[ "${reBuildAll}" == "true" ]] && [[ "${changedFiles}" == "NULL" ]] || [[ "${reBuildAll}" == "true" ]] && [[ -n "${changedFiles[0]// /}" ]]; then
+      cpList=( $(find . -type f -name "*.c") )
+      if [ -n "${cpList[0]// /}" ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild true and ${changedFiles[*]} is NULL so compilation for ${cpList[*]} RC:$_RC"
+        #Process Sabre Talk Segments
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild true and ${changedFiles[*]} is NULL so compilation for ${cpList[*]}"
+      fi
+    elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.h ]] || [[ "${changedFiles}" =~ \.hpp ]]; then
+      cpList=( $(find . -type f -name "*.c") )
+      for delCp in "${cpList[@]}";
+      do
+        cSegmt="${delCp##*/}"
+        delCpDer="${cSegmt%%.*}"
+        if [ -n "${delCpDer// /}" ]; then
+          find . -type f -iname "${delCpDer}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+        fi
+        makPresnt+=($(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${delCp##*/}\b" {} + 2>&1 | sed "s|^\./||"))
+      done
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} is .h or .hpp so compilation for ${cpList[*]} RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} is .h or .hpp so compilation for ${cpList[*]}"
+    elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.c ]]; then
+      IFS=',' read -r -a cRebuilt <<< "${changedFiles[@]}";
+      for cRe in "${cRebuilt[@]}";
+      do
+        if [ -f "${DvlPath}${cRe}" ]; then
+          cRebldexe="${cRe##*.}";
+          if [[ "${cRebldexe}" == "c" ]]; then
+            cpListFinal+="${cRe##} "
+          fi
+        fi
+      done
+      unset IFS
+      cpList=(${cpListFinal[@]})
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} is .c so compilation for ${cpList[*]} RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} is .c so compilation for ${cpList[*]}"
+    fi
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-process to collect source references to be compile completed - $(($(date +%-S)-_execDate))s"
+    if [ "${cpList[0]}" != '' ]; then
+      _execDate=$(date +%-S)
+      for((i=0; i<${#cpList[*]}; i++));
+      do
+        _cpFile="${cpList[i]##*/}"
+        _cpName="${_cpFile%%.*}"
+        compList=($(find . -type f -name "*.mak" -exec grep -l "${cpList[i]##*/}" {} +))
+        if [ "${compList[0]}" != '' ]; then      #For component segments
+          _submDate=$(date +%-S)
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+          if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o with CPU priority RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} ${_cpName}.o with CPU priority"
+            cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?; #For Component CPP
+            echo -e "${cPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f ${_cpFile} ${_cpName}.o"
+              cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?; #For Component CPP
+              echo -e "${cPresult}\\n";
+            fi
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} ${_cpName}.o"
+            cPresult=$(maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?;  #For Component CPP
+            echo -e "${cPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_cpFile} ${_cpName}.o"
+              cPresult=$(maketpf -f "${_cpFile}" "${_cpName}.o"); _RC=$?;  #For Component CPP
+              echo -e "${cPresult}\\n";
+            fi
+          fi
+          if [ "${_RC}" -eq 0 ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o RC:${_RC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} ${_cpName}.o completed - $(($(date +%-S)-_submDate))s"
+          elif [ "${_RC}" -gt 4 ] && [[ "${_cpFile}" != +($BLD_EXCL_CPP) ]]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o >> ${_cpName^^}.err RC:$EC"
+            echo -e "${cPresult}"| tee "${_cpName^^}.err";
+            echo -e "\\nERROR: maketpf -f ${_cpFile} ${_cpName}.o" >> "${_cpName^^}.err"
+            _RC="${EC}";
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cpFile} ${_cpName}.o failed - $(($(date +%-S)-_submDate))s"
+          elif [ "${_RC}" -eq 4 ] && [[ "${_cpFile}" == +($BLD_EXCL_CPP) ]]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+            rm -f "${_cpName^^}.err"             #DEBUG Exclude warning file
+            warnList="${warnList} -not -name ${_cpName^^}.err"       #Include error Skip List
+            _RC="${RC}";
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_cpFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+          elif [ "${_RC}" -gt 0 ]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cPresult} RC:$EC"
+            echo -e "${cPresult}"| tee "${_cpName^^}.err";
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} ${_cpName}.o >> ${_cpName^^}.err RC:$EC"
+            echo -e "ERROR: maketpf -f ${_cpFile} ${_cpName}.o" >> "${_cpName^^}.err"
+            _RC="${EC}";
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cpFile} ${_cpName}.o failed - $(($(date +%-S)-_submDate))s"
+          fi
+        else #For generic and stand-along segments
+          _submDate=$(date +%-S)
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+          if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link with CPU priority RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} link with CPU priority"
+            cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" link); _RC=$?;
+            echo -e "${cPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f ${_cpFile} link"
+              cPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cpFile}" link); _RC=$?;
+              echo -e "${cPresult}\\n";
+            fi
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} link"
+            cPresult=$(maketpf -f "${_cpFile}" link); _RC=$?;
+            echo -e "${cPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_cpFile} link"
+              cPresult=$(maketpf -f "${_cpFile}" link); _RC=$?;
+              echo -e "${cPresult}\\n";
+            fi
+          fi
+          if [ "${_RC}" -eq 0 ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link RC:${_RC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cpFile} link completed - $(($(date +%-S)-_submDate))s"
+          elif [ "${_RC}" -gt 4 ] && [[ "${_cpFile}" != +($BLD_EXCL_CPP) ]]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link >> ${_cpName}.err RC:$EC"
+            echo -e "${cPresult}"| tee "${_cpName^^}.err"
+            echo -e "\\nERROR: maketpf -f ${_cpFile} link" >> "${_cpName^^}.err"
+            _RC="${EC}";
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cpFile} link failed - $(($(date +%-S)-_submDate))s"
+          elif [ "${_RC}" -eq 4 ] && [[ "${_cpFile}" == +($BLD_EXCL_CPP) ]]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_cpFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+            rm -f "${_cpName^^}.err"             #DEBUG Exclude warning file
+            warnList="${warnList} -not -name ${_cpName^^}.err"       #Include error Skip List
+            _RC="${RC}";
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_cpFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+          elif [ "${_RC}" -gt 0 ]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cPresult} RC:$EC"
+            echo -e "${cPresult}"| tee "${_cpName^^}.err";
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cpFile} link >> ${_cpName}.err RC:$EC"
+            echo -e "ERROR: maketpf -f ${_cpFile} link" >> "${_cpName^^}.err"
+            _RC="${EC}";
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cpFile} link failed - $(($(date +%-S)-_submDate))s"
+          fi
+        fi
+      done
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: C compliation process completed - $(($(date +%-S)-_execDate))s"
+    fi
+  fi
+  #cppList=( $(find . -type f -name "*.cpp") )
+#Process CPP segments---------------------------------------------------------#
+  _execDate=$(date +%-S)
+  if [[ "${reBuildAll}" == "true" ]] && [[ "${changedFiles}" == "NULL" ]] || [[ "${reBuildAll}" == "true" ]] && [[ -n "${changedFiles[0]// /}" ]]; then
+    cppList=( $(find . -type f -name "*.cpp") )
+    if [ -n "${cppList[0]// /}" ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Rebuild true and ${changedFiles[*]} is NULL so compilation for ${cppList[*]} RC:$_RC"
+      #Process Sabre Talk Segments
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild true and ${changedFiles[*]} is NULL so compilation for ${cppList[*]}"
+    fi
+  elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.hpp ]] || [[ "${changedFiles}" =~ \.h ]]; then
+    cppList=( $(find . -type f -name "*.cpp") )
+    #Process Sabre Talk Segments
+    for delCpp in "${cppList[@]}";
+    do
+      cppSegmt="${delCpp##*/}"
+      delCppDer="${cppSegmt%%.*}"
+      if [ -n "${delCppDer// /}" ]; then
+        find . -type f -iname "${delCppDer}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+      fi
+      makPresnt+=($(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${delCpp##*/}\b" {} + 2>&1 | sed "s|^\./||"))
+    done
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} is .hpp or .h so compilation for ${cppList[*]} RC:$_RC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} is .hpp or .h so compilation for ${cppList[*]}"
+  elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.cpp ]]; then
+    IFS=',' read -r -a cppRebuilt <<< "${changedFiles[@]}";
+    for cppRe in "${cppRebuilt[@]}";
+    do
+      if [ -f "${DvlPath}${cppRe}" ]; then
+        cppRebldexe="${cppRe##*.}";
+        if [[ "${cppRebldexe}" == "cpp" ]]; then
+          cppListFinal+="${cppRe##} "
+        fi
+      fi
+    done
+    unset IFS
+    cppList=(${cppListFinal[@]});
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} is .cpp so compilation for ${cppList[*]} RC:$_RC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} is .cpp so compilation for ${cppList[*]}"
+  fi
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-process to collect CPP source references to be compile completed - $(($(date +%-S)-_execDate))s"
+  if [ "${cppList[0]}" != '' ]; then
+    _execDate=$(date +%-S)
+    for((i=0; i<${#cppList[*]}; i++));
+    do
+      _cppFile="${cppList[i]##*/}"
+      _cppName="${_cppFile%%.*}"
+      compList=($(find . -type f -name "*.mak" -exec grep -l "${cppList[i]##*/}" {} +))
+      if [ "${compList[0]}" != '' ]; then        #For component segments
+        _submDate=$(date +%-S)
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+        if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cppFile} ${_cppName}.o with CPU priority RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cppFile} ${_cppName}.o with CPU priority"
+          cppPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cppFile}" "${_cppName}.o"); _RC=$?;  #For Component CPP
+          echo -e "${cppPresult}\\n";
+          if [ "${_RC}" -eq 20 ]; then
+            autoFixConfig;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f ${_cppFile} ${_cppName}.o"
+            cppPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cppFile}" "${_cppName}.o"); _RC=$?;  #For Component CPP
+            echo -e "${cppPresult}\\n";
+          fi
+        else
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cppFile} ${_cppName}.o RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cppFile} ${_cppName}.o"
+          cppPresult=$(maketpf -f "${_cppFile}" "${_cppName}.o"); _RC=$?;  #For Component CPP
+          echo -e "${cppPresult}\\n";
+          if [ "${_RC}" -eq 20 ]; then
+            autoFixConfig;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_cppFile} ${_cppName}.o"
+            cppPresult=$(maketpf -f "${_cppFile}" "${_cppName}.o"); _RC=$?;  #For Component CPP
+            echo -e "${cppPresult}\\n";
+          fi
+        fi
+        if [ "${_RC}" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cppFile} ${_cppName}.o RC:${_RC}"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cppFile} ${_cppName}.o completed - $(($(date +%-S)-_submDate))s"
+        elif [ "${_RC}" -gt 4 ] && [[ "${_cppFile}" != +($BLD_EXCL_CPP) ]]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cppFile} ${_cppName}.o >> ${_cppName^^}.err RC:$EC"
+          echo -e "${cppPresult}"| tee "${_cppName^^}.err";
+          echo -e "\\nERROR: maketpf -f ${_cppFile} ${_cppName}.o" >> "${_cppName^^}.err"
+          _RC="${EC}";
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cppFile} ${_cppName}.o failed - $(($(date +%-S)-_submDate))s"
+        elif [ "${_RC}" -eq 4 ] && [[ "${_cppFile}" == +($BLD_EXCL_CPP) ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_cppFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_cppFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+          rm -f "${_cppName^^}.err"    #DEBUG Exclude warning file
+          warnList="${warnList} -not -name ${_cppName^^}.err"
+          _RC="${RC}";
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_cppFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+        elif [ "${_RC}" -gt 0 ]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cppPresult} RC:$EC"
+          echo -e "${cppPresult}"| tee "${_cppName^^}.err";
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cppFile} ${_cppName}.o >> ${_cppName^^}.err RC:$EC"
+          echo -e "ERROR: maketpf -f ${_cppFile} ${_cppName}.o" >> "${_cppName^^}.err"
+          _RC="${EC}"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cppFile} ${_cppName}.o failed - $(($(date +%-S)-_submDate))s"
+        fi
+      else #For generic and stand-along segments
+        _submDate=$(date +%-S)
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+        if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cppFile} link with CPU priority RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cppFile} link with CPU priority"
+          cppPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cppFile}" link); _RC=$?;
+          echo -e "${cppPresult}\\n";
+          if [ "${_RC}" -eq 20 ]; then
+            autoFixConfig;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f ${_cppFile} link"
+            cppPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_cppFile}" link); _RC=$?;
+            echo -e "${cppPresult}\\n";
+          fi
+        else
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cppFile} link  RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cppFile} link"
+          cppPresult=$(maketpf -f "${_cppFile}" link); _RC=$?;
+          echo -e "${cppPresult}\\n";
+          if [ "${_RC}" -eq 20 ]; then
+            autoFixConfig;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_cppFile} link"
+            cppPresult=$(maketpf -f "${_cppFile}" link); _RC=$?;
+            echo -e "${cppPresult}\\n";
+          fi
+        fi
+        if [ "${_RC}" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cppFile} link RC:${_RC}"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_cppFile} link completed - $(($(date +%-S)-_submDate))s"
+        elif [ "${_RC}" -gt 4 ] && [[ "${_cppFile}" != +($BLD_EXCL_CPP) ]]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cppFile} link >> ${_cppName^^}.err RC:$EC"
+          echo -e "${cppPresult}"| tee "${_cppName^^}.err";
+          echo -e "\\nERROR: maketpf -f ${_cppFile} link" >> "${_cppName^^}.err"
+          _RC="${EC}";
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cppFile} link failed - $(($(date +%-S)-_submDate))s"
+        elif [ "${_RC}" -eq 4 ] && [[ "${_cppFile}" == +($BLD_EXCL_CPP) ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_cppFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_cppFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+          rm -f "${_cppName^^}.err"    #DEBUG Exclude warning file
+          warnList="${warnList} -not -name ${_cppName^^}.err"
+          _RC="${RC}";
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_cppFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+        elif [ "${_RC}" -gt 0 ]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cppPresult} RC:$EC"
+          echo -e "${cppPresult}"| tee "${_cppName^^}.err";
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_cppFile} link >> ${_cppName^^}.err RC:$EC"
+          echo -e "ERROR: maketpf -f ${_cppFile} link" >> "${_cppName^^}.err"
+          _RC="${EC}";
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_cppFile} link failed - $(($(date +%-S)-_submDate))s"
+        fi
+      fi
+    done
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: CPP compliation process completed - $(($(date +%-S)-_execDate))s"
+  fi
+ #asmList=( $(find . -type f -name "*.asm") )
+#Process ASM segments---------------------------------------------------------#
+  _execDate=$(date +%-S)
+  if [[ "${reBuildAll}" == "true" ]] && [[ "${changedFiles}" == "NULL" ]] || [[ "${reBuildAll}" == "true" ]] && [[ -n "${changedFiles[0]// /}" ]]; then
+    asmList=( $(find . -type f -name "*.asm") )
+    if [ -n "${asmList[0]// /}" ]; then
+      #Process Sabre Talk Segments
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild true and ${changedFiles[*]} is NULL so compilation for ${asmList[*]} RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild true and ${changedFiles[*]} is NULL so compilation for ${asmList[*]}"
+    fi
+  elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.cpy ]] || [[ "${changedFiles}" =~ \.mac ]]; then
+    asmList=( $(find . -type f -name "*.asm") )
+    for delAsm in "${asmList[@]}";
+    do
+      asmSegmt="${delAsm##*/}"
+      delAsmDer="${asmSegmt%%.*}"
+      if [ -n "${delAsmDer// /}" ]; then
+        find . -type f -iname "${delAsmDer}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+      fi
+    done
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} is .cpy or .mac so compilation for ${asmList[*]} RC:$_RC"
+    # mac or cpy
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} is .cpy or .mac so compilation for ${asmList[*]}"
+  elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles[*]}" =~ \.asm ]] || [[ "${changedFiles[*]}" =~ \.sbt ]] || [[ "${changedFiles[*]}" =~ \.inc ]]; then
+    if [[ "${changedFiles[*]}" =~ \.inc ]]; then
+      asmListInc=( $(find ./sbtasm -type f -name "*.asm" | sed "s|^\./||") )
+      IFS=',' read -r -a asmRebuilt <<< "${changedFiles[@]}";
+      for asmRe in "${asmRebuilt[@]}";
+      do
+        if [ -f "${DvlPath}${asmRe}" ]; then
+          asmRebldexe="${asmRe##*.}";
+          if [[ "${asmRebldexe}" == "asm" ]]; then
+            asmListFinal+="${asmRe##} "
+          fi
+        fi
+        makPresnt+=($(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${asmRe}\b" {} + 2>&1 | sed "s|^\./||"))
+      done
+      if [[ -n "${asmListInc[0]// /}" ]] && [[ -n "${asmListFinal[0]// /}" ]]; then
+        asmList=(${asmListInc[@]} ${asmListFinal[@]})
+      elif [[ -z "${asmListInc[0]}" ]] && [[ -n "${asmListFinal[0]// /}" ]]; then
+        asmList=(${asmListFinal[@]})
+      elif [[ -n "${asmListInc[0]// /}" ]] && [[ -z "${asmListFinal[0]}" ]]; then
+        asmList=(${asmListInc[@]})
+      fi
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} have .inc so taking all .sbt and changed .asm available compilation -- ${asmList[*]} RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} have .inc so taking all .sbt and changed .asm available compilation -- ${asmList[*]}"
+    elif [[ "${changedFiles[*]}" =~ \.sbt ]]; then
+      IFS=',' read -r -a asmRebuilt <<< "${changedFiles[@]}";
+      for asmRe in "${asmRebuilt[@]}";
+      do
+        if [ -f "${DvlPath}${asmRe}" ]; then
+          asmRebldexe="${asmRe##*.}";
+          if [[ "${asmRebldexe}" == "asm" ]]; then
+            asmListFinal+="${asmRe##} "
+          elif [[ "${asmRebldexe}" == "sbt" ]]; then
+            segMentSbt=${asmRe##*/};
+            sbtFilename=${segMentSbt%%.*};
+            if [ -f "${DvlPath}sbtasm/${sbtFilename}.asm" ]; then
+              asmListFinal+="sbtasm/${sbtFilename}.asm "
+            fi
+          fi
+        fi
+      done
+      asmList=(${asmListFinal[@]})
+      unset IFS
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} have .sbt & possible of asm and taking changed .sbt and changed .asm file so compilation -- ${asmList[*]} RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} have .sbt & possible of asm and taking changed .sbt and changed .asm file so compilation -- ${asmList[*]}"
+    elif [[ "${changedFiles[*]}" =~ \.asm ]]; then
+      IFS=',' read -r -a asmRebuilt <<< "${changedFiles[@]}";
+      for asmRe in "${asmRebuilt[@]}";
+      do
+        if [ -f "${DvlPath}${asmRe}" ]; then
+          asmRebldexe="${asmRe##*.}";
+          if [[ "${asmRebldexe}" == "asm" ]]; then
+            asmListFinal+="${asmRe##} "
+          fi
+        fi
+      done
+      asmList=(${asmListFinal[@]})
+      unset IFS
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} is .asm alone so take modified asm and compilation -- ${asmList[*]} RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} is .asm alone so take modified asm and compilation -- ${asmList[*]}"
+    fi
+  fi
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-process to collect ASM source references to be compile completed - $(($(date +%-S)-_execDate))s"
+  if [ "${asmList[0]}" != '' ]; then
+    _execDate=$(date +%-S)
+    for((i=0; i<${#asmList[*]}; i++));
+    do
+      _asmFile="${asmList[i]##*/}"
+      _asmName="${_asmFile%%.*}"
+      compList=($(find . -type f -name "*.mak" -exec grep -l "${asmList[i]##*/}" {} +))
+      if [ "${compList[0]}" != '' ]; then        #For component segments
+        _submDate=$(date +%-S)
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+        if [[ "${compList[0]}" =~ "cps0" ]] && [[ "${USR_IMPL_CORE,,}" == +($REF_T4_CORE) ]]; then #Exception force compile
+          if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f CPS0 ${_asmName}.o with CPU priority RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f CPS0 ${_asmName}.o with CPU priority"
+            cpsPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f CPS0 "${_asmName}.o"); _RC=$?;
+            echo -e "${cpsPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f CPS0 ${_asmName}.o"
+              cpsPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f CPS0 "${_asmName}.o"); _RC=$?;
+              echo -e "${cpsPresult}\\n";
+            fi
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f CPS0 ${_asmName}.o  RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f CPS0 ${_asmName}.o"
+            cpsPresult=$(maketpf -f CPS0 "${_asmName}.o"); _RC=$?;
+            echo -e "${cpsPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f CPS0 ${_asmName}.o"
+              cpsPresult=$(maketpf -f CPS0 "${_asmName}.o"); _RC=$?;
+              echo -e "${cpsPresult}\\n";
+            fi
+          fi
+        else
+          if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_asmFile} ${_asmName}.o with CPU priority RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_asmFile} ${_asmName}.o with CPU priority"
+            cpsPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_asmFile}" "${_asmName}.o"); _RC=$?;
+            echo -e "${cpsPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f ${_asmFile} ${_asmName}.o"
+              cpsPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_asmFile}" "${_asmName}.o"); _RC=$?;
+              echo -e "${cpsPresult}\\n";
+            fi
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_asmFile} ${_asmName}.o  RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_asmFile} ${_asmName}.o"
+            cpsPresult=$(maketpf -f "${_asmFile}" "${_asmName}.o"); _RC=$?;
+            echo -e "${cpsPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_asmFile} ${_asmName}.o"
+              cpsPresult=$(maketpf -f "${_asmFile}" "${_asmName}.o"); _RC=$?;
+              echo -e "${cpsPresult}\\n";
+            fi
+          fi
+        fi
+        if [ "${_RC}" -eq 0 ]; then
+          if [[ "${compList[0]}" =~ "cps0" ]] && [[ "${USR_IMPL_CORE,,}" == +($REF_T4_CORE) ]]; then #Exception force compile
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f CPS0 ${_asmName}.o RC:${_RC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f CPS0 ${_asmName}.o completed - $(($(date +%-S)-_submDate))s"
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_asmFile} ${_asmName}.o RC:${_RC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_asmFile} ${_asmName}.o completed - $(($(date +%-S)-_submDate))s"
+          fi
+        elif [ "${_RC}" -gt 4 ] && [[ "${_asmFile}" != +($BLD_EXCL_ASM) ]]; then
+          if [[ "${compList[0]}" =~ "cps0" ]] && [[ "${USR_IMPL_CORE,,}" == +($REF_T4_CORE) ]]; then #Exception force compile
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cpsPresult} RC:$EC"
+            echo -e "${cpsPresult}"| tee "${_asmName^^}.err";
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f CPS0 ${_asmName}.o >> ${_asmName^^}.err  RC:$EC"
+            echo -e "ERROR: maketpf -f CPS0 ${_asmName}.o" >> "${_asmName^^}.err"
+            _RC="${EC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f CPS0 ${_asmName}.o failed - $(($(date +%-S)-_submDate))s"
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cpsPresult} RC:$EC"
+            echo -e "${cpsPresult}"| tee "${_asmName^^}.err";
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_asmFile} ${_asmName}.o >> ${_asmName^^}.err  RC:$EC"
+            echo -e "ERROR: maketpf -f ${_asmFile} ${_asmName}.o" >> "${_asmName^^}.err"
+            _RC="${EC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_asmFile} ${_asmName}.o failed - $(($(date +%-S)-_submDate))s"
+          fi
+        elif [ "${_RC}" -eq 4 ] && [[ "${asmList[i]}" =~ sbtasm ]]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cpsPresult} RC:$EC"
+          echo -e "${cpsPresult}"| tee "${_asmName^^}.err";
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_asmFile} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n  RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_asmFile} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n";
+          warnList="${warnList} -not -name ${_asmName^^}.err";
+          _RC="${RC}";
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_asmFile} part of sabretalk warning exception completed - $(($(date +%-S)-_submDate))s\n";
+        elif [ "${_RC}" -eq 4 ] && [[ "${_asmFile}" == +($BLD_EXCL_ASM) ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_asmFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_asmFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+          rm -f "${_asmName^^}.err"    #DEBUG Exclude warning file
+          warnList="${warnList} -not -name ${_asmName^^}.err"
+          _RC="${RC}";
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_asmFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+        elif [ "${_RC}" -gt 0 ]; then
+          if [[ "${compList[0]}" =~ "cps0" ]] && [[ "${USR_IMPL_CORE,,}" == +($REF_T4_CORE) ]]; then #Exception force compile
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cpsPresult} RC:$EC"
+            echo -e "${cpsPresult}"| tee "${_asmName^^}.err";
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f CPS0 ${_asmName}.o >> ${_asmName^^}.err  RC:$EC"
+            echo -e "ERROR: maketpf -f CPS0 ${_asmName}.o" >> "${_asmName^^}.err"
+            _RC="${EC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f CPS0 ${_asmName}.o failed - $(($(date +%-S)-_submDate))s"
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${cpsPresult} RC:$EC"
+            echo -e "${cpsPresult}"| tee "${_asmName^^}.err";
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_asmFile} ${_asmName}.o >> ${_asmName^^}.err  RC:$EC"
+            echo -e "ERROR: maketpf -f ${_asmFile} ${_asmName}.o" >> "${_asmName^^}.err"
+            _RC="${EC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_asmFile} ${_asmName}.o failed - $(($(date +%-S)-_submDate))s"
+          fi
+        fi
+      else #For generic and stand-along segments
+        _submDate=$(date +%-S)
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+        if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_asmFile} link with CPU priority RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_asmFile} link with CPU priority"
+          asmPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_asmFile}" link); _RC=$?;
+          echo -e "${asmPresult}\\n";
+          if [ "${_RC}" -eq 20 ]; then
+            autoFixConfig;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_asmFile} link"
+            asmPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${_asmFile}" link); _RC=$?;
+            echo -e "${asmPresult}\\n";
+          fi
+        else
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_asmFile} link  RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_asmFile} link"
+          asmPresult=$(maketpf -f "${_asmFile}" link); _RC=$?;
+          echo -e "${asmPresult}\\n";
+          if [ "${_RC}" -eq 20 ]; then
+            autoFixConfig;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${_asmFile} link"
+            asmPresult=$(maketpf -f "${_asmFile}" link); _RC=$?;
+            echo -e "${asmPresult}\\n";
+          fi
+        fi
+        if [ "${_RC}" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_asmFile} link RC:${_RC}"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${_asmFile} link completed - $(($(date +%-S)-_submDate))s"
+        elif [ "${_RC}" -gt 4 ] && [[ "${_asmFile}" != +($BLD_EXCL_ASM) ]]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_asmFile} link >> ${_asmName^^}.err  RC:$EC"
+          echo -e "${asmPresult}"| tee "${_asmName^^}.err";
+          echo -e "\\nERROR: maketpf -f ${_asmFile} link" >> "${_asmName^^}.err"
+          _RC="${EC}"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_asmFile} link failed - $(($(date +%-S)-_submDate))s"
+        elif [ "${_RC}" -eq 4 ] && [[ "${asmList[i]}" =~ sbtasm ]]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${asmPresult} RC:$EC"
+          echo -e "${asmPresult}"| tee "${_asmName^^}.err";
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_asmFile} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n  RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_asmFile} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n";
+          warnList="${warnList} -not -name ${_asmName^^}.err";
+          _RC="${RC}";
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_asmFile} part of sabretalk warning exception completed - $(($(date +%-S)-_submDate))s\n";
+        elif [ "${_RC}" -eq 4 ] && [[ "${_asmFile}" == +($BLD_EXCL_ASM) ]]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${asmPresult} RC:$EC"
+          echo -e "${asmPresult}"| tee "${_asmName^^}.err";
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_asmFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n  RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_asmFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+          rm -f "${_asmName^^}.err"    #DEBUG Exclude warning file
+          warnList="${warnList} -not -name ${_asmName^^}.err"
+          _RC="${RC}";
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_asmFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+        elif [ "${_RC}" -gt 0 ]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${asmPresult} RC:$EC"
+          echo -e "${asmPresult}"| tee "${_asmName^^}.err";
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${_asmFile} link >> ${_asmName^^}.err  RC:$EC"
+          echo -e "ERROR: maketpf -f ${_asmFile} link" >> "${_asmName^^}.err"
+          _RC="${EC}"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${_asmFile} link failed - $(($(date +%-S)-_submDate))s"
+        fi
+      fi
+      if [ -f "bss/macro/syseqc.mac" ];then      #Special macro handling
+        if [ -f bss/macro/syseqc.mac.gen ]; then #Date ref added to make uniq file
+          fdt=$( stat -c %Y bss/macro/syseqc.mac.gen )
+          mv bss/macro/syseqc.mac.gen "bss/macro/syseqc.mac.gen.${fdt}"
+        fi
+        mv bss/macro/syseqc.mac bss/macro/syseqc.mac.gen
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: syseqc.mac renamed"
+      fi
+      if [ -f "bss/src/irccr.asm" ];then         #Special asm handling
+        if [ -f bss/src/irccr.asm.gen ]; then    #Date ref added to make uniq file
+          fdt=$( stat -c %Y bss/src/irccr.asm.gen )
+          mv bss/src/irccr.asm.gen "bss/src/irccr.asm.gen.${fdt}"
+        fi
+        mv bss/src/irccr.asm bss/src/irccr.asm.gen
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: irccr.asm renamed"
+      fi
+    done
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: ASM compliation process completed - $(($(date +%-S)-_execDate))s"
+  fi
+#Process MAK segments---------------------------------------------------------#
+  _execDate=$(date +%-S)
+  #makList=( $(find . -type f -name "*.mak") )
+  if [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.mak ]] || [[ "${reBuildAll}" == "true" ]] && [[ "${changedFiles}" == "NULL" ]] || [[ "${reBuildAll}" == "true" ]] && [[ -n "${changedFiles[0]// /}" ]]; then
+    makList=( $(find . -type f -name "*.mak") )
+    if [ -n "${makList[0]// /}" ]; then
+      #Process Sabre Talk Segments
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} it has mak compilation for ${makList[*]} / Rebuild True and ${changedFiles} RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} it has mak compilation for ${makList[*]} / Rebuild True and ${changedFiles}"
+     fi
+  elif [[ "${reBuildAll}" == "false" ]] && [[ "${changedFiles}" =~ \.mak ]] || [[ "${changedFiles}" =~ \.cpy ]] || [[ "${changedFiles}" =~ \.h ]] || [[ "${changedFiles}" =~ \.hpp ]] || [[ "${changedFiles}" =~ \.mac ]]; then
+    IFS=',' read -r -a makRebuilt <<< "${changedFiles[@]}";
+    for makRe in "${makRebuilt[@]}";
+    do
+      if [ -f "${DvlPath}${makRe}" ]; then
+        makRebldexe="${makRe##*.}";
+        if [[ "${makRebldexe}" == "mak" ]]; then
+          makListFinal+="${makRe##} "
+        fi
+      fi
+    done
+    unset IFS
+    makList=(${makListFinal[@]} ${makPresnt[@]})
+    makPresnt=($(echo "${makList[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+    makList=(${makPresnt[@]})
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild false and ${changedFiles[*]} [.h/.hpp/.cpy/.mac] it has mak compilation for ${makList[*]} RC:$_RC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Rebuild false and ${changedFiles[*]} [.h/.hpp/.cpy/.mac] it has mak compilation for ${makList[*]}"
+  fi
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-process to collect MAK source references to be compile completed - $(($(date +%-S)-_execDate))s"
+  if [ "${makList[0]}" != '' ]; then
+    _execDate=$(date +%-S)
+    for((i=0; i<${#makList[*]}; i++));
+    do
+      _makFile="${makList[i]##*/}"
+      _makName="${_makFile%%.*}"
+      if [[ "${_makFile}" == +($BLD_EXCL_MAK) ]]; then #Exclude .mak error files
+        _errExclude="${_makName^^}.err";
+      elif [[ "${_makFile}" != +($BLD_EXCL_MAK) ]]; then
+        grep -w "directories do not exist:" "${_makName^^}.err" &> /dev/null; _RC=$?
+        if [ "${_RC}" -eq 0 ]; then
+          _errExclude="${_makName^^}.err"
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_errExclude} The error created due to APPL or TPF ROOT do not exist on zlinux RC:$_RC"
+        fi
+      fi
+      if [[ ! -f "${_makName^^}.err" ]] || [[ -f "${_errExclude}" ]]; then    #Check existing for directory less .err file
+        _submDate=$(date +%-S)
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+        if [[ "${_makName}" == "fctb" ]]; then #Exception force compile
+          if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${makList[i]##*/} link with CPU priority RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${makList[i]##*/} link with CPU priority"       #Force compile
+            makPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${makList[i]##*/}" link); _RC=$?;
+            echo -e "${makPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf -f ${makList[i]##*/} link"
+              makPresult=$(nice -"${TPF_CPU_NICE}" maketpf -f "${makList[i]##*/}" link); _RC=$?;
+              echo -e "${makPresult}\\n";
+            fi
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${makList[i]##*/} link  RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${makList[i]##*/} link"       #Force compile
+            makPresult=$(maketpf -f "${makList[i]##*/}" link); _RC=$?;
+            echo -e "${makPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf -f ${makList[i]##*/} link"
+              makPresult=$(maketpf -f "${makList[i]##*/}" link); _RC=$?;
+              echo -e "${makPresult}\\n";
+            fi
+          fi
+        else
+          if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link with CPU priority RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link with CPU priority"
+            makPresult=$(nice -"${TPF_CPU_NICE}" maketpf "${makList[i]##*/}" link); _RC=$?;
+            echo -e "${makPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf ${makList[i]##*/} link"
+              makPresult=$(nice -"${TPF_CPU_NICE}" maketpf "${makList[i]##*/}" link); _RC=$?;
+              echo -e "${makPresult}\\n";
+            fi
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link  RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link"
+            makPresult=$(maketpf "${makList[i]##*/}" link); _RC=$?;
+            echo -e "${makPresult}\\n";
+            if [ "${_RC}" -eq 20 ]; then
+              autoFixConfig;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf ${makList[i]##*/} link"
+              makPresult=$(maketpf "${makList[i]##*/}" link); _RC=$?;
+              echo -e "${makPresult}\\n";
+            fi
+          fi
+        fi
+        #Return code handling
+        if [ "${_RC}" -eq 0 ]; then
+          if [[ "${_makName}" == "fctb" ]]; then #Exception force compile
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${makList[i]##*/} link RC:${_RC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf -f ${makList[i]##*/} link completed - $(($(date +%-S)-_submDate))s"
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link RC:${_RC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link completed - $(($(date +%-S)-_submDate))s"
+          fi
+        elif [ "${_RC}" -gt 4 ] && [[ "${_makFile}" != +($BLD_EXCL_MAK) ]]; then
+          if [[ "${_makName}" == "fctb" ]]; then #Exception force compile
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${makPresult} RC:$EC"
+            echo -e "${makPresult}"| tee "${_makName^^}.err";
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${makList[i]##*/} link >> ${_makName^^}.err  RC:$EC"
+            echo -e "ERROR: maketpf -f ${makList[i]##*/} link" >> "${_makName^^}.err"
+            _RC="${EC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${makList[i]##*/} link failed - $(($(date +%-S)-_submDate))s"
+          else
+            #New LIBS validation
+            #shellcheck disable=SC2059
+            _errLibs=$(printf "${makPresult[@]}" | grep 'cannot find -l' | sed 's/.*-l//g')
+#            if [[ "${makPresult}" =~ 'cannot find -l' ]]; then #Re-compile for Libs
+#              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf identified new libs in the ${makList[i]##*/} file continue to re-compile RC:$RC"
+#              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Maketpf identified new libs in the ${makList[i]##*/} file continue to re-compile"
+#              _subnDate=$(date +%-S)
+#              if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+#                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO with CPU priority RC:$RC"
+#                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO with CPU priority"
+#                makPresult=$(nice -"${TPF_CPU_NICE}" maketpf "${makList[i]##*/}" link TPF_VERIFY_LINK_REFS=NO); _RC=$?;
+#                echo -e "${makPresult}\\n";
+#              else
+#                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO RC:$RC"
+#                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO"
+#                makPresult=$(maketpf "${makList[i]##*/}" link TPF_VERIFY_LINK_REFS=NO); _RC=$?;
+#                echo -e "${makPresult}\\n";
+#              fi
+#              if [ "${_RC}" -eq 0 ]; then
+#                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO RC:${_RC}"
+#                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO re-compile completed - $(($(date +%-S)-_subnDate))s"
+#              else
+#                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${makPresult} RC:$EC"
+#                echo -e "${makPresult}" | tee "${_makName^^}.err";
+#                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO >> ${_makName^^}.err  RC:$EC"
+#                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO recompile failed - $(($(date +%-S)-_subnDate))s"
+#                _RC="${EC}"
+#              fi
+#            else
+            if [ -z "${_errLibs}" ]; then
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${makPresult} RC:$EC"
+              echo -e "${makPresult}" | tee "${_makName^^}.err";
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link >> ${_makName^^}.err  RC:$EC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf ${makList[i]##*/} link failed - $(($(date +%-S)-_submDate))s"
+              _RC="${EC}"
+            else
+              _libsFile+=("${_makFile}:${_errLibs// /}")
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link failed for LIBS dependency >> ${_makName^^}.err  RC:$EC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf ${makList[i]##*/} link failed for LIBS dependency - $(($(date +%-S)-_submDate))s"
+              if [ "${#makList[*]}" -gt 1 ]; then
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:In this plan, Maketpf identified more than one .mak file, so skip all other.mak files to re-build  RC:$EC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: In this plan, Maketpf identified more than one .mak file, so skip all other.mak files to re-build - $(($(date +%-S)-_submDate))s"
+                break;
+              fi
+            fi
+          fi
+        elif [ "${_RC}" -eq 4 ] && [[ "${_makFile}" == +($BLD_EXCL_MAK) ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${_makFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n  RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${_makFile} part of warning exclude list - PROCEEDED WITH COMPILER WARNING\n"
+          rm -f "${_makName^^}.err"    #DEBUG Exclude warning file
+          warnList="${warnList} -not -name ${_makName^^}.err"
+          _RC="${RC}"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: PROCEEDED WITH COMPILER WARNING file ${_makFile} part of warning exclude list completed - $(($(date +%-S)-_submDate))s\n"
+        elif [ "${_RC}" -gt 0 ]; then
+          if [[ "${_makName}" == "fctb" ]]; then #Exception force compile
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${makPresult} RC:$EC"
+            echo -e "${makPresult}"| tee "${_makName^^}.err";
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf -f ${makList[i]##*/} link >> ${_makName^^}.err  RC:$EC"
+            echo -e "ERROR: maketpf -f ${makList[i]##*/} link" >> "${_makName^^}.err"
+            _RC="${EC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf -f ${makList[i]##*/} link failed - $(($(date +%-S)-_submDate))s"
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${makPresult} RC:$EC"
+            echo -e "${makPresult}"| tee "${_makName^^}.err";
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link >> ${_makName^^}.err  RC:$EC"
+            echo -e "ERROR: maketpf ${makList[i]##*/} link" >> "${_makName^^}.err"
+            _RC="${EC}"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf ${makList[i]##*/} link failed - $(($(date +%-S)-_submDate))s"
+          fi
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Existing source compile failed - ${_makName^^}.err  RC:$EC"
+        echo "ERROR:$(date +"%Y-%m-%d %H:%M:%S") Existing source compile failed - ${_makName^^}.err"
+        _RC="${EC}"
+      fi
+    done
+  fi
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+  #New LIBS re-compilation to resolve the dependency
+  if [ "${#makList[*]}" -gt 1 ] && [ "${#_libsFile[*]}" -gt 0 ]; then
+    #printf "${_libsFile[@]}"; #Print both .mak file and it's LIB dependency
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Makefile re-compilation initiated to resolve LIBS dependency..."
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Makefile re-compilation initiated to resolve LIBS dependency..."
+    for _lFile in "${_libsFile[@]}"
+    do
+      #Re-compile all .mak file with TPF_VERIFY_LINK_REFS=NO to resolve LIBS
+      for((i=0; i<${#makList[*]}; i++));
+      do
+        _makFile="${makList[i]##*/}"
+        _makName="${_makFile%%.*}"
+        _subnDate=$(date +%-S)
+        if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO with CPU priority"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO with CPU priority"
+          makPresult=$(nice -"${TPF_CPU_NICE}" maketpf "${makList[i]##*/}" link TPF_VERIFY_LINK_REFS=NO); _RC=$?;
+          echo -e "${makPresult}\\n";
+          if [ "${_RC}" -eq 20 ]; then
+            autoFixConfig;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO"
+            makPresult=$(nice -"${TPF_CPU_NICE}" maketpf "${makList[i]##*/}" link TPF_VERIFY_LINK_REFS=NO); _RC=$?;
+            echo -e "${makPresult}\\n";
+          fi
+        else
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO"
+          makPresult=$(maketpf "${makList[i]##*/}" link TPF_VERIFY_LINK_REFS=NO); _RC=$?;
+          echo -e "${makPresult}\\n";
+          if [ "${_RC}" -eq 20 ]; then
+            autoFixConfig;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO"
+            makPresult=$(maketpf "${makList[i]##*/}" link TPF_VERIFY_LINK_REFS=NO); _RC=$?;
+            echo -e "${makPresult}\\n";
+          fi
+        fi
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO re-compile completed RC:${_RC}"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link TPF_VERIFY_LINK_REFS=NO re-compile completed - $(($(date +%-S)-_subnDate))s"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+      done
+      #Re-compile all .mak files
+      for((i=0; i<${#makList[*]}; i++));
+      do
+        _makFile="${makList[i]##*/}"
+        _makName="${_makFile%%.*}"
+        _subnDate=$(date +%-S)
+        if [[ "${TPF_CPU_LIMIT^^}" == Y ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link with CPU priority"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link with CPU priority"
+          makPresult=$(nice -"${TPF_CPU_NICE}" maketpf "${makList[i]##*/}" link); _RC=$?;
+          echo -e "${makPresult}\\n";
+          if [ "${_RC}" -eq 20 ]; then
+            autoFixConfig;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile nice -${TPF_CPU_NICE} maketpf ${makList[i]##*/} link"
+            makPresult=$(nice -"${TPF_CPU_NICE}" maketpf "${makList[i]##*/}" link); _RC=$?;
+            echo -e "${makPresult}\\n";
+          fi
+        else
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link"
+          makPresult=$(maketpf "${makList[i]##*/}" link); _RC=$?;
+          echo -e "${makPresult}\\n";
+          if [ "${_RC}" -eq 20 ]; then
+            autoFixConfig;
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARN: Re-compile maketpf ${makList[i]##*/} link"
+            makPresult=$(maketpf "${makList[i]##*/}" link); _RC=$?;
+            echo -e "${makPresult}\\n";
+          fi
+        fi
+        if [ "${_RC}" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link re-compile completed RC:${_RC}"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf ${makList[i]##*/} link re-compile completed - $(($(date +%-S)-_subnDate))s"
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${makPresult} RC:$EC"
+          echo -e "${makPresult}" | tee "${_makName^^}.err";
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf ${makList[i]##*/} link re-compile failed >> ${_makName^^}.err  RC:$EC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf ${makList[i]##*/} link recompile failed - $(($(date +%-S)-_subnDate))s"
+          _RC="${EC}"
+        fi
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+      done
+    done
+  else
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: -----------------------------------------------------";
+  fi
+  if [ -f "bss/macro/syseqc.mac" ];then        #Special macro handling
+    if [ -f bss/macro/syseqc.mac.gen ]; then   #Date ref added to make uniq file
+      fdt=$( stat -c %Y bss/macro/syseqc.mac.gen )
+      mv bss/macro/syseqc.mac.gen "bss/macro/syseqc.mac.gen.${fdt}"
+    fi
+    mv bss/macro/syseqc.mac bss/macro/syseqc.mac.gen
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: syseqc.mac renamed"
+  fi
+  if [ -f "bss/src/irccr.asm" ];then #Special asm handling
+    if [ -f bss/src/irccr.asm.gen ]; then      #Date ref added to make uniq file
+      fdt=$( stat -c %Y bss/src/irccr.asm.gen )
+      mv bss/src/irccr.asm.gen "bss/src/irccr.asm.gen.${fdt}"
+    fi
+    mv bss/src/irccr.asm bss/src/irccr.asm.gen
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: irccr.asm renamed"
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+function pdddsLibs {
+  local _countNo;
+  local _pddd;
+  declare -a _pddd;
+  local _pdddsfolder;
+  local _pdddsfolder1;
+  local _execDate;
+  #pdddsSystemsLib=$5 #--------Eg aaa,bbb,ccc,ddd,zzz
+  pddspath="APPL_ROOT += /ztpfrepos/pddds_test/${USR_IMPL_CORE}/"
+  _pdddsSystemsLib="${pdddsSystemsLib//\,/ }"
+  _pddd=(${_pdddsSystemsLib})
+  IFS=' '
+  if [[ ${_pddd[0]} != "NULL" ]]; then
+    _execDate=$(date +%-S)
+    for ((i=0;i<${#_pddd[@]};i++))
+    do
+      if [[ -d "/ztpfrepos/pddds_test/${USR_IMPL_CORE}/${_pddd[i]}" ]]; then
+        _pdddsfolder="${_pdddsfolder} ${_pddd[i]}"
+      else
+        echo "ERROR:$(date +"%Y-%m-%d %H:%M:%S") PDDDS library folder doesnot exist with zlinux system /ztpfrepos/pddds_test/${USR_IMPL_CORE}/${_pddd[i]}"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:PDDDS library folder doesnot exist with zlinux system /ztpfrepos/pddds_test/${USR_IMPL_CORE}/${_pddd[i]} RC:$EC"
+      fi
+    done
+    #shellcheck disable=2116
+    _pdddsfolder1=($(echo "${_pdddsfolder}"))
+    if [ -n "${_pdddsfolder1[0]// /}" ]; then
+      _countNo=$(grep -n "APPL_ROOT :=" maketpf.cfg | cut -d : -f 1)
+      for ((i=0;i<"${#_pdddsfolder1[@]}";i++))
+      do
+        if [[ -n "${_pdddsfolder1[i]// /}" ]]; then
+          sed -i "$((_countNo=_countNo + 1)) i $pddspath${_pdddsfolder1[i]}" maketpf.cfg
+        fi
+      done
+    fi
+    echo "INFO:$(date +"%Y-%m-%d %H:%M:%S") PDDDS library folder update completed - $(($(date +%-S)-_execDate))s"
+  fi
+  unset IFS
+}
+#-----------------------------------------------------------------------------#
+function updateConfig {
+  local _RC=0;
+  local _implementation="$1";
+  local _implPutLevel="$2";
+  local _implDependancyDvl="$3";
+  local _implDependancyStg="$4";
+  local _currentDate;
+  local _syslineNo;
+  local _temp="";
+  local _cfgFlag=0;
+  local _XrefPlanName;
+  local _XrefPlanDate;
+  local _XrefPlanPath;
+  local _jTemp;
+  local _putlineNo;
+  local _putPtr;
+  local _execDate;                     #Execution block timestamp
+  local _taskDate;                     #Execution task execution timestamp
+  local _submDate;                     #Subtask execution timestamp
+  local _finalPutNo;                   #help to remove += for no depent cfg
+  local _finPtr;                       #help to remove += for no depent cfg
+  declare -a _dvlList;
+  declare -a _stgList;
+  _currentDate="$(date +%Y%m%d)"
+  _implLoadDate="${_implementation##*_}"
+  _implDependancyDvl="${_implDependancyDvl//\,/ }";
+  _implDependancyStg="${_implDependancyStg//\,/ }";
+  _implReferenceCore="${implementation%%_*}/${USR_IMPL_CORE}";
+#DVL Dependancy added from modernization project------------------------------#
+  if [ -n "${_implDependancyDvl// /}" ]; then
+    _execDate=$(date +%-S)
+    _temp=( ${_implDependancyDvl} );
+    for((i=1; i<${#_temp[@]}; i++));   #Skip first data start from 1
+    do
+      if [ -d "${DVL_TPF_APP}/${_temp[i]%%_*}/${USR_IMPL_CORE}" ]; then
+        _dvlList+="${_dvlList[i]} ${_temp[i]##*_},${DVL_TPF_APP}/${_temp[i]%%_*}/${USR_IMPL_CORE}";
+      fi
+      if [ -d "${DVL_TPF_SYS}/${_temp[i]%%_*}/${USR_IMPL_CORE}" ]; then
+        _dvlList+="${_dvlList[i]} ${_temp[i]##*_},${DVL_TPF_SYS}/${_temp[i]%%_*}/${USR_IMPL_CORE}";
+      fi
+    done
+    _temp=()                           #Unset
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Delete invalid directory plan numbers from the list of DVL dependencies - $(($(date +%-S)-_execDate))s"
+  else
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:No DVL workspace dependancy provided to SKIP RC:$RC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: No DVL workspace dependancy provided to SKIP"
+  fi
+#DVL Sort order---------------------------------------------------------------#
+  _execDate=$(date +%-S)
+  IFS=' ' read -r -a _devlList <<< "${_dvlList[*]}"
+  for ((i=0;i<"${#_devlList[@]}";i++))
+  do
+    #shellcheck disable=SC2004
+    for ((j=$i;j<"${#_devlList[@]}";j++))
+    do
+      if [ -n "${_devlList[$i]%,*}" ] && [ "${_devlList[$i]%,*}" -lt "${_devlList[$j]%,*}" ]; then
+        _dvlLst="${_devlList[$i]}"
+        _devlList[$i]="${_devlList[$j]}"
+        _devlList[$j]="${_dvlLst}"
+      fi
+    done
+  done
+  unset IFS
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Sorted list of DVL dependence by date - $(($(date +%-S)-_execDate))s"
+#STG Dependancy added from modernization--------------------------------------#
+  if [ -n "${_implDependancyStg// /}" ]; then
+    _execDate=$(date +%-S)
+    _temp=( ${_implDependancyStg} );
+    for((i=1; i<${#_temp[@]}; i++));   #Skip first data start from 1
+    do
+      if [ -d "${STG_TPF_APP}/${_temp[i]%%_*}/${USR_IMPL_CORE}" ]; then
+        _stgList+="${_stgList[i]} ${_temp[i]##*_},${STG_TPF_APP}/${_temp[i]%%_*}/${USR_IMPL_CORE} ";
+      fi
+      if [ -d "${STG_TPF_SYS}/${_temp[i]%%_*}/${USR_IMPL_CORE}" ]; then
+        _stgList+="${_stgList[i]} ${_temp[i]##*_},${STG_TPF_SYS}/${_temp[i]%%_*}/${USR_IMPL_CORE} ";
+      fi
+    done
+    _temp=()                           #Unset
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Delete invalid directory plan numbers from the list of STG dependencies - $(($(date +%-S)-_execDate))s"
+  else
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:No STG workspace dependancy provided to SKIP RC:$RC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: No STG workspace dependancy provided to SKIP"
+  fi
+#Define PEND and XREF paths as per core/systems-------------------------------#
+  case "${USR_IMPL_CORE,,}" in
+    res)
+      _pendPath="$PRD_RES_PND";
+    ;;
+    air)
+      _pendPath="$PRD_AIR_PND";
+    ;;
+    oss)
+      _pendPath="$PRD_OSS_PND";
+    ;;
+    wsp)
+      _pendPath="$PRD_WSP_PND";
+    ;;
+    apo)
+      _pendPath="$PRD_APO_PND";
+      _pendXref="$PRD_APO_XRF";
+    ;;
+    pgr)
+      _pendPath="$PRD_PGR_PND";
+      _pendXref="$PRD_PGR_XRF";
+    ;;
+    pre)
+      _pendPath="$PRD_PRE_PND";
+      _pendXref="$PRD_PRE_XRF";
+    ;;
+    *)
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:No systems selected RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: No systems selected"
+    ;;
+  esac
+#Load PEND File path----------------------------------------------------------#
+  _execDate=$(date +%-S)
+  if [ "${USR_IMPL_CORE,,}" == "apo" ] || [ "${USR_IMPL_CORE,,}" == "pgr" ] || [ "${USR_IMPL_CORE,,}" == "pre" ]; then
+    _XrefImplID=( $(awk ' $3 <= '"${_implLoadDate:0:8}"' ' "${_pendXref}" | grep ' APZ ' | tr -s ' ' | sort -nrk 3.1 | cut -d' ' -f1,3,8 | sed 's/ //2' | sed 's/ /,/g' | uniq -u) )
+    for((i=0; i<${#_XrefImplID[@]}; i++));
+    do
+      _XrefPlanName="${_XrefImplID[i]%%,*}"
+      _XrefTempDate="${_XrefImplID[i]#*,}"
+      _XrefPlanDate="${_XrefTempDate/,/}"
+      _XrefPlanPath=( $(grep "${_XrefPlanName}" "${_pendPath}" | grep "${USR_IMPL_CORE}" | grep 'ztpfrepos' | tr -s " " | sort -nrk 5.1 | cut -d' ' -f6 ) )
+      _seqNum=0;
+      if [ -n "${_XrefPlanPath[0]// /}" ];  then
+        for x in "${_XrefPlanPath[@]}"
+        do
+          _seqNum=$((_seqNum + 1))
+          printf -v snum "%06d" "$_seqNum"       #Append 6-digit sequence number (12-digit time stamp, 4-digit sequnce number)
+          _jTemp="${_XrefPlanDate},${x}"
+          _stgList+="${_jTemp/,/${snum},} "
+        done
+      fi
+      _XrefPlanPath=( $(grep "${_XrefPlanName}" "${_pendPath}" | grep "${USR_IMPL_CORE}" | grep 'ztpfsys' | tr -s " " | sort -nrk 5.1 | cut -d' ' -f6 ) )
+      _seqNum=0;
+      if [ -n "${_XrefPlanPath[0]// /}" ];  then
+        for x in "${_XrefPlanPath[@]}"
+        do
+          _seqNum=$((_seqNum + 1))
+          printf -v snum "%06d" "$_seqNum"       #Append 6-digit sequence number (12-digit time stamp, 4-digit sequnce number)
+          _jTemp="${_XrefPlanDate},${x}"
+          _stgList+="${_jTemp/,/${snum},} "
+        done
+      fi
+    done
+  elif [ "${USR_IMPL_CORE,,}" == "wsp" ] || [ "${USR_IMPL_CORE,,}" == "air" ] || [ "${USR_IMPL_CORE,,}" == "res" ] || [ "${USR_IMPL_CORE,,}" == "oss" ]; then
+    #shellcheck disable=SC2086
+    _stgTemp=( $(grep "${USR_IMPL_CORE}" ${_pendPath} | grep 'ztpfsys\|ztpfrepos' | tr -s " " | cut -d" " -f4,5 | sed 's/ /,/g') )
+    _seqNum=0;
+    for i in "${_stgTemp[@]}"
+    do
+      _seqNum=$((_seqNum + 1))
+      printf -v snum "%010d" "$_seqNum"          #Append 10-digit sequence number (6-digit time format, 4-digit sequnce number)
+      _stgList+="${i/,/${snum},} "
+    done
+  fi
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Legacy plan dependencies read from pend file - $(($(date +%-S)-_execDate))s"
+#STG Sort order---------------------------------------------------------------#
+  _execDate=$(date +%-S)
+  IFS=' ' read -r -a _stagingList <<< "${_stgList[*]}"
+  for ((i=0;i<"${#_stagingList[@]}";i++))
+  do
+    #shellcheck disable=SC2004
+    for ((j=$i;j<"${#_stagingList[@]}";j++))
+    do
+      if [ -n "${_stagingList[$i]%,*}" ] && [ "${_stagingList[$i]%,*}" -lt "${_stagingList[$j]%,*}" ]; then
+        _stgLst="${_stagingList[$i]}"
+        _stagingList[$i]="${_stagingList[$j]}"
+        _stagingList[$j]="${_stgLst}"
+      fi
+    done
+  done
+  unset IFS
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Sorted list of STG dependence by date  - $(($(date +%-S)-_execDate))s"
+#-----------------------------------------------------------------------------#
+#Update configuration file                                                    #
+#-----------------------------------------------------------------------------#
+  if [ -f "maketpf.cfg" ]; then
+    _execDate=$(date +%-S)
+#TPF_ROOT Update--------------------------------------------------------------#
+    _taskDate=$(date +%-S)
+    _syslineNo=($(grep -n '^TPF_ROOT \|#TPF_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+    for((i=0; i<${#_syslineNo[@]}; i++));        #Remove all exsiting TPF_ROOT lines
+    do
+      sed -i "${_syslineNo[0]}d" maketpf.cfg
+    done
+    if [ -d "${SYS_DVL_IMPL_CWRK}derived" ]; then
+      sed -i "${_syslineNo[0]} i TPF_ROOT := ${SYS_DVL_IMPL_CWRK}derived \t # ${_implLoadDate}" maketpf.cfg
+      sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${SYS_DVL_IMPL_CWRK%*/} \t # ${_implLoadDate}" maketpf.cfg
+    elif [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+      sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT := ${SYS_DVL_IMPL_CWRK%*/} \t # ${_implLoadDate}" maketpf.cfg
+    fi
+    for((i=0; i<=${#_devlList[@]}; i++));
+    do
+      _temp=( ${_devlList[i]/,/ } );
+      if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+        if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        elif [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        fi
+      elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+        if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        elif [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        fi
+      fi
+    done
+    for((i=0; i<=${#_stagingList[@]}; i++));
+    do
+      _temp=( ${_stagingList[i]/,/ } );
+      if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+        if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        elif [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        fi
+      elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+        if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        elif [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        fi
+      fi
+    done
+    if [ -d "${PRD_ORIGIN_SYS}/derived" ] && [ -n "${PRD_ORIGIN_SYS// /}" ]; then
+      sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_ORIGIN_SYS}/derived" maketpf.cfg
+    fi
+    if [ -d "${PRD_ORIGIN_SYS}" ] && [ -n "${PRD_ORIGIN_SYS// /}" ]; then
+      sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_ORIGIN_SYS}" maketpf.cfg
+    elif [ -n "${PRD_ORIGIN_SYS// /}" ]; then
+      sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${PRD_ORIGIN_SYS}" maketpf.cfg
+    fi
+    if [[ "${USR_IMPL_CORE,,}" =~ ^(apo|pgr|pre)$ ]]; then
+      for((i=0; i<=${#_devlList[@]}; i++));
+      do
+        _temp=( ${_devlList[i]/,/ } );
+        if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}/common" ] && [[ "${_temp[1]}/common" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}/common \t # ${_temp[0]}" maketpf.cfg
+          fi
+        elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}/common" ] && [[ "${_temp[1]}/common" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}/common \t # ${_temp[0]}" maketpf.cfg
+          fi
+        fi
+      done
+      for((i=0; i<=${#_stagingList[@]}; i++));
+      do
+        _temp=( ${_stagingList[i]/,/ } );
+        if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}/common" ] && [[ "${_temp[1]}/common" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}/common \t # ${_temp[0]}" maketpf.cfg
+          fi
+        elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}/common" ] && [[ "${_temp[1]}/common" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}/common \t # ${_temp[0]}" maketpf.cfg
+          fi
+        fi
+      done
+      if [ -d "${PRD_ORIGIN_CSY}/derived" ] && [ -n "${PRD_ORIGIN_CSY// /}" ]; then
+        sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_ORIGIN_CSY}/derived" maketpf.cfg
+      fi
+      if [ -d "${PRD_ORIGIN_CSY}" ] && [ -n "${PRD_ORIGIN_CSY// /}" ]; then
+        sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_ORIGIN_CSY}" maketpf.cfg
+      elif [ -n "${PRD_ORIGIN_CSY// /}" ]; then
+        sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${PRD_ORIGIN_CSY}" maketpf.cfg
+      fi
+    fi
+    if [ -n "${PRD_ORIGIN_IBM// /}" ]; then
+      sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_ORIGIN_IBM}" maketpf.cfg
+    fi
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: TPF_ROOT Updated in the config file with the list of dependencies - $(($(date +%-S)-_taskDate))s"
+#APPL_ROOT Update-------------------------------------------------------------#
+    _taskDate=$(date +%-S)
+    _applineNo=($(grep -n '^APPL_ROOT \|#APPL_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+    _appPtr="${_applineNo[1]}"
+    for((i=0; i<${#_applineNo[@]}; i++));        #Remove all exsiting TPF_ROOT lines
+    do
+      sed -i "${_applineNo[0]}d" maketpf.cfg
+    done
+    if [ -d "${APP_DVL_IMPL_CWRK}derived" ]; then
+      sed -i "${_applineNo[0]} i APPL_ROOT := ${APP_DVL_IMPL_CWRK}derived \t # ${_implLoadDate}" maketpf.cfg
+      sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${APP_DVL_IMPL_CWRK%*/} \t # ${_implLoadDate}" maketpf.cfg
+    elif [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+      sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT := ${APP_DVL_IMPL_CWRK%*/} \t # ${_implLoadDate}" maketpf.cfg
+    fi
+    for((i=0; i<=${#_devlList[@]}; i++));
+    do
+      _temp=( ${_devlList[i]/,/ } );
+      if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+        if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        elif [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_applineNo=_applineNo + 1)) i #APPL_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        fi
+      elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+        if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        elif [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_applineNo=_applineNo + 1)) i #APPL_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        fi
+      fi
+    done
+    for((i=0; i<=${#_stagingList[@]}; i++));
+    do
+      _temp=( ${_stagingList[i]/,/ } );
+      if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -le "${_implLoadDate:0:14}" ]; then #Load date boudry
+        if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        elif [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_applineNo=_applineNo + 1)) i #APPL_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        fi
+      elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+        if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        elif [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+          sed -i "$((_applineNo=_applineNo + 1)) i #APPL_ROOT += ${_temp[1]} \t # ${_temp[0]}" maketpf.cfg
+        fi
+      fi
+    done
+    if [[ "${USR_IMPL_CORE,,}" =~ ^(apo|pgr|pre)$ ]]; then
+      if [ -d "${PRD_ORIGIN_CAP}/derived" ] && [ -n "${PRD_ORIGIN_CAP// /}" ]; then
+        sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${PRD_ORIGIN_CAP}/derived" maketpf.cfg
+      fi
+      if [ -d "${PRD_ORIGIN_CAP}" ] && [ -n "${PRD_ORIGIN_CAP// /}" ]; then
+        sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${PRD_ORIGIN_CAP}" maketpf.cfg
+      fi
+    fi
+    if [ -d "${PRD_ORIGIN_APP}/derived" ] && [ -n "${PRD_ORIGIN_APP// /}" ]; then
+      sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${PRD_ORIGIN_APP}/derived" maketpf.cfg
+    fi
+    if [ -d "${PRD_ORIGIN_APP}" ] && [ -n "${PRD_ORIGIN_APP// /}" ]; then
+      sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${PRD_ORIGIN_APP}" maketpf.cfg
+    elif [ -n "${PRD_ORIGIN_APP// /}" ]; then
+      sed -i "$((_applineNo=_applineNo + 1)) i #APPL_ROOT += ${PRD_ORIGIN_APP}" maketpf.cfg
+    fi
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: APPL_ROOT Updated in the config file with the list of dependencies - $(($(date +%-S)-_taskDate))s"
+#NON-IBM FLAGS Update---------------------------------------------------------#
+    if [[ "${BLD_FLAG}" == "APP" ]]; then
+      _taskDate=$(date +%-S)
+      if [ "${USR_IMPL_CORE}" == "pgr" ]; then   #Disable FLAGS only for PGR
+        _flagLineNo="$(grep -n 'CFLAGS_USER := -fshort-enums' maketpf.cfg | grep -v "\#" | cut -d : -f 1)"
+        if [ -n "${_flagLineNo// /}" ]; then
+          sed -i "${_flagLineNo}d" maketpf.cfg
+          sed -i "${_flagLineNo} i #CFLAGS_USER := -fshort-enums" maketpf.cfg
+        fi
+        _flagLineNo="$(grep -n 'CXXFLAGS_USER := -fshort-enums' maketpf.cfg | grep -v "\#" | cut -d : -f 1)"
+        if [ -n "${_flagLineNo// /}" ]; then
+          sed -i "${_flagLineNo}d" maketpf.cfg
+          sed -i "${_flagLineNo} i #CXXFLAGS_USER := -fshort-enums" maketpf.cfg
+        fi
+        _flagLineNo="$(grep -n 'CFLAGS_USER += -fshort-enums' maketpf.cfg | grep -v "\#" | cut -d : -f 1)"
+        if [ -n "${_flagLineNo// /}" ]; then
+          sed -i "${_flagLineNo}d" maketpf.cfg
+          sed -i "${_flagLineNo} i #CFLAGS_USER += -fshort-enums" maketpf.cfg
+        fi
+        _flagLineNo="$(grep -n 'CXXFLAGS_USER += -fshort-enums' maketpf.cfg | grep -v "\#" | cut -d : -f 1)"
+        if [ -n "${_flagLineNo// /}" ]; then
+          sed -i "${_flagLineNo}d" maketpf.cfg
+          sed -i "${_flagLineNo} i #CXXFLAGS_USER += -fshort-enums" maketpf.cfg
+        fi
+      else #Enable C FLAGS except for PGR
+        _flagLineNo="$(grep -n '#CFLAGS_USER := -fshort-enums' maketpf.cfg | cut -d : -f 1)"
+        if [ -n "${_flagLineNo// /}" ]; then
+          sed -i "${_flagLineNo}d" maketpf.cfg
+          sed -i "${_flagLineNo} i CFLAGS_USER := -fshort-enums" maketpf.cfg
+        fi
+        _flagLineNo="$(grep -n '#CXXFLAGS_USER := -fshort-enums' maketpf.cfg | cut -d : -f 1)"
+        if [ -n "${_flagLineNo// /}" ]; then
+          sed -i "${_flagLineNo}d" maketpf.cfg
+          sed -i "${_flagLineNo} i CXXFLAGS_USER := -fshort-enums" maketpf.cfg
+        fi
+        _flagLineNo="$(grep -n '#CFLAGS_USER += -fshort-enums' maketpf.cfg | cut -d : -f 1)"
+        if [ -n "${_flagLineNo// /}" ]; then
+          sed -i "${_flagLineNo}d" maketpf.cfg
+          sed -i "${_flagLineNo} i CFLAGS_USER += -fshort-enums" maketpf.cfg
+        fi
+        _flagLineNo="$(grep -n '#CXXFLAGS_USER += -fshort-enums' maketpf.cfg | cut -d : -f 1)"
+        if [ -n "${_flagLineNo// /}" ]; then
+          sed -i "${_flagLineNo}d" maketpf.cfg
+          sed -i "${_flagLineNo} i CXXFLAGS_USER += -fshort-enums" maketpf.cfg
+        fi
+      fi
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: FLAGS updated for NON-IBM segments - $(($(date +%-S)-_taskDate))s"
+    fi
+#IBM FLAGS Update-------------------------------------------------------------#
+    if [[ "${BLD_FLAG}" == "SYS" ]]; then        #Disable all C FLAGS for IBM
+      _taskDate=$(date +%-S)
+      _flagLineNo="$(grep -n 'CFLAGS_USER := -fshort-enums' maketpf.cfg | grep -v "\#" | cut -d : -f 1)"
+      if [ -n "${_flagLineNo// /}" ]; then
+        sed -i "${_flagLineNo}d" maketpf.cfg
+        sed -i "${_flagLineNo} i #CFLAGS_USER := -fshort-enums" maketpf.cfg
+      fi
+      _flagLineNo="$(grep -n 'CXXFLAGS_USER := -fshort-enums' maketpf.cfg | grep -v "\#" | cut -d : -f 1)"
+      if [ -n "${_flagLineNo// /}" ]; then
+        sed -i "${_flagLineNo}d" maketpf.cfg
+        sed -i "${_flagLineNo} i #CXXFLAGS_USER := -fshort-enums" maketpf.cfg
+      fi
+      _flagLineNo="$(grep -n 'CFLAGS_USER += -fshort-enums' maketpf.cfg | grep -v "\#" | cut -d : -f 1)"
+      if [ -n "${_flagLineNo// /}" ]; then
+        sed -i "${_flagLineNo}d" maketpf.cfg
+        sed -i "${_flagLineNo} i #CFLAGS_USER += -fshort-enums" maketpf.cfg
+      fi
+      _flagLineNo="$(grep -n 'CXXFLAGS_USER += -fshort-enums' maketpf.cfg | grep -v "\#" | cut -d : -f 1)"
+      if [ -n "${_flagLineNo// /}" ]; then
+        sed -i "${_flagLineNo}d" maketpf.cfg
+        sed -i "${_flagLineNo} i #CXXFLAGS_USER += -fshort-enums" maketpf.cfg
+      fi
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: FLAGS updated for IBM segments - $(($(date +%-S)-_taskDate))s"
+    fi
+#Set active workspace path----------------------------------------------------#
+    _taskDate=$(date +%-S)
+    _syslineNo=($(grep -n '^TPF_ROOT \|#TPF_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+    _sysPtr="${_syslineNo[0]}"
+    sed -i "${_sysPtr}s/./:/10" maketpf.cfg      #Replace exiting + symbol
+    _applineNo=($(grep -n '^APPL_ROOT \|#APPL_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+    _appPtr="${_applineNo[0]}"
+    sed -i "${_appPtr}s/./:/11" maketpf.cfg      #Replace exiting + symbol
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Set DVL workspace as primary path in config files - $(($(date +%-S)-_taskDate))s"
+#Set user custom put level----------------------------------------------------#
+    _taskDate=$(date +%-S)
+    _putlineNo=($(grep -n " /ztpf/\|/ztpfsys/${USR_IMPL_CORE,,}" maketpf.cfg | cut -d : -f 1 ));
+    _putPtr="${_putlineNo[0]}";
+    if [ "${putStatus}" == 'prod' ]; then
+      _implPutstatus=${_implPutLevel};
+    elif [ "${putStatus}" == 'devl' ]; then
+      _implPutstatus="devl";
+    fi
+    if [[ "${USR_IMPL_CORE,,}" =~ ^(apo|pgr|pre)$ ]]; then
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr} i TPF_ROOT += /ztpf/ibm/${_implPutLevel}" maketpf.cfg
+      sed -i "${_putPtr} i TPF_ROOT += /ztpfsys/common/${_implPutstatus}" maketpf.cfg
+      sed -i "${_putPtr} i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE,,}/${_implPutstatus}" maketpf.cfg
+      sed -i "${_putPtr} i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE,,}/${_implPutstatus}/derived" maketpf.cfg
+    else
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr} i TPF_ROOT += /ztpf/ibm/${_implPutLevel}" maketpf.cfg
+      sed -i "${_putPtr} i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE,,}/${_implPutstatus}" maketpf.cfg
+      sed -i "${_putPtr} i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE,,}/${_implPutstatus}/derived" maketpf.cfg
+    fi
+    if [ "${_putPtr}" == "${_sysPtr}" ]; then           # replace it one more time
+      _finalPutNo=($(grep -n '^TPF_ROOT \|#TPF_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+      _finPtr="${_finalPutNo[0]}"
+      sed -i "${_finPtr}s/./:/10" maketpf.cfg      #Replace exiting + symbol
+    fi
+    buildMSG="${USR_IMPL_PLAN^^}: maketpf.cfg file has been generated for ${USR_IMPL_CORE}"
+    sendBLDWSMSG "${buildMSG}" "${USR_IMPL_PLAN}" "SH_BUILD_STATUS"
+    if [[ ${pdddsSystemsLib} != 'NULL' ]];then
+      pdddsLibs                        # Function call for PDDS Libs
+    fi
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Configured with implementation plan support zTPF level in config files - $(($(date +%-S)-_taskDate))s"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: maketpf.cfg configuration file updated along with dependency and flags - $(($(date +%-S)-_execDate))s"
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Maketpf.cfg not found RC:$EC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found";
+    _RC="${EC}";
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+function getConfig {
+  local _RC=0;
+  local _execDate;                     #Execution block timestamp
+  local _taskDate;                     #Execution task execution timestamp
+  local _submDate;                     #Subtask execution timestamp
+  if [ "${reBuildAll}" == "false" ] && [ "${changedFiles}" == "NULL" ]; then
+      echo -e "${reBuildAll} is false and ${changedFiles} is NULL so skipping configuration file generation."
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: DVL creation job has been skipped due to no modification in files and rebuild also maketpf.cfg will not get refreshed"
+  else
+    rm ./*.cfg ./*.err TEMP.out &> /dev/null
+    _execDate=$(date +%-S)
+    wget --no-check-certificate -N "${CFG_URL}" &> /dev/null; _RC=$?;
+    if [ "${_RC}" -lt 1 ]; then
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Retrieved maketpf configuration file from the remote configuration repository  - $(($(date +%-S)-_execDate))s"
+      #index[0]-impl.plan index[1]-putlevel index[2]-dvl.dependancy index[3]-stg.dependancy
+      updateConfig "${implementation,,}" "${implPutLevel,,}" "${implDependancyDvl,,}" "${implDependancyStg,,}";
+      _RC=$?;
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}: Failed to retrieve maketpf configuration file from the remote configuration repository RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Failed to retrieve maketpf configuration file from the remote configuration repository - $(($(date +%-S)-_execDate))s";
+      _RC="${EC}";
+    fi
+    return "${_RC}";
+  fi
+}
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  if [ "${BLD_MUL_STT}" == "true" ]; then
+    USR_IMPL_DATE="${implementation##*_}"
+    warnList="";
+    srcErrSbr="";
+    getParmFromBranch "${implementation%_*}" "DVL"; #RC=$?;
+    if [ "${reBuildAll}" == "true" ]; then
+      execDate=$(date +%-S)
+      #shellcheck disable=2086
+      ${MTP_ENV}/mtpgitcmdexport "projects/${USR_IMPL_ID}/${USR_IMPL_CORE}" "${implementation%_*}" "mtpservice" "NULL" "NULL"; RC=$?;
+      if [ "${RC}" -eq 0 ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Export source to the workspace of DVL completed - $(($(date +%-S)-execDate))s RC:$RC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Export source to the workspace of DVL completed - $(($(date +%-S)-execDate))s"
+      else
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Export source to the workspace of DVL failed - $(($(date +%-S)-execDate))s"
+      fi
+    fi
+    if [ -d "${APP_DVL_IMPL_CWRK}" ] || [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+      if [ -d "/ztpf/ibm/${implPutLevel}" ] && [ -d "/ztpfsys/${USR_IMPL_CORE,,}/${implPutLevel}" ]; then
+        rm -f "${DVL_TPF_LOD}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/"*     #LDR clean up
+        if [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+          pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null          #Switch to project workspace
+            #rm ./*.err TEMP.out &> /dev/null
+            #shellcheck disable=SC2185
+            appTotal=( $(find -type f -regex ".*/.*\.\(asm\|bak\|c\|cbl\|cms\|cpp\|for\|htm\|oco\|sbt\|scr\|java\|pl1\|mak\|cpy\|mac\|h\|hpp\|inc\|dfdl\|dat\|bsc\|dbc\|hfs\|jcl\|job\|200\|201\|ans\|ass\|lis\|loa\|log\|lsc\|oth\|pil\|rt\|tok\|uns\|vis\|xml\|xsd\|l\|ypp\|json\)") )
+            #shellcheck disable=SC2185
+            ocoAppTotal=( $(find -type f -regex "./oco/.*") )
+            execDate=$(date +%-S)
+            if [ "${implementation:0:1}" == "t" ]; then
+              CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/tp/nonibm/nonibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+              BLD_FLAG="APP"
+              getConfig; RC=$?;
+            elif [ "${implementation:0:1}" == "d" ]; then
+              CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/dl/nonibm/nonibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+              getConfig; RC=$?;
+            fi
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Configuration file generated to compile NON-IBM source files - $(($(date +%-S)-execDate))s"
+            if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+              DvlPath="${APP_DVL_IMPL_CWRK}";
+              execDate=$(date +%-S)
+              sabrCompile; RC=$?;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Pre-process Sabretalk has been completed - $(($(date +%-S)-execDate))s"
+              if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+                execDate=$(date +%-S)
+                tpfBuild; RC=$?;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Completed TPF source file compilation process - $(($(date +%-S)-execDate))s"
+              else
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: sabre compilation failed due to following error files ${srcErrSbr[*]} - $(($(date +%-S)-execDate))s"
+                if [ -n "${srcErrSbr// /}" ]; then
+                  if [ "${reBuildAll}" == "true" ]; then
+                    pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+                      failedNonibm="$(find . -type f | grep -Ev "\./sbtasm|\./tpfarc" | grep -E '\.cpp|\.c|\.asm|\.mak' | sed "s|^\./||" | tr '\n' ',')"
+                      failedNames="${srcErrSbr}${failedNonibm}"
+                    popd &> /dev/null
+                  else
+                    #srcErrSbr="src/abcd.sbt,src/oror.sbt,src/porp.sbt"
+                    #changedFiles="src/abcd.sbt,src/oror.sbt,src/orro.sbt,src/aoao.asm,src/aosc.cpp,src/sosp.c,src/porp.sbt,include/acacd.h"
+                    IFS=',' read -r -a chndFiles <<< "${changedFiles[@]}";
+                    for chderr in "${chndFiles[@]}";
+                    do
+                      echo ${srcErrSbr} | grep "${chderr}"; FC=$?;
+                      if [[ "${chderr}" =~ \.sbt ]]; then
+                        if [ "${FC}" -eq 0 ]; then
+                          failedLst+="${chderr},"
+                        fi
+                      else
+                        if [ "${FC}" -eq 1 ]; then
+                          failedLst+="${chderr},"
+                        fi
+                      fi
+                    done
+                    unset IFS;
+                    failedNames="${failedLst[*]}"
+                  fi
+                fi
+              fi
+              execDate=$(date +%-S)
+              unResolved; RC=$?;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: TPF Build unresolved references validated - $(($(date +%-S)-execDate))s"
+            fi
+            # shellcheck disable=2086
+            if [[ -n "${warnList}" ]]; then
+              appNonError=( $(find . -type f -name "*.err" ${warnList} ) );
+              #change
+            else
+              appNonError=( $(find . -type f -name "*.err" ) );
+            fi
+            for verfErr in "${appNonError[@]}";
+            do
+              if [ -f "${verfErr}" ]; then
+                grep "^MTPF\w*E:" "${verfErr}"; _RC="$?";  # actually error files
+                if [ "${_RC}" -ne 0 ]; then
+                  grep -w "directories do not exist:" "${verfErr}" &> /dev/null; _RC=$?
+                  if [ "${_RC}" -ne 0 ]; then
+                    appError+=("${verfErr} ")
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file NON-IBM Segments ${appError[*]} RC:$RC"
+                  else
+                    grep "^MTPF\w*W:" "${verfErr}"| grep -v "MTPF1111W:"; _RC=$?
+                    if [ "${_RC}" -ne 0 ]; then
+                      echo -e "WARN: Maketpf APPL or TPF ROOT do not exist in zlinux for ${verfErr}."
+                      sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Maketpf APPL or TPF ROOT do not exist in zlinux for ${verfErr}. RC:$RC"
+                    else
+                      appError+=("${verfErr} ")
+                    fi
+                  fi
+                else
+                  appError+=("${verfErr} ")
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file NON-IBM Segments ${appError[*]} RC:$RC"
+                fi
+              fi
+            done
+          popd &> /dev/null
+        fi
+        if [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+          pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null          #Switch to project workspace
+            #rm ./*.err TEMP.out &> /dev/null
+            #shellcheck disable=SC2185
+            sysTotal=( $(find -type f -regex ".*/.*\.\(asm\|bak\|c\|cbl\|cms\|cpp\|for\|htm\|oco\|sbt\|scr\|java\|pl1\|mak\|cpy\|mac\|h\|hpp\|inc\|dfdl\|dat\|bsc\|dbc\|hfs\|jcl\|job\|200\|201\|ans\|ass\|lis\|loa\|log\|lsc\|oth\|pil\|rt\|tok\|uns\|vis\|xml\|xsd\|l\|ypp\|json\)") )
+            #shellcheck disable=SC2185
+            ocoSysTotal=( $(find -type f -regex ".*/**/oco/.*") )
+            execDate=$(date +%-S)
+            if [ "${implementation:0:1}" == "t" ]; then
+              CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/tp/ibm/ibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+              BLD_FLAG="SYS"
+              getConfig; RC=$?;
+            elif [ "${implementation:0:1}" == "d" ]; then
+              CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/dl/ibm/ibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+              getConfig; RC=$?;
+            fi
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Configuration file generated to compile IBM source files - $(($(date +%-S)-execDate))s"
+            if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+              DvlPath="${SYS_DVL_IMPL_CWRK}";
+              execDate=$(date +%-S)
+              sabrCompile; RC=$?;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Sabretalk Pre-process completed - $(($(date +%-S)-execDate))s"
+              if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+                execDate=$(date +%-S)
+                tpfBuild; RC=$?;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Completed TPF source file compilation process - $(($(date +%-S)-execDate))s"
+              else
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: sabre compilation failed due to following error files ${srcErrSbr[*]} - $(($(date +%-S)-execDate))s"
+                if [ -n "${srcErrSbr// /}" ]; then
+                  if [ "${reBuildAll}" == "true" ]; then
+                    pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+                      failedIbm="$(find . -type f | grep -Ev "\./sbtasm|\./tpfarc" | grep -E '\.cpp|\.c|\.asm|\.mak' | sed "s|^\./||" | tr '\n' ',')"
+                      failedNames="${srcErrSbr}${failedIbm}"
+                    popd &> /dev/null
+                  else
+                    #srcErrSbr="src/abcd.sbt,src/oror.sbt,src/porp.sbt"
+                    #changedFiles="src/abcd.sbt,src/oror.sbt,src/orro.sbt,src/aoao.asm,src/aosc.cpp,src/sosp.c,src/porp.sbt,include/acacd.h"
+                    IFS=',' read -r -a chndFiles <<< "${changedFiles[@]}";
+                    for chderr in "${chndFiles[@]}";
+                    do
+                      echo "${srcErrSbr}" | grep "${chderr}"; FC=$?;
+                      if [[ "${chderr}" =~ \.sbt ]]; then
+                        if [ "${FC}" -eq 0 ]; then
+                          failedLst+="${chderr},"
+                        fi
+                      else
+                        if [ "${FC}" -eq 1 ]; then
+                          failedLst+="${chderr},"
+                        fi
+                      fi
+                    done
+                    unset IFS;
+                    failedNames="${failedLst[*]}"
+                  fi
+                fi
+              fi
+              execDate=$(date +%-S)
+              unResolved; RC=$?;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: TPF Build unresolved references validated - $(($(date +%-S)-execDate))s"
+            fi
+            # shellcheck disable=SC2086
+            #sysError=( $(find . -type f -name "*.err" ${warnList} ) )
+            if [[ -n "${warnList}" ]]; then
+              sysIbmError=( $(find . -type f -name "*.err" ${warnList} ) );
+            else
+              sysIbmError=( $(find . -type f -name "*.err" ) );
+            fi
+            sysError=();
+            for verIbmErr in "${sysIbmError[@]}";
+            do
+              if [ -f "${verIbmErr}" ]; then
+                grep "^MTPF\w*E:" "${verIbmErr}"; _RC=$?;
+                if [ "${_RC}" -ne 0 ]; then
+                  grep -w "directories do not exist:" "${verIbmErr}" &> /dev/null; _RC=$?
+                  if [ "${_RC}" -ne 0 ]; then
+                    sysError+=("${verIbmErr} ")
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file IBM Segments ${sysError[*]} RC:$RC"
+                  else
+                    grep "^MTPF\w*W:" "${verIbmErr}"| grep -v "MTPF1111W:"; _RC=$?
+                    if [ "${_RC}" -ne 0 ]; then
+                      echo -e "WARN: Maketpf APPL or TPF ROOT do not exist in zlinux for ${verIbmErr}."
+                      sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Maketpf APPL or TPF ROOT do not exist in zlinux for ${verIbmErr}. RC:$RC"
+                    else
+                      sysError+=("${verIbmErr} ")
+                    fi
+                  fi
+                else
+                  sysError+=("${verIbmErr} ")
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file IBM Segments ${sysError[*]} RC:$RC"
+                fi
+              fi
+            done
+          popd &> /dev/null
+        fi
+      else
+        printErr="ERROR:$(date +"%Y-%m-%d %H:%M:%S") IBM zTPF level directory not found - ${implPutLevel}"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${printErr} RC:$EC"
+        echo -e "${printErr}"
+        RC="${EC}"
+      fi
+      execDate=$(date +%-S)
+      srcTotal=("${appTotal[@]}" "${sysTotal[@]}" "${ocoAppTotal[@]}" "${ocoSysTotal[@]}")
+      errTotal=("${appError[@]}" "${sysError[@]}")
+      if [ -n "${appError[0]// /}" ]; then
+        for appErrs in "${appError[@]}";
+        do
+          appErrPath+="${APP_DVL_IMPL_CWRK}${appErrs##*./},"
+          errFilename="${appErrs##*./}";
+          errName="${errFilename%%.*}";
+          pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+            failedFinal+="$(find . -type f -iname "*${errName}*" | grep -E '\b\.cpp\b|\b\.c\b|\b\.asm\b|\b\.mak\b' | sed "s|^\./||" | tr '\n' ',')"
+          popd  &> /dev/null
+        done
+      fi
+      if [ -n "${sysError[0]// /}" ]; then
+        for sysErrs in "${sysError[@]}";
+        do
+          sysErrPath+="${SYS_DVL_IMPL_CWRK}${sysErrs##*./},"
+          errFilename="${sysErrs##*./}";
+          errName="${errFilename%%.*}";
+          pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+            failedFinal+="$(find . -type f -iname "*${errName}*" | grep -E '\b\.cpp\b|\b\.c\b|\b\.asm\b|\b\.mak\b' | sed "s|^\./||" | tr '\n' ',')"
+          popd  &> /dev/null
+        done
+      fi
+      if [ -n "${failedFinal[0]// /}" ]; then
+        failedNames="$(echo "${failedFinal[*]}" | tr ',' ' ' | xargs -n1 | sort -u | xargs | tr ' ' ',')"
+      fi
+      if [ "${errTotal[0]}" != '' ] && [ -n "${appErrPath[0]// /}" ] || [ -n "${sysErrPath[0]// /}" ]; then
+        if [ -z "${appErrPath[0]// /}" ] && [ -n "${sysErrPath[0]// /}" ]; then
+          errFiles="${sysErrPath[*]}"
+        elif [ -n "${appErrPath[0]// /}" ] && [ -z "${sysErrPath[0]// /}" ]; then
+          errFiles="${appErrPath[*]}"
+        elif [ -n "${appErrPath[0]// /}" ] && [ -n "${sysErrPath[0]// /}" ]; then
+          errFiles="${appErrPath[*]}${sysErrPath[*]}"
+        fi
+        failFiles="\"${errFiles%*,}\""
+        errFiles="${errFiles%*,}"
+        RC="${EC}"
+      fi
+      if [ -f "${APP_DVL_IMPL_CWRK}.temp" ] && [ -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+        pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+        #shellcheck disable=SC2002
+        _cntlError=( $(cat .temp | tr "\n" " ") )
+        for i in "${_cntlError[@]}"
+        do
+          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt RC:$RC"
+          echo -e "WARNING: ${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt"
+        done
+        rm ./.temp &> /dev/null
+        popd &> /dev/null
+      elif [ ! -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND RC:$RC"
+        echo -e "WARNING: Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND" #RESERVED format
+        rm ./.temp &> /dev/null
+      fi
+      if [ -f "${SYS_DVL_IMPL_CWRK}.temp" ] && [ -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+        pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+        #shellcheck disable=SC2002
+        _cntlError=( $(cat .temp | tr "\n" " ") )
+        for i in "${_cntlError[@]}"
+        do
+          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt RC:$RC"
+          echo -e "WARNING: ${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt"
+        done
+        rm ./.temp &> /dev/null
+        popd &> /dev/null
+      elif [ ! -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND RC:$RC"
+        echo -e "WARNING: Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND" #RESERVED format
+        rm ./.temp &> /dev/null
+      fi
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Post warning check with compiler control tables - $(($(date +%-S)-execDate))s"
+    else
+      RC="${EC}";
+    fi
+    execDate=$(date +%-S)
+    if [ -z "${sabreErr}" ]; then
+      if [ -z "${errFiles[0]}" ]; then
+        loadErr=""
+      else
+        if [ -z "${errorMesUnres[0]}" ]; then
+          loadErr="${errFiles[*]} . Please review the .err files and take corrective action."
+        else
+          loadErr="${errFiles[*]} ${errorMesUnres}. Please review the .err files and take corrective action."
+        fi
+      fi
+    else
+      loadErr="${sabreErr}"
+      RC=${EC};
+    fi
+    if [ -z "${loadErr}" ]; then
+      loadErr="${printErr}"
+    fi
+    if [ -f "${APP_DVL_IMPL_CWRK}TEMP.out" ]; then
+      # shellcheck disable=SC2002
+      makeErr=$(cat "${APP_DVL_IMPL_CWRK}TEMP.out" | grep maketpf_checkeol | cut -d ' ' -f 2)
+      loadErr="TEMP.so generated due to ${makeErr##*/} in MAK file or CNTL entry missing"
+      RC="$EC"
+    elif [ -f "${SYS_DVL_IMPL_CWRK}TEMP.out" ]; then
+      # shellcheck disable=SC2002
+      makeErr=$(cat "${SYS_DVL_IMPL_CWRK}TEMP.out" | grep maketpf_checkeol | cut -d ' ' -f 2)
+      loadErr="TEMP.so generated due to ${makeErr##*/} in MAK file or CNTL entry missing"
+      RC="$EC"
+    fi
+    if [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+      appBuildErr=$(buildVerify "${APP_DVL_IMPL_CWRK%/*}")
+    fi
+    if [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+      sysBuildErr=$(buildVerify "${SYS_DVL_IMPL_CWRK%/*}")
+    fi
+    if [ -n "${appBuildErr// /}" ] || [ -n "${sysBuildErr// /}" ]; then
+      if [[ -n "${appBuildErr// /}" ]] && [[ -n "${sysBuildErr// /}" ]]; then
+        printErr="Source ${appBuildErr} in ${APP_DVL_IMPL_CWRK} and ${sysBuildErr} in ${SYS_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+      elif [[ -z "${appBuildErr}" ]] && [[ -n "${sysBuildErr// /}" ]]; then
+        printErr="Source ${sysBuildErr} in ${SYS_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+      elif [[ -n "${appBuildErr// /}" ]] && [[ -z "${sysBuildErr// /}" ]]; then
+        printErr="Source ${appBuildErr} in ${APP_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+      fi
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${printErr} RC:$EC"
+      echo -e "\nERROR:$(date +"%Y-%m-%d %H:%M:%S") ${printErr}.";
+      if [ -z "${loadErr// /}" ]; then
+        loadErr="${printErr}"
+      fi
+      RC="$EC";
+    fi
+    if [ -n "${failedNames// /}" ]; then
+      if [ "${failedNames: -1}" == "," ]; then
+        failedNames=${failedNames%,*}
+      else
+        failedNames=${failedNames};
+      fi
+      echo -e "\nERROR:$(date +"%Y-%m-%d %H:%M:%S") ${failedNames} final not complied files or error files.";
+    fi
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: POST Build directory errors analysis completed - $(($(date +%-S)-execDate))s"
+    if [ "${RC}" -eq 0 ]; then
+       jobstatus="TRUE"
+    elif [ "${RC}" -eq 4 ]; then
+       jobstatus="TRUE"
+       RC=0;
+    else
+       jobstatus="FALSE"
+    fi
+    echo -e "\\nJSON RESULT --> { \"totalCount\" :\"${#srcTotal[@]}\" , \"failedCount\" : \"${#errTotal[@]}\", \"failedFiles\" : [$failFiles] , \"failedFileNames\" : \"$failedNames\" , \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\" , \"errorMessage\" : \"$loadErr\" , \"jobStatus\" : \"$jobstatus\" }\n"
+  elif [ "${BLD_MUL_STT}" == "false" ]; then
+    USR_IMPL_DATE="${implementation##*_}"
+    getParmFromBranch "${implementation%_*}" "DVL"; #RC=$?;
+    lockfile="/tmp/multiplebuild.lck"
+    if [ -f ${lockfile} ]; then
+      execDate=$(date +%-S)
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:$(date +"%Y-%m-%d %H:%M:%S") - START wait for existing DVL or STAGING build to be complete -- ${implementation%_*} RC:$RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: - START wait for existing DVL or STAGING build to be complete -- ${implementation%_*}"
+      curl -k -s "${PRD_API_CHNL}://${PRD_API_HOST}:${PRD_API_PORT}/${PRD_API_BDB}?planId=${implementation}&runStatus=wait" &> /dev/null;
+      while ls "${lockfile[0]}"
+      do
+        psaux=$(cat "${lockfile}")
+        if [ -n "${psaux[0]// /}" ]; then
+          ps -axu|awk '{print$2}'| grep -x "${psaux}";_RC=$?
+          if [ "${_RC}" -ne 0 ]; then
+            rm -f "${lockfile}";
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Existing DVL or STAGING build in process, DVL build for $(hostname) and process id is ${psaux} -- ${implementation%_*} RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Existing DVL or STAGING build in process for $(hostname) and process id is ${psaux} -- ${implementation%_*}"
+          fi
+        fi
+        sleep 5;
+      done
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Build wait queue completed - $(($(date +%-S)-execDate))s"
+      touch "${lockfile}"
+      echo ${SPID} > "${lockfile}";
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:$(date +"%Y-%m-%d %H:%M:%S") - END wait for existing DVL or STAGING build -- ${implementation%_*} RC:$RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: - END wait for existing DVL or STAGING build -- ${implementation%_*}"
+      curl -k -s "${PRD_API_CHNL}://${PRD_API_HOST}:${PRD_API_PORT}/${PRD_API_BDB}?planId=${implementation}&runStatus=run" &> /dev/null;
+      USR_IMPL_DATE="${implementation##*_}"
+      warnList="";
+      getParmFromBranch "${implementation%_*}" "DVL"; #RC=$?;
+      if [ "${reBuildAll}" == "true" ]; then
+        execDate=$(date +%-S)
+        #shellcheck disable=2086
+        ${MTP_ENV}/mtpgitcmdexport "projects/${USR_IMPL_ID}/${USR_IMPL_CORE}" "${implementation%_*}" "mtpservice" "NULL" "NULL"&> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild All is activited so removing existing DVL workspace mtpgitcmdexport projects/${USR_IMPL_ID}/${USR_IMPL_CORE} ${implementation%_*} mtpservice NULL NULL RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Source export to build workspace completed - $(($(date +%-S)-execDate))s"
+      fi
+      if [ -d "${APP_DVL_IMPL_CWRK}" ] || [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+        if [ -d "/ztpf/ibm/${implPutLevel}" ] && [ -d "/ztpfsys/${USR_IMPL_CORE,,}/${implPutLevel}" ]; then
+          rm -f "${DVL_TPF_LOD}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/"*     #LDR clean up
+          if [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+            pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null          #Switch to project workspace
+              #rm ./*.err TEMP.out &> /dev/null
+              #shellcheck disable=SC2185
+              appTotal=( $(find -type f -regex ".*/.*\.\(asm\|bak\|c\|cbl\|cms\|cpp\|for\|htm\|oco\|sbt\|scr\|java\|pl1\|mak\|cpy\|mac\|h\|hpp\|inc\|dfdl\|dat\|bsc\|dbc\|hfs\|jcl\|job\|200\|201\|ans\|ass\|lis\|loa\|log\|lsc\|oth\|pil\|rt\|tok\|uns\|vis\|xml\|xsd\|l\|ypp\|json\)") )
+              #shellcheck disable=SC2185
+              ocoAppTotal=( $(find -type f -regex "./oco/.*") )
+              execDate=$(date +%-S)
+              if [ "${implementation:0:1}" == "t" ]; then
+                CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/tp/nonibm/nonibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+                BLD_FLAG="APP"
+                getConfig; RC=$?;
+              elif [ "${implementation:0:1}" == "d" ]; then
+                CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/dl/nonibm/nonibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+                getConfig; RC=$?;
+              fi
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Configuration file generated to compile NON-IBM source files - $(($(date +%-S)-execDate))s"
+              if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+                DvlPath="${APP_DVL_IMPL_CWRK}";
+                execDate=$(date +%-S)
+                sabrCompile; RC=$?;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Sabretalk Pre-process completed - $(($(date +%-S)-execDate))s"
+                if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+                  execDate=$(date +%-S)
+                  tpfBuild; RC=$?;
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Completed TPF source file compilation process - $(($(date +%-S)-execDate))s"
+                else
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: sabre compilation failed due to following error files ${srcErrSbr[*]} - $(($(date +%-S)-execDate))s"
+                  if [ -n "${srcErrSbr// /}" ]; then
+                    if [ "${reBuildAll}" == "true" ]; then
+                      pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+                        failedNonibm="$(find . -type f | grep -Ev "\./sbtasm|\./tpfarc" | grep -E '\.cpp|\.c|\.asm|\.mak' | sed "s|^\./||" | tr '\n' ',')"
+                        failedNames="${srcErrSbr}${failedNonibm}"
+                      popd &> /dev/null
+                    else
+                      #srcErrSbr="src/abcd.sbt,src/oror.sbt,src/porp.sbt"
+                      #changedFiles="src/abcd.sbt,src/oror.sbt,src/orro.sbt,src/aoao.asm,src/aosc.cpp,src/sosp.c,src/porp.sbt,include/acacd.h"
+                      IFS=',' read -r -a chndFiles <<< "${changedFiles[@]}";
+                      for chderr in "${chndFiles[@]}";
+                      do
+                        echo ${srcErrSbr} | grep "${chderr}"; FC=$?;
+                        if [[ "${chderr}" =~ \.sbt ]]; then
+                          if [ "${FC}" -eq 0 ]; then
+                            failedLst+="${chderr},"
+                          fi
+                        else
+                          if [ "${FC}" -eq 1 ]; then
+                            failedLst+="${chderr},"
+                          fi
+                        fi
+                      done
+                      unset IFS;
+                      failedNames="${failedLst[*]}"
+                    fi
+                  fi
+                fi
+                execDate=$(date +%-S)
+                unResolved; RC=$?;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: TPF Build unresolved references validated - $(($(date +%-S)-execDate))s"
+              fi
+              # shellcheck disable=2086
+              if [[ -n "${warnList}" ]]; then
+                appNonError=( $(find . -type f -name "*.err" ${warnList} ) );
+                #change
+              else
+                appNonError=( $(find . -type f -name "*.err" ) );
+              fi
+              for verfErr in "${appNonError[@]}";
+              do
+                if [ -f "${verfErr}" ]; then
+                  grep "^MTPF\w*E:" "${verfErr}"; _RC="$?";  # actually error files
+                  if [ "${_RC}" -ne 0 ]; then
+                    grep -w "directories do not exist:" "${verfErr}" &> /dev/null; _RC=$?
+                    if [ "${_RC}" -ne 0 ]; then
+                      appError+=("${verfErr} ")
+                      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file NON-IBM Segments ${appError[*]} RC:$RC"
+                    else
+                      grep "^MTPF\w*W:" "${verfErr}"| grep -v "MTPF1111W:"; _RC=$?
+                      if [ "${_RC}" -ne 0 ]; then
+                        echo -e "WARN: Maketpf APPL or TPF ROOT do not exist in zlinux for ${verfErr}."
+                        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Maketpf APPL or TPF ROOT do not exist in zlinux for ${verfErr}. RC:$RC"
+                      else
+                        appError+=("${verfErr} ")
+                      fi
+                    fi
+                  else
+                    appError+=("${verfErr} ")
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file NON-IBM Segments ${appError[*]} RC:$RC"
+                  fi
+                fi
+              done
+            popd &> /dev/null
+          fi
+          if [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+            pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null          #Switch to project workspace
+              #rm ./*.err TEMP.out &> /dev/null
+              #shellcheck disable=SC2185
+              sysTotal=( $(find -type f -regex ".*/.*\.\(asm\|bak\|c\|cbl\|cms\|cpp\|for\|htm\|oco\|sbt\|scr\|java\|pl1\|mak\|cpy\|mac\|h\|hpp\|inc\|dfdl\|dat\|bsc\|dbc\|hfs\|jcl\|job\|200\|201\|ans\|ass\|lis\|loa\|log\|lsc\|oth\|pil\|rt\|tok\|uns\|vis\|xml\|xsd\|l\|ypp\|json\)") )
+              #shellcheck disable=SC2185
+              ocoSysTotal=( $(find -type f -regex ".*/**/oco/.*") )
+              execDate=$(date +%-S)
+              if [ "${implementation:0:1}" == "t" ]; then
+                CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/tp/ibm/ibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+                BLD_FLAG="SYS"
+                getConfig; RC=$?;
+              elif [ "${implementation:0:1}" == "d" ]; then
+                CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/dl/ibm/ibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+                getConfig; RC=$?;
+              fi
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Configuration file generated to compile IBM source files - $(($(date +%-S)-execDate))s"
+              if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+                DvlPath="${SYS_DVL_IMPL_CWRK}";
+                execDate=$(date +%-S)
+                sabrCompile; RC=$?;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Sabretalk Pre-process completed - $(($(date +%-S)-execDate))s"
+                if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+                  execDate=$(date +%-S)
+                  tpfBuild; RC=$?;
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Completed TPF source file compilation process - $(($(date +%-S)-execDate))s"
+                else
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: sabre compilation failed due to following error files ${srcErrSbr[*]} - $(($(date +%-S)-execDate))s"
+                  if [ -n "${srcErrSbr// /}" ]; then
+                    if [ "${reBuildAll}" == "true" ]; then
+                      pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+                        failedIbm="$(find . -type f | grep -Ev "\./sbtasm|\./tpfarc" | grep -E '\.cpp|\.c|\.asm|\.mak' | sed "s|^\./||" | tr '\n' ',')"
+                        failedNames="${srcErrSbr}${failedIbm}"
+                      popd &> /dev/null
+                    else
+                      #srcErrSbr="src/abcd.sbt,src/oror.sbt,src/porp.sbt"
+                      #changedFiles="src/abcd.sbt,src/oror.sbt,src/orro.sbt,src/aoao.asm,src/aosc.cpp,src/sosp.c,src/porp.sbt,include/acacd.h"
+                      IFS=',' read -r -a chndFiles <<< "${changedFiles[@]}";
+                      for chderr in "${chndFiles[@]}";
+                      do
+                        echo "${srcErrSbr}" | grep "${chderr}"; FC=$?;
+                        if [[ "${chderr}" =~ \.sbt ]]; then
+                          if [ "${FC}" -eq 0 ]; then
+                            failedLst+="${chderr},"
+                          fi
+                        else
+                          if [ "${FC}" -eq 1 ]; then
+                            failedLst+="${chderr},"
+                          fi
+                        fi
+                      done
+                      unset IFS;
+                      failedNames="${failedLst[*]}"
+                    fi
+                  fi
+                fi
+                execDate=$(date +%-S)
+                unResolved; RC=$?;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: TPF Build unresolved references validated - $(($(date +%-S)-execDate))s"
+              fi
+              # shellcheck disable=SC2086
+              #sysError=( $(find . -type f -name "*.err" ${warnList} ) )
+              if [[ -n "${warnList}" ]]; then
+                sysIbmError=( $(find . -type f -name "*.err" ${warnList} ) );
+              else
+                sysIbmError=( $(find . -type f -name "*.err" ) );
+              fi
+              sysError=();
+              for verIbmErr in "${sysIbmError[@]}";
+              do
+                if [ -f "${verIbmErr}" ]; then
+                  grep "^MTPF\w*E:" "${verIbmErr}"; _RC=$?;
+                  if [ "${_RC}" -ne 0 ]; then
+                    grep -w "directories do not exist:" "${verIbmErr}" &> /dev/null; _RC=$?
+                    if [ "${_RC}" -ne 0 ]; then
+                      sysError+=("${verIbmErr} ")
+                      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file IBM Segments ${sysError[*]} RC:$RC"
+                    else
+                      grep "^MTPF\w*W:" "${verIbmErr}"| grep -v "MTPF1111W:"; _RC=$?
+                      if [ "${_RC}" -ne 0 ]; then
+                        echo -e "WARN: Maketpf APPL or TPF ROOT do not exist in zlinux for ${verIbmErr}."
+                        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Maketpf APPL or TPF ROOT do not exist in zlinux for ${verIbmErr}. RC:$RC"
+                      else
+                        sysError+=("${verIbmErr} ")
+                      fi
+                    fi
+                  else
+                    sysError+=("${verIbmErr} ")
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file IBM Segments ${sysError[*]} RC:$RC"
+                  fi
+                fi
+              done
+            popd &> /dev/null
+          fi
+        else
+          printErr="ERROR:$(date +"%Y-%m-%d %H:%M:%S") zTPF level directory not found - ${implPutLevel}"
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${printErr} RC:$EC"
+          echo -e "${printErr}"
+          RC="${EC}"
+        fi
+        execDate=$(date +%-S)
+        srcTotal=("${appTotal[@]}" "${sysTotal[@]}" "${ocoAppTotal[@]}" "${ocoSysTotal[@]}")
+        errTotal=("${appError[@]}" "${sysError[@]}")
+        if [ -n "${appError[0]// /}" ]; then
+          for appErrs in "${appError[@]}";
+          do
+            appErrPath+="${APP_DVL_IMPL_CWRK}${appErrs##*./},"
+            errFilename="${appErrs##*./}";
+            errName="${errFilename%%.*}";
+            pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+              failedFinal+="$(find . -type f -iname "*${errName}*" | grep -E '\b\.cpp\b|\b\.c\b|\b\.asm\b|\b\.mak\b' | sed "s|^\./||" | tr '\n' ',')"
+            popd  &> /dev/null
+          done
+        fi
+        if [ -n "${sysError[0]// /}" ]; then
+          for sysErrs in "${sysError[@]}";
+          do
+            sysErrPath+="${SYS_DVL_IMPL_CWRK}${sysErrs##*./},"
+            errFilename="${sysErrs##*./}";
+            errName="${errFilename%%.*}";
+            pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+              failedFinal+="$(find . -type f -iname "*${errName}*" | grep -E '\b\.cpp\b|\b\.c\b|\b\.asm\b|\b\.mak\b' | sed "s|^\./||" | tr '\n' ',')"
+            popd  &> /dev/null
+          done
+        fi
+        if [ -n "${failedFinal[0]// /}" ]; then
+          failedNames="$(echo "${failedFinal[*]}" | tr ',' ' ' | xargs -n1 | sort -u | xargs | tr ' ' ',')"
+        fi
+        if [ "${errTotal[0]}" != '' ] && [ -n "${appErrPath[0]// /}" ] || [ -n "${sysErrPath[0]// /}" ]; then
+          if [ -z "${appErrPath[0]// /}" ] && [ -n "${sysErrPath[0]// /}" ]; then
+            errFiles="${sysErrPath[*]}"
+          elif [ -n "${appErrPath[0]// /}" ] && [ -z "${sysErrPath[0]// /}" ]; then
+            errFiles="${appErrPath[*]}"
+          elif [ -n "${appErrPath[0]// /}" ] && [ -n "${sysErrPath[0]// /}" ]; then
+            errFiles="${appErrPath[*]}${sysErrPath[*]}"
+          fi
+          failFiles="\"${errFiles%*,}\""
+          errFiles="${errFiles%*,}"
+          RC="${EC}"
+        fi
+        if [ -f "${APP_DVL_IMPL_CWRK}.temp" ] && [ -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+          pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+          #shellcheck disable=SC2002
+          _cntlError=( $(cat .temp | tr "\n" " ") )
+          for i in "${_cntlError[@]}"
+          do
+            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt RC:$RC"
+            echo -e "WARNING: ${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt"
+          done
+          rm ./.temp &> /dev/null
+          popd &> /dev/null
+        elif [ ! -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND RC:$RC"
+          echo -e "WARNING: Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND" #RESERVED format
+          rm ./.temp &> /dev/null
+        fi
+        if [ -f "${SYS_DVL_IMPL_CWRK}.temp" ] && [ -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+          pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+          #shellcheck disable=SC2002
+          _cntlError=( $(cat .temp | tr "\n" " ") )
+          for i in "${_cntlError[@]}"
+          do
+            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt RC:$RC"
+            echo -e "WARNING: ${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt"
+          done
+          rm ./.temp &> /dev/null
+          popd &> /dev/null
+        elif [ ! -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND RC:$RC"
+          echo -e "WARNING: Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND" #RESERVED format
+          rm ./.temp &> /dev/null
+        fi
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Post warning check with compiler control tables - $(($(date +%-S)-execDate))s"
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Build workspace not found - $APP_DVL_IMPL_CWRK $APP_DVL_IMPL_CWRK RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Build workspace not found - $APP_DVL_IMPL_CWRK $APP_DVL_IMPL_CWRK"
+        RC="${EC}";
+      fi
+      execDate=$(date +%-S)
+      if [ -z "${sabreErr}" ]; then
+        if [ -z "${errFiles[0]}" ]; then
+          loadErr=""
+        else
+          if [ -z "${errorMesUnres[0]}" ]; then
+            loadErr="${errFiles[*]} . Please review the .err files and take corrective action."
+          else
+            loadErr="${errFiles[*]} ${errorMesUnres}. Please review the .err files and take corrective action."
+          fi
+        fi
+      else
+        loadErr="${sabreErr}"
+        RC=${EC};
+      fi
+      if [ -z "${loadErr}" ]; then
+        loadErr="${printErr}"
+      fi
+      if [ -f "${APP_DVL_IMPL_CWRK}TEMP.out" ]; then
+        # shellcheck disable=SC2002
+        makeErr=$(cat "${APP_DVL_IMPL_CWRK}TEMP.out" | grep maketpf_checkeol | cut -d ' ' -f 2)
+        loadErr="TEMP.so generated due to ${makeErr##*/} in MAK file or CNTL entry missing"
+        RC="$EC"
+      elif [ -f "${SYS_DVL_IMPL_CWRK}TEMP.out" ]; then
+        # shellcheck disable=SC2002
+        makeErr=$(cat "${SYS_DVL_IMPL_CWRK}TEMP.out" | grep maketpf_checkeol | cut -d ' ' -f 2)
+        loadErr="TEMP.so generated due to ${makeErr##*/} in MAK file or CNTL entry missing"
+        RC="$EC"
+      fi
+      if [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+        appBuildErr=$(buildVerify "${APP_DVL_IMPL_CWRK%/*}")
+      fi
+      if [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+        sysBuildErr=$(buildVerify "${SYS_DVL_IMPL_CWRK%/*}")
+      fi
+      if [ -n "${appBuildErr// /}" ] || [ -n "${sysBuildErr// /}" ]; then
+        if [[ -n "${appBuildErr// /}" ]] && [[ -n "${sysBuildErr// /}" ]]; then
+          printErr="Source ${appBuildErr} in ${APP_DVL_IMPL_CWRK} and ${sysBuildErr} in ${SYS_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+        elif [[ -z "${appBuildErr}" ]] && [[ -n "${sysBuildErr// /}" ]]; then
+          printErr="Source ${sysBuildErr} in ${SYS_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+        elif [[ -n "${appBuildErr// /}" ]] && [[ -z "${sysBuildErr// /}" ]]; then
+          printErr="Source ${appBuildErr} in ${APP_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+        fi
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${printErr} RC:$EC"
+        echo -e "\nERROR:$(date +"%Y-%m-%d %H:%M:%S") ${printErr}.";
+        if [ -z "${loadErr// /}" ]; then
+          loadErr="${printErr}"
+        fi
+        RC="$EC";
+      fi
+      if [ -n "${failedNames// /}" ]; then
+        if [ "${failedNames: -1}" == "," ]; then
+          failedNames=${failedNames%,*}
+        else
+          failedNames=${failedNames};
+        fi
+        echo -e "\nERROR:$(date +"%Y-%m-%d %H:%M:%S") ${failedNames} final not complied files or error files.";
+      fi
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Analysis of error file in the build directory completed - $(($(date +%-S)-execDate))s"
+      if [ "${RC}" -eq 0 ]; then
+         jobstatus="TRUE"
+      elif [ "${RC}" -eq 4 ]; then
+         jobstatus="TRUE"
+         RC=0;
+      else
+         jobstatus="FALSE"
+      fi
+      rm -f "${lockfile}";
+      echo -e "\\nJSON RESULT --> { \"totalCount\" :\"${#srcTotal[@]}\" , \"failedCount\" : \"${#errTotal[@]}\", \"failedFiles\" : [$failFiles] , \"failedFileNames\" : \"$failedNames\" , \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\" , \"errorMessage\" : \"$loadErr\" , \"jobStatus\" : \"$jobstatus\" }\n"
+    else
+      lockfile="/tmp/multiplebuild.lck"
+      touch "${lockfile}"
+      echo ${SPID} > "${lockfile}";
+      curl -k -s "${PRD_API_CHNL}://${PRD_API_HOST}:${PRD_API_PORT}/${PRD_API_BDB}?planId=${implementation}&runStatus=run" &> /dev/null;
+      USR_IMPL_DATE="${implementation##*_}"
+      warnList="";
+      getParmFromBranch "${implementation%_*}" "DVL"; #RC=$?;
+      if [ "${reBuildAll}" == "true" ]; then
+        execDate=$(date +%-S)
+        #shellcheck disable=2086
+        ${MTP_ENV}/mtpgitcmdexport "projects/${USR_IMPL_ID}/${USR_IMPL_CORE}" "${implementation%_*}" "mtpservice" "NULL" "NULL" &> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Rebuild All is activited so removing existing DVL workspace mtpgitcmdexport projects/${USR_IMPL_ID}/${USR_IMPL_CORE} ${implementation%_*} mtpservice NULL NULL RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Source export to build workspace completed - $(($(date +%-S)-execDate))s"
+      fi
+      if [ -d "${APP_DVL_IMPL_CWRK}" ] || [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+        if [ -d "/ztpf/ibm/${implPutLevel}" ] && [ -d "/ztpfsys/${USR_IMPL_CORE,,}/${implPutLevel}" ]; then
+          rm -f "${DVL_TPF_LOD}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/"*     #LDR clean up
+          if [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+            pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null          #Switch to project workspace
+              #rm ./*.err TEMP.out &> /dev/null
+              #shellcheck disable=SC2185
+              appTotal=( $(find -type f -regex ".*/.*\.\(asm\|bak\|c\|cbl\|cms\|cpp\|for\|htm\|oco\|sbt\|scr\|java\|pl1\|mak\|cpy\|mac\|h\|hpp\|inc\|dfdl\|dat\|bsc\|dbc\|hfs\|jcl\|job\|200\|201\|ans\|ass\|lis\|loa\|log\|lsc\|oth\|pil\|rt\|tok\|uns\|vis\|xml\|xsd\|l\|ypp\|json\)") )
+              #shellcheck disable=SC2185
+              ocoAppTotal=( $(find -type f -regex "./oco/.*") )
+              execDate=$(date +%-S)
+              if [ "${implementation:0:1}" == "t" ]; then
+                CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/tp/nonibm/nonibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+                BLD_FLAG="APP"
+                getConfig; RC=$?;
+              elif [ "${implementation:0:1}" == "d" ]; then
+                CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/dl/nonibm/nonibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+                getConfig; RC=$?;
+              fi
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Configuration file generated to compile NON-IBM source files - $(($(date +%-S)-execDate))s"
+              if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+                DvlPath="${APP_DVL_IMPL_CWRK}";
+                execDate=$(date +%-S)
+                sabrCompile; RC=$?;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Sabretalk Pre-process completed - $(($(date +%-S)-execDate))s"
+                if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+                  execDate=$(date +%-S)
+                  tpfBuild; RC=$?;
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Completed TPF source file compilation process - $(($(date +%-S)-execDate))s"
+                else
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: sabre compilation failed due to following error files ${srcErrSbr[*]} - $(($(date +%-S)-execDate))s"
+                  if [ -n "${srcErrSbr// /}" ]; then
+                    if [ "${reBuildAll}" == "true" ]; then
+                      pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+                        failedNonibm="$(find . -type f | grep -Ev "\./sbtasm|\./tpfarc" | grep -E '\b\.cpp\b|\b\.c\b|\b\.asm\b|\b\.mak\b' | sed "s|^\./||" | tr '\n' ',')"
+                        failedNames="${srcErrSbr}${failedNonibm}"
+                      popd &> /dev/null
+                    else
+                      #srcErrSbr="src/abcd.sbt,src/oror.sbt,src/porp.sbt"
+                      #changedFiles="src/abcd.sbt,src/oror.sbt,src/orro.sbt,src/aoao.asm,src/aosc.cpp,src/sosp.c,src/porp.sbt,include/acacd.h"
+                      IFS=',' read -r -a chndFiles <<< "${changedFiles[@]}";
+                      for chderr in "${chndFiles[@]}";
+                      do
+                        echo ${srcErrSbr} | grep "${chderr}"; FC=$?;
+                        if [[ "${chderr}" =~ \.sbt ]]; then
+                          if [ "${FC}" -eq 0 ]; then
+                            failedLst+="${chderr},"
+                          fi
+                        else
+                          if [ "${FC}" -eq 1 ]; then
+                            failedLst+="${chderr},"
+                          fi
+                        fi
+                      done
+                      unset IFS;
+                      failedNames="${failedLst[*]}"
+                    fi
+                  fi
+                fi
+                execDate=$(date +%-S)
+                unResolved; RC=$?;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: TPF Build unresolved references validated - $(($(date +%-S)-execDate))s"
+              fi
+              # shellcheck disable=2086
+              if [[ -n "${warnList}" ]]; then
+                appNonError=( $(find . -type f -name "*.err" ${warnList} ) );
+                #change
+              else
+                appNonError=( $(find . -type f -name "*.err" ) );
+              fi
+              for verfErr in "${appNonError[@]}";
+              do
+                if [ -f "${verfErr}" ]; then
+                  grep "^MTPF\w*E:" "${verfErr}"; _RC="$?";  # actually error files
+                  if [ "${_RC}" -ne 0 ]; then
+                    grep -w "directories do not exist:" "${verfErr}" &> /dev/null; _RC=$?
+                    if [ "${_RC}" -ne 0 ]; then
+                      appError+=("${verfErr} ")
+                      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file NON-IBM Segments ${appError[*]} RC:$RC"
+                    else
+                      grep "^MTPF\w*W:" "${verfErr}"| grep -v "MTPF1111W:"; _RC=$?
+                      if [ "${_RC}" -ne 0 ]; then
+                        echo -e "WARN: Maketpf APPL or TPF ROOT do not exist in zlinux for ${verfErr}."
+                        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Maketpf APPL or TPF ROOT do not exist in zlinux for ${verfErr}. RC:$RC"
+                      else
+                        appError+=("${verfErr} ")
+                      fi
+                    fi
+                  else
+                    appError+=("${verfErr} ")
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file NON-IBM Segments ${appError[*]} RC:$RC"
+                  fi
+                fi
+              done
+            popd &> /dev/null
+          fi
+          if [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+            pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null          #Switch to project workspace
+              #rm ./*.err TEMP.out &> /dev/null
+              #shellcheck disable=SC2185
+              sysTotal=( $(find -type f -regex ".*/.*\.\(asm\|bak\|c\|cbl\|cms\|cpp\|for\|htm\|oco\|sbt\|scr\|java\|pl1\|mak\|cpy\|mac\|h\|hpp\|inc\|dfdl\|dat\|bsc\|dbc\|hfs\|jcl\|job\|200\|201\|ans\|ass\|lis\|loa\|log\|lsc\|oth\|pil\|rt\|tok\|uns\|vis\|xml\|xsd\|l\|ypp\|json\)") )
+              #shellcheck disable=SC2185
+              ocoSysTotal=( $(find -type f -regex ".*/**/oco/.*") )
+              execDate=$(date +%-S)
+              if [ "${implementation:0:1}" == "t" ]; then
+                CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/tp/ibm/ibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+                BLD_FLAG="SYS"
+                getConfig; RC=$?;
+              elif [ "${implementation:0:1}" == "d" ]; then
+                CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/dl/ibm/ibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+                getConfig; RC=$?;
+              fi
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Configuration file generated to compile IBM source files - $(($(date +%-S)-execDate))s"
+              if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+                DvlPath="${SYS_DVL_IMPL_CWRK}";
+                execDate=$(date +%-S)
+                sabrCompile; RC=$?;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Sabretalk Pre-process completed - $(($(date +%-S)-execDate))s"
+                if [ "${RC}" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+                  execDate=$(date +%-S)
+                  tpfBuild; RC=$?;
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Completed TPF source file compilation process - $(($(date +%-S)-execDate))s"
+                else
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: sabre compilation failed due to following error files ${srcErrSbr[*]} - $(($(date +%-S)-execDate))s"
+                  if [ -n "${srcErrSbr// /}" ]; then
+                    if [ "${reBuildAll}" == "true" ]; then
+                      pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+                        failedIbm="$(find . -type f | grep -Ev "\./sbtasm|\./tpfarc" | grep -E '\.cpp|\.c|\.asm|\.mak' | sed "s|^\./||" | tr '\n' ',')"
+                        failedNames="${srcErrSbr}${failedIbm}"
+                      popd &> /dev/null
+                    else
+                      #srcErrSbr="src/abcd.sbt,src/oror.sbt,src/porp.sbt"
+                      #changedFiles="src/abcd.sbt,src/oror.sbt,src/orro.sbt,src/aoao.asm,src/aosc.cpp,src/sosp.c,src/porp.sbt,include/acacd.h"
+                      IFS=',' read -r -a chndFiles <<< "${changedFiles[@]}";
+                      for chderr in "${chndFiles[@]}";
+                      do
+                        echo "${srcErrSbr}" | grep "${chderr}"; FC=$?;
+                        if [[ "${chderr}" =~ \.sbt ]]; then
+                          if [ "${FC}" -eq 0 ]; then
+                            failedLst+="${chderr},"
+                          fi
+                        else
+                          if [ "${FC}" -eq 1 ]; then
+                            failedLst+="${chderr},"
+                          fi
+                        fi
+                      done
+                      unset IFS;
+                      failedNames="${failedLst[*]}"
+                    fi
+                  fi
+                fi
+                execDate=$(date +%-S)
+                unResolved; RC=$?;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: TPF Build unresolved references validated - $(($(date +%-S)-execDate))s"
+              fi
+              # shellcheck disable=SC2086
+              #sysError=( $(find . -type f -name "*.err" ${warnList} ) )
+              if [[ -n "${warnList}" ]]; then
+                sysIbmError=( $(find . -type f -name "*.err" ${warnList} ) );
+              else
+                sysIbmError=( $(find . -type f -name "*.err" ) );
+              fi
+              sysError=();
+              for verIbmErr in "${sysIbmError[@]}";
+              do
+                if [ -f "${verIbmErr}" ]; then
+                  grep "^MTPF\w*E:" "${verIbmErr}"; _RC=$?;
+                  if [ "${_RC}" -ne 0 ]; then
+                    grep -w "directories do not exist:" "${verIbmErr}" &> /dev/null; _RC=$?
+                    if [ "${_RC}" -ne 0 ]; then
+                      sysError+=("${verIbmErr} ")
+                      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file IBM Segments ${sysError[*]} RC:$RC"
+                    else
+                      grep "^MTPF\w*W:" "${verIbmErr}"| grep -v "MTPF1111W:"; _RC=$?
+                      if [ "${_RC}" -ne 0 ]; then
+                        echo -e "WARN: Maketpf APPL or TPF ROOT do not exist in zlinux for ${verIbmErr}."
+                        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Maketpf APPL or TPF ROOT do not exist in zlinux for ${verIbmErr}. RC:$RC"
+                      else
+                        sysError+=("${verIbmErr} ")
+                      fi
+                    fi
+                  else
+                    sysError+=("${verIbmErr} ")
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file IBM Segments ${sysError[*]} RC:$RC"
+                  fi
+                fi
+              done
+            popd &> /dev/null
+          fi
+        else
+          printErr="ERROR:$(date +"%Y-%m-%d %H:%M:%S") zTPF level directory not found - ${implPutLevel}"
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${printErr} RC:$EC"
+          echo -e "${printErr}"
+          RC="${EC}"
+        fi
+        execDate=$(date +%-S)
+        srcTotal=("${appTotal[@]}" "${sysTotal[@]}" "${ocoAppTotal[@]}" "${ocoSysTotal[@]}")
+        errTotal=("${appError[@]}" "${sysError[@]}")
+        if [ -n "${appError[0]// /}" ]; then
+          for appErrs in "${appError[@]}";
+          do
+            appErrPath+="${APP_DVL_IMPL_CWRK}${appErrs##*./},"
+            errFilename="${appErrs##*./}";
+            errName="${errFilename%%.*}";
+            pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+              failedFinal+="$(find . -type f -iname "*${errName}*" | grep -E '\b\.cpp\b|\b\.c\b|\b\.asm\b|\b\.mak\b' | sed "s|^\./||" | tr '\n' ',')"
+            popd  &> /dev/null
+          done
+        fi
+        if [ -n "${sysError[0]// /}" ]; then
+          for sysErrs in "${sysError[@]}";
+          do
+            sysErrPath+="${SYS_DVL_IMPL_CWRK}${sysErrs##*./},"
+            errFilename="${sysErrs##*./}";
+            errName="${errFilename%%.*}";
+            pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+              failedFinal+="$(find . -type f -iname "*${errName}*" | grep -E '\b\.cpp\b|\b\.c\b|\b\.asm\b|\b\.mak\b' | sed "s|^\./||" | tr '\n' ',')"
+            popd  &> /dev/null
+          done
+        fi
+        if [ -n "${failedFinal[0]// /}" ]; then
+          failedNames="$(echo "${failedFinal[*]}" | tr ',' ' ' | xargs -n1 | sort -u | xargs | tr ' ' ',')"
+        fi
+        if [ "${errTotal[0]}" != '' ] && [ -n "${appErrPath[0]// /}" ] || [ -n "${sysErrPath[0]// /}" ]; then
+          if [ -z "${appErrPath[0]// /}" ] && [ -n "${sysErrPath[0]// /}" ]; then
+            errFiles="${sysErrPath[*]}"
+          elif [ -n "${appErrPath[0]// /}" ] && [ -z "${sysErrPath[0]// /}" ]; then
+            errFiles="${appErrPath[*]}"
+          elif [ -n "${appErrPath[0]// /}" ] && [ -n "${sysErrPath[0]// /}" ]; then
+            errFiles="${appErrPath[*]}${sysErrPath[*]}"
+          fi
+          failFiles="\"${errFiles%*,}\""
+          errFiles="${errFiles%*,}"
+          RC="${EC}"
+        fi
+        if [ -f "${APP_DVL_IMPL_CWRK}.temp" ] && [ -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+          pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+          #shellcheck disable=SC2002
+          _cntlError=( $(cat .temp | tr "\n" " ") )
+          for i in "${_cntlError[@]}"
+          do
+            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt RC:$RC"
+            echo -e "WARNING: ${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt"
+          done
+          rm ./.temp &> /dev/null
+          popd &> /dev/null
+        elif [ ! -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND RC:$RC"
+          echo -e "WARNING: Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND" #RESERVED format
+          rm ./.temp &> /dev/null
+        fi
+        if [ -f "${SYS_DVL_IMPL_CWRK}.temp" ] && [ -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+          pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+          #shellcheck disable=SC2002
+          _cntlError=( $(cat .temp | tr "\n" " ") )
+          for i in "${_cntlError[@]}"
+          do
+            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt RC:$RC"
+            echo -e "WARNING: ${i} has compiler override statements that are not present in the compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt"
+          done
+          rm ./.temp &> /dev/null
+          popd &> /dev/null
+        elif [ ! -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND RC:$RC"
+          echo -e "WARNING: Compiler control table ${USR_IMPL_CORE}_compiler_control_table.txt - NOT FOUND" #RESERVED format
+          rm ./.temp &> /dev/null
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Build workspace not found - $APP_DVL_IMPL_CWRK $APP_DVL_IMPL_CWRK RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Build workspace not found - $APP_DVL_IMPL_CWRK $APP_DVL_IMPL_CWRK"
+        RC="${EC}";
+      fi
+      execDate=$(date +%-S)
+      if [ -z "${sabreErr}" ]; then
+        if [ -z "${errFiles[0]}" ]; then
+          loadErr=""
+        else
+          if [ -z "${errorMesUnres[0]}" ]; then
+            loadErr="${errFiles[*]} . Please review the .err files and take corrective action."
+          else
+            loadErr="${errFiles[*]} ${errorMesUnres}. Please review the .err files and take corrective action."
+          fi
+        fi
+      else
+        loadErr="${sabreErr}"
+        RC=${EC};
+      fi
+      if [ -z "${loadErr}" ]; then
+        loadErr="${printErr}"
+      fi
+      if [ -f "${APP_DVL_IMPL_CWRK}TEMP.out" ]; then
+        # shellcheck disable=SC2002
+        makeErr=$(cat "${APP_DVL_IMPL_CWRK}TEMP.out" | grep maketpf_checkeol | cut -d ' ' -f 2)
+        loadErr="TEMP.so generated due to ${makeErr##*/} in MAK file or CNTL entry missing"
+        RC="$EC"
+      elif [ -f "${SYS_DVL_IMPL_CWRK}TEMP.out" ]; then
+        # shellcheck disable=SC2002
+        makeErr=$(cat "${SYS_DVL_IMPL_CWRK}TEMP.out" | grep maketpf_checkeol | cut -d ' ' -f 2)
+        loadErr="TEMP.so generated due to ${makeErr##*/} in MAK file or CNTL entry missing"
+        RC="$EC"
+      fi
+      if [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+        appBuildErr=$(buildVerify "${APP_DVL_IMPL_CWRK%/*}")
+      fi
+      if [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+        sysBuildErr=$(buildVerify "${SYS_DVL_IMPL_CWRK%/*}")
+      fi
+      if [ -n "${appBuildErr// /}" ] || [ -n "${sysBuildErr// /}" ]; then
+        if [[ -n "${appBuildErr// /}" ]] && [[ -n "${sysBuildErr// /}" ]]; then
+          printErr="Source ${appBuildErr} in ${APP_DVL_IMPL_CWRK} and ${sysBuildErr} in ${SYS_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+        elif [[ -z "${appBuildErr}" ]] && [[ -n "${sysBuildErr// /}" ]]; then
+          printErr="Source ${sysBuildErr} in ${SYS_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+        elif [[ -n "${appBuildErr// /}" ]] && [[ -z "${sysBuildErr// /}" ]]; then
+          printErr="Source ${appBuildErr} in ${APP_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+        fi
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${printErr} RC:$EC"
+        echo -e "\nERROR:$(date +"%Y-%m-%d %H:%M:%S") ${printErr}.";
+        if [ -z "${loadErr// /}" ]; then
+          loadErr="${printErr}"
+        fi
+        RC="$EC";
+      fi
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Analysis of error file in the build directory completed - $(($(date +%-S)-execDate))s"
+      if [ -n "${failedNames// /}" ]; then
+        if [ "${failedNames: -1}" == "," ]; then
+          failedNames=${failedNames%,*}
+        else
+          failedNames=${failedNames};
+        fi
+        echo -e "\nERROR:$(date +"%Y-%m-%d %H:%M:%S") ${failedNames} final not complied files or error files.";
+      fi
+      if [ "${RC}" -eq 0 ]; then
+         jobstatus="TRUE"
+      elif [ "${RC}" -eq 4 ]; then
+         jobstatus="TRUE"
+         RC=0;
+      else
+         jobstatus="FALSE"
+      fi
+      rm -f "${lockfile}"
+      echo -e "\\nJSON RESULT --> { \"totalCount\" :\"${#srcTotal[@]}\" , \"failedCount\" : \"${#errTotal[@]}\", \"failedFiles\" : [$failFiles] , \"failedFileNames\" : \"$failedNames\" , \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\" , \"errorMessage\" : \"$loadErr\" , \"jobStatus\" : \"$jobstatus\" }\n"
+    fi
+  fi
+else
+  jobstatus="FALSE"
+  loadErr="Invalid inputs"
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}: ${loadErr} RC:$RC"
+  echo -e "\\nJSON RESULT --> { \"totalCount\" :\"${#srcTotal[@]}\" , \"failedCount\" : \"${#errTotal[@]}\", \"failedFiles\" : [$errFiles] , \"failedFileNames\" : \"$failedNames\" , \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\" , \"errorMessage\" : \"$loadErr\", \"jobStatus\" : \"$jobstatus\" }\n"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:End ${implementation} ${implPutLevel} ${putStatus} ${implDependancyDvl} ${implDependancyStg} ${pdddsSystemsLib} ${sabreIncLib} ${reBuildAll} ${changedFiles} RC:$RC"
+exit "${RC}"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

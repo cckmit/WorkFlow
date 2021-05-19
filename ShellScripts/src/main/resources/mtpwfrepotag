@@ -1,0 +1,95 @@
+#!/bin/bash
+# shellcheck disable=2164
+#************************************************************************************#
+#   SCRIPT NAME: mtpwfrepotag                                                        #
+#                                                                                    #
+#   DESCRIPTION:                                                                     #
+#      This script is to Tag the GIT repository from the workflow.                   #
+#                                                                                    #
+#   NOTE: Don't alter CONSOLE messages                                               #
+#                                                                                    #
+#   INPUT:                                                                           #
+#      $1  - Tagname                                                                 #
+#      $2  - Repository Name                                                         #
+#      $3  - Branch List                                                             #
+#                                                                                    #
+#   OUTPUT:                                                                          #
+#      exit with 0, successfull tagging process                                      #
+#      exit with 1, Partial fail                                                     #
+#      exit with 8, Fully failed.                                                    #
+#                                                                                    #
+#************************************************************************************#
+#************************************************************************************#
+#                                                                                    #
+#                            M A I N T E N A N C E                                   #
+#                                                                                    #
+#------------------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                                      #
+#   --------    ----    -------------------------------------------------------------#
+#   03142017    UVAIS   Created the script                                           #
+#   18082017    Uvais   Code refactor as per new SCM structure                       #
+#   04252019    GOWTHAM   Updated with logger support                                #
+#************************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+TAG_NAME=$1                            #Read Tag from input
+REMOTE_REPO_NAME=$2                    #Read Repo Name from Input
+BRANCH_NAME_LIST=$3                    #Read Branch List from Input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${TAG_NAME} ${REMOTE_REPO_NAME} ${BRANCH_NAME_LIST} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  Proj_Dest_path="$HOME/gittemp/";
+  mkdir -p "$Proj_Dest_path";
+  pushd "${Proj_Dest_path}" &> /dev/null;
+    git clone -b "master" "${DEV_SRC_RURL}$REMOTE_REPO_NAME.git" "master" &> /dev/null; RC=$?;
+    if [ "$RC" -ne 0 ]; then
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Tagging $BRANCH_NAME Failed [Clone] RC:$RC"
+      echo -e "STATUS: Tagging $BRANCH_NAME Failed [Clone].";          #CONSOLE
+    else
+      pushd "master" &> /dev/null
+        git tag | grep "$TAG_NAME" &> /dev/null; RC=$?;
+        if [ "$RC" != 0 ]; then
+          git tag "$TAG_NAME" "master" &> /dev/null; RC=$?;
+          if [ "$RC" != 0 ]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Tagging master Failed RC:$RC"
+            echo -e "STATUS: Tagging master Failed.";                  #CONSOLE
+          else
+            git push -u origin --tags &> /dev/null; RC=$?;
+            if [ "$RC" != 0 ]; then
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Tagging master Failed [Push] RC:$RC"
+              echo -e "STATUS: Tagging master Failed [Push].";         #CONSOLE
+            else
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Tagging master Success RC:$RC"
+              echo -e "STATUS: Tagging master Success.";               #CONSOLE
+              Success_Count=$((Success_Count+1))
+            fi
+          fi
+        else
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Tagging master Success [Already found] RC:$RC"
+          echo -e "STATUS: Tagging master Success [Already found].";   #CONSOLE
+          Success_Count=$((Success_Count+1))
+        fi
+      popd &> /dev/null
+    fi
+  popd &> /dev/null
+  rm -Rf "$Proj_Dest_path"
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#------------------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${TAG_NAME} ${REMOTE_REPO_NAME} ${BRANCH_NAME_LIST} RC:$RC"
+exit "$RC"
+#------------------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,106 @@
+#!/bin/bash
+# shellcheck disable=2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdpush                                                #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to push the source from developer worksapce to default          #
+#             remote branch                                                   #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Project directory path                                           #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   07122016    VARA    Created the script                                    #
+#   17022017    ARUL    Get to know if there's any merge conflict             #
+#   18042017    ARUL    Updates the script for new SCM struct for common src  #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ProjectDir="$1";                       #Read actual path of prject dir
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ProjectDir} RC:$RC"
+#-----------------------------------------------------------------------------#
+#Push git changes to active branch, which is requested branch
+function pushDefaultBranch {
+  local _RC;
+  local _activeBranch;
+  #Check remote repository accessible or not
+  git ls-remote --exit-code -h &> /dev/null; _RC=$?;
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Remote branch ${_activeBranch} validate RC:$_RC"
+  if [ "${_RC}" -eq 0 ]; then
+    _activeBranch="$( git branch -a | grep -F '*' | cut -d ' ' -f2 )";
+    git push origin "${_activeBranch}" --dry-run &> /dev/null; _RC=$?;
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Remote ${_activeBranch} push validate RC:$_RC"; #CONSOLE
+    if [ "$_RC" -eq 0 ]; then
+      git push origin "${_activeBranch}"; _RC=$?;
+      if [ "$_RC" -eq 0 ]; then
+        echo -e "INFO: Push to remote branch ${_activeBranch} success.\n"; #CONSOLE
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Push to remote branch ${_activeBranch} success RC:$_RC"
+      else
+        echo -e "ERROR: Push to remote branch ${_activeBranch} failed.\n"; #CONSOLE
+        _RC="$EC"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Push to remote branch ${_activeBranch} failed RC:$_RC"
+      fi
+    else
+      echo -e "ERROR: Remote branch ${_activeBranch} having new changes.\n"; #CONSOLE
+      _RC="$EC"
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Remote branch ${_activeBranch} having changes RC:$_RC"
+    fi
+  else
+    echo -e "ERROR: Remote repository not accessible.\n";              #CONSOLE
+    _RC="$EC"
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Remote repository not accessible RC:$_RC"
+  fi
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ -d "$ProjectDir" ] && [ "$ProjectDir" != "/" ]; then
+    pushd "$ProjectDir" &> /dev/null
+      getGitStatus; RC=$?;
+      if [ "$RC" -eq 0 ]; then
+        pushDefaultBranch; RC=$?;
+      else
+        echo -e "ERROR: $ProjectDir is not a valid git repository.\n"; #CONSOLE
+        RC="$EC";
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$ProjectDir is not a valid git repository RC:$RC"
+      fi
+    popd &> /dev/null
+  else
+    echo -e "ERROR: $ProjectDir is not a valid directory.\n";          #CONSOLE
+    RC="$EC";
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$ProjectDir is not a valid directory RC:$RC"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ProjectDir} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,89 @@
+#!/usr/bin/env groovy
+node {
+    
+    def COMPANY = "TP"
+    def ENVIRONMENT = "PRE_PROD"
+    def BUILD_PROFILE = "${COMPANY}_${ENVIRONMENT}"
+
+    def ORIGIN_TAG = "Stable_QA"
+    def GIT_URL = "https://vhldvztdt001.tvlport.net:8443/gitblit/r/dev/WorkFlow.git"
+
+    def POM_VERSION
+    def BUILD_COUNT = 6
+    def BUILD_PATH = "/opt/delivery/release/WF/${ENVIRONMENT}/${COMPANY}"
+
+    properties([buildDiscarder(logRotator(artifactDaysToKeepStr: '', artifactNumToKeepStr: '', numToKeepStr: '10')), disableConcurrentBuilds(), pipelineTriggers([])])
+
+    stage ('Checkout') {
+        deleteDir()
+        checkout scm: [$class: 'GitSCM', userRemoteConfigs: [[url: (GIT_URL), credentialsId: '80b50f11-b5d5-4093-b4f9-70ee5fe0e88a']], branches: [[name: (ORIGIN_TAG)]]],poll:false
+        def pom = readMavenPom file: 'pom.xml'
+        POM_VERSION = pom.version
+    }
+
+    stage ('Clean') {
+        sh "JAVA_HOME=/usr/java/default; /opt/apache-maven-3.3.9/bin/mvn clean"
+    }
+
+    stage ('Install') {
+        sh "JAVA_HOME=/usr/java/default; /opt/apache-maven-3.3.9/bin/mvn install:install-file -Dfile=Derived/TOSIBM/TOSApi_1.2.6.jar -DgroupId=com.ibm.tpf -DartifactId=TOSApi -Dversion=1.2.06 -Dpackaging=jar"
+    }
+
+    stage ('Compile and Testing') {
+        sh "JAVA_HOME=/usr/java/default; /opt/apache-maven-3.3.9/bin/mvn -P${BUILD_PROFILE} -Dbuild.number=${BUILD_NUMBER} -DskipTests=true compile install -fn"
+    }
+
+    stage ('Bundle') {
+        sh "mkdir -p ${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/"
+        sh "rm `ls -dt '${BUILD_PATH}/'* | tail -n +'${BUILD_COUNT}'` -rf"
+
+        sh "cp TOSAutomation/target/TOSAutomation*dependencies.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/TOSAutomation.jar'"
+        sh "cp UI/target/WorkFlowUI*.war '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/WorkFlow.war'"
+        sh "cp JGITAPI/target/JGITAPI*.war '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/JGitAPI.war'"
+        sh "cp API/target/WorkFlowAPI*.war '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/WorkFlowAPI.war'"
+        sh "cp ShellScripts/target/ShellScripts*.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/ShellScripts.jar'"
+        sh "cp Jenkins/target/Jenkins*.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/Jenkins.jar'"   
+        sh "cp BPM/target/WorkFlow*.bar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/'"
+        sh "cp ConfigGenerator/target/ConfigGenerator*dependencies.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/ConfigGenerator.jar'"
+        sh "cp RepoReconsile/target/RepoReconsile*dependencies.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/RepoReconsile.jar'"
+        sh "cp GBLDAPAuthenticator/target/GBLDAPAuthenticator*dependencies.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/tp-gitblit.jar'"
+        sh "cp Derived/GITCFG/${BUILD_PROFILE}/*.properties '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/'"
+        sh "cp pom.xml '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/pom.xml'"
+        sh "cp DeployScripts/install.sh '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/'"
+        sh "cp DeployScripts/config.sh '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/'"
+    }
+
+    stage ("Build Verification") {
+        sh "unzip -p '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/WorkFlow.war' js/config.js | grep apiBase"
+    }
+
+    stage ('Tagging') {
+        withCredentials([
+        usernamePassword(credentialsId: '80b50f11-b5d5-4093-b4f9-70ee5fe0e88a', passwordVariable: 'SRV_PASS', usernameVariable: 'SRV_USER')]) 
+        {
+            def branch = env.BRANCH_NAME
+            def gitUrl = sh(returnStdout: true, script: 'git config remote.origin.url').trim()
+            def SRV_PWD = pwd()
+            sh """
+sshpass -p $SRV_PASS ssh -o StrictHostKeyChecking=no -l $SRV_USER vhldvztdt001.tvlport.net << EOF
+git clone -b $branch --single-branch $gitUrl /tmp/${BUILD_PROFILE}/tmp_Workflow;
+pushd /tmp/${BUILD_PROFILE}/tmp_Workflow;
+git pull --tags
+echo -e "Deployment Content for the ${ENVIRONMENT} build v${POM_VERSION}_${BUILD_NUMBER} (Diff from Last Build)\n\nCommit ID\tJira #\tDescription & Committer\n\n" > dmail.txt
+echo -e "Release Content for the ${ENVIRONMENT} build v${POM_VERSION}_${BUILD_NUMBER} (Diff from Last Production)\n\nCommit ID\tJira #\tDescription & Committer\n\n" > rmail.txt
+git log --oneline --no-merges --pretty=format:'%+h %s by %cn' Snapshot_${BUILD_PROFILE}..${ORIGIN_TAG} &>> dmail.txt
+git log --oneline --merges --pretty=format:'%+h %s by %cn' Snapshot_TP_PROD..${ORIGIN_TAG} | grep Merged  &>> rmail.txt
+cat dmail.txt | mail -s "${BUILD_PROFILE}_BUILD: v${POM_VERSION}_${BUILD_NUMBER}" tsi.devops@tpfsoftware.com
+cat rmail.txt | mail -s "${BUILD_PROFILE}_RELEASE: v${POM_VERSION}_${BUILD_NUMBER}" tsi.devops@tpfsoftware.com
+git tag -d Snapshot_${BUILD_PROFILE};
+git push origin :refs/tags/Snapshot_${BUILD_PROFILE};
+git tag -a Snapshot_${BUILD_PROFILE} -m ZTPFM-0000-DeployedIn${BUILD_PROFILE};
+git push --tags;
+popd
+rm /tmp/${BUILD_PROFILE}/tmp_Workflow -Rf;
+EOF
+            """
+        }
+    }
+}
+ 

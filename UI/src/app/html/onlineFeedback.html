@@ -1,0 +1,214 @@
+<!-- Main content -->
+<section class="content animated slideInLeft">
+    <div class="col-md-12">
+        <div class="row">
+            <div class="systemTasks">
+                <div class="tab-content">
+                    <div ng-if="showETYPETab" class="tab-pane active" id="_ETYPE">
+                        <div class="row" style="margin-right: 0px;padding-bottom: 10px;"
+                            ng-if="keyLength(vm.loadsetReadyList) !== 0">
+                            <div class="col-md-2">
+                                <input type="text" class="form-control"
+                                    press-enter-key="searchPlanData(vm.searchPlanData)" ng-model="vm.searchPlanData"
+                                    placeholder="Search By Plan ID" />
+                            </div>
+                            <div class="col-md-4 padding-none">
+                                <button type="button" class="btn btn-primary themeButton refreshButton"
+                                    ng-click="searchPlanData(vm.searchPlanData)" aria-label="searchDeploymentChanges">
+                                    <i class="fa fa-search"></i>
+                                    Search
+                                </button>
+                            </div>
+                            <div class="col-md-6 text-right">
+                                <button type="button" style="margin-right:5px;" class="btn btn-primary themeButton "
+                                    ng-click="refreshTSDAccept()" aria-label="refreshDeploymentChanges">
+                                    <i class="fa fa-refresh"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                        <span>
+                            <span class="col-md-12 text-right" ng-if="keyLength(vm.loadsetReadyList) !== 0">
+                                <span style="margin:0 10px;"> Total number of items: <span class="templateCountSize">
+                                        {{vm.totalNumberOfItem}}</span> </span>
+                            </span>
+                        </span>
+
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div ng-if="keyLength(vm.loadsetReadyList) !== 0" class="row">
+                                    <div class="col-md-3" style="display: inline-flex;"
+                                        ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                                    <div class="col-md-3" style="display: inline-flex;"
+                                        ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                        <span style="padding: 10px;">Show</span>
+                                        <select class="form-control" style="padding:10px;width: 40%;"
+                                            ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                            <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                                ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                        </select>
+                                        <span style="padding:10px">entries</span>
+                                    </div>
+                                    <div class="col-md-3"></div>
+                                    <div class="col-md-6">
+                                        <dir-pagination-controls boundary-links="true"
+                                            on-page-change="pageChangeHandler(newPageNumber)"
+                                            pagination-id="tablePagination"></dir-pagination-controls>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div ng-if="keyLength(vm.loadsetReadyList) == 0"
+                            style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                            <b>No tasks found</b>
+                        </div>
+
+                        <div ng-if="keyLength(vm.loadsetReadyList) != 0">
+                            <div class="divTableHeader divFlexBody flex textCenter">
+                                <div class="" style="flex: 0.4"></div>
+                                <div class="flex-1" style="">
+                                    <span class="noClickProp" ng-click="sort('loads.planId.id')">
+                                        Plan ID
+                                    </span>
+                                    <span class="">
+                                        <i
+                                            class="fa fa-long-arrow-down {{sortColumn['loads.planId.id'].asc ? '' : 'sortDisabled'}}"></i>
+                                        <i
+                                            class="fa fa-long-arrow-up {{sortColumn['loads.planId.id'].desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </div>
+                                <div ng-class="flex-2">
+                                    <span class="noClickProp" ng-click="sort('loads.planId.loadType')">
+                                        Load Type
+                                    </span>
+                                    <span class="">
+                                        <i
+                                            class="fa fa-long-arrow-down {{sortColumn['loads.planId.loadType'].asc ? '' : 'sortDisabled'}}"></i>
+                                        <i
+                                            class="fa fa-long-arrow-up {{sortColumn['loads.planId.loadType'].desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </div>
+
+                                <div class="flex-1" style="padding: 0 0 0 20px;">
+                                    <div class="flex-1" style="border-bottom: 1px solid #ccc;">
+                                        System
+                                    </div>
+                                    <div class="flex-1">
+                                        Category
+                                    </div>
+                                </div>
+                                <div class="" style="flex:2">
+                                    <span class="noClickProp" ng-click="sort('sysload.loadDateTime')">
+                                        Load Date/Time
+                                    </span>
+                                    <span class="">
+                                        <i
+                                            class="fa fa-long-arrow-down {{sortColumn['sysload.loadDateTime'].asc ? '' : 'sortDisabled'}}"></i>
+                                        <i
+                                            class="fa fa-long-arrow-up {{sortColumn['sysload.loadDateTime'].desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </div>
+
+                                <div class="" style="flex:2;">
+                                    <span class="noClickProp" ng-click="sort('loads.activatedDateTime')">
+                                        Activated Date/Time
+                                    </span>
+                                    <span class="">
+                                        <i
+                                            class="fa fa-long-arrow-down {{sortColumn['loads.activatedDateTime'].asc ? '' : 'sortDisabled'}}"></i>
+                                        <i
+                                            class="fa fa-long-arrow-up {{sortColumn['loads.activatedDateTime'].desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </div>
+                                <div class="" style="flex:1">Status</div>
+                            </div>
+                            <div dir-paginate=" pPlanObj in vm.loadsetReadyList | filter: q | itemsPerPage: tableConfig.pageSize"
+                                total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"
+                                pagination-id="tablePagination">
+                                <div class="flex divFlexBody textCenter hoverCurrentRow">
+                                    <div class="fContent" style="flex:0.4">
+                                        <a ng-if="pPlanObj.productionLoads[0].expanded"
+                                            ng-click="pPlanObj.productionLoads[0].expanded = false;"
+                                            aria-label="{{pPlanObj.plan.id}}">
+                                            <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+                                        </a>
+                                        <a ng-if="!pPlanObj.productionLoads[0].expanded"
+                                            ng-click="pPlanObj.productionLoads[0].expanded = true;loadSystemImplApproverList(pPlanObj.productionLoads[0].planId);"
+                                            aria-label="{{pPlanObj.plan.id}}">
+                                            <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+                                        </a>
+                                    </div>
+                                    <div class="fContent flex-1">
+
+                                        {{pPlanObj.plan.id}}
+                                    </div>
+                                    <div class=" fContent" ng-class="flex-2" style="padding: 0 0 0 25px">
+                                        {{pPlanObj.plan.loadType}}
+                                    </div>
+                                    <div class="flex-6 fContent" style="padding: 0 0 0 30px;">
+                                        <div class="flex flex-system-group" style="border-bottom:0px;"
+                                            ng-repeat="syslrObj in pPlanObj.productionLoads">
+                                            <div class="flex-2 fContent" style="">
+                                                <div class="flex-2" style="border-bottom: 1px solid #eee;">
+                                                    {{syslrObj.systemLoadId.systemId.name}}
+
+                                                </div>
+                                                <div class="flex-2"
+                                                    ng-class="((syslrObj.systemLoadId.loadCategoryId.name == 'R' )  ? 'exceptionRowColor' : '')">
+                                                    <span
+                                                        title="{{syslrObj.systemLoadId.loadCategoryId.description}}">{{syslrObj.systemLoadId.loadCategoryId.name}}</span>
+                                                </div>
+                                            </div>
+                                            <div class=" flex-4 fContent">
+                                                {{syslrObj.systemLoadId.loadDateTime | dCheck}}
+                                            </div>
+
+                                            <div class="flex-4 fContent">
+                                                {{syslrObj.activatedDateTime | dCheck}}
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+                                    <div class="flex-1_5 fContent">
+                                        <span plan-status-to-display-label="{{pPlanObj.plan.planStatus}}"
+                                            style="white-space: inherit;"></span>
+                                    </div>
+                                </div>
+                                <div class="row labelFix" style="margin:0px;"
+                                    ng-init="pObj=pPlanObj.productionLoads[0].planId"
+                                    ng-if="pPlanObj.productionLoads[0].expanded">
+                                    <div ng-include='templatePath+"/impPlan.template.html"'></div>
+                                </div>
+                            </div>
+                            <div class="row" style="margin: 10px 0px;">
+                                <div class="col-md-12">
+                                    <div ng-if="keyLength(vm.loadsetReadyList) !== 0" class="row">
+                                        <div class="col-md-3" style="display: inline-flex;"
+                                            ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                                        <div class="col-md-3" style="display: inline-flex;"
+                                            ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                            <span style="padding: 10px;">Show</span>
+                                            <select class="form-control" style="padding:10px;width: 40%;"
+                                                ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                                <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                                    ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                            </select>
+                                            <span style="padding:10px">entries</span>
+                                        </div>
+                                        <div class="col-md-3"></div>
+                                        <div class="col-md-6">
+                                            <dir-pagination-controls boundary-links="true"
+                                                on-page-change="pageChangeHandler(newPageNumber)"
+                                                pagination-id="tablePagination"></dir-pagination-controls>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- /.content -->

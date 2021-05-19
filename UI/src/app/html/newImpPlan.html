@@ -1,0 +1,569 @@
+<style>
+    md-input-container.md-block {
+        /* margin-top:10px; */
+    }
+
+    .md-select-value *:first-child {
+        flex: initial;
+        width: 100%;
+    }
+
+    .select2-results__option[aria-selected=true] {
+        display: none;
+    }
+
+    md-radio-group.md-focused.ng-pristine md-radio-button:first-child .md-container:before {
+        background-color: rgba(0, 0, 0, 0.15);
+        left: -8px;
+        top: -8px;
+        right: -8px;
+        bottom: -8px;
+    }
+</style>
+<!-- Content Header (Page header) -->
+<section class="content-header">
+
+</section>
+<!-- Main content -->
+<section class="content animated slideInLeft scrollingFunction" id="scroll_function">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="well scrollview" style="background-color:#fff">
+                <form data-ng-submit="" name="impPlanForm" ng-focus="true">
+                    <md-content class="row" style="overflow: inherit;">
+                        <div style="position:absolute;right: 0px;top:-15px;z-index: 10;">
+                            <md-button class="md-raised  planCancelBtn" ng-click='cancel_click()' style="background: #fff;color: black;">
+                                Cancel
+                            </md-button>
+                            <md-button ng-click="vm.submitImpPlanForm(vm.impPlan)" class="md-raised  planSaveBtn" ng-disabled="http_loading" style="background: #009688;color: white;">
+                                <!--<i  class="fa fa-save"></i> -->
+                                <span ng-if="vm.loader.save">
+                                    <i class="fa fa-spinner fa-pulse" style="color:white"></i>
+                                </span>
+                                <span ng-if="!vm.loader.save">Save</span>
+                            </md-button>
+                        </div>
+                        <div class="col-md-12">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label>Company
+                                        <span class="requiredField">*</span>
+                                    </label>
+                                    <md-input-container class="md-icon-float md-block spacingTwo">
+                                        <md-radio-group layout="row" ng-model="vm.impPlan.platformId">
+                                            <md-radio-button md-autofocus="true" id="{{pValue.name}}"
+											aria-label="platform" ng-click="selectedPlatform(pValue.id)" 
+											value="{{pValue.id}}_{{pValue.name}}"
+                                                ng-repeat="pValue in vm.pList">
+                                                {{pValue.name}}
+                                            </md-radio-button>
+                                        </md-radio-group>
+                                    </md-input-container>
+                                </div>
+                                <div class="col-md-6">
+                                    <div ng-show="vm.showSystem">
+                                        <label>Target system (s)
+                                            <span class="requiredField">*</span>
+                                        </label>
+                                        <md-input-container class="md-icon-float md-block spacingTwo">
+                                            <div layout="row">
+                                                <md-checkbox class="check_{{system.name}} custom" data-id="{{system.id}}" ng-change="selectSystems(system.id,system.name)"
+                                                    ng-value="system.id" ng-model="vm.impPlan.systems[system.id]" ng-repeat="system in vm.systemsList"
+                                                    aria-label="systems">{{system.name}}
+                                                </md-checkbox>
+                                            </div>
+                                        </md-input-container>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-12 row">
+                            <fieldset>
+                                <legend>
+                                    Project Details
+                                </legend>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="row">
+                                            <div class="col-md-12">
+                                                <label>Load type
+                                                    <span class="requiredField">*</span>
+                                                </label>
+                                                <md-input-container class="md-icon-float md-block" style="">
+                                                    <md-radio-group layout="row" ng-model="vm.impPlan.loadType" 
+														ng-change="vm.chooseLoadType()">
+                                                        <md-radio-button ng-repeat="(lTKey, lTValue) in vm.loadTypeList" ng-click="vm.showCategoryType = true" value="{{lTKey}}">{{lTValue}}
+                                                        </md-radio-button>
+                                                    </md-radio-group>
+                                                </md-input-container>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-12">
+                                                <div class="col-md-6">
+                                                    <label>Deployment type</label>
+                                                    <md-input-container class="md-icon-float md-block">
+                                                        <md-checkbox ng-model="vm.impPlan.macroHeader"
+														ng-change="changeMacroHeader(vm.impPlan.macroHeader)" aria-label="macroHeader">
+                                                            Macro/Header/Include - Only
+                                                        </md-checkbox>
+                                                    </md-input-container>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- <div class="row" ng-if="vm.impPlan.platformId == '2_Delta'"  -->
+											<!-- ng-hide="vm.impPlan.macroHeader_delta"> -->
+                                            <!-- <div class="col-md-12"> -->
+                                                <!-- <div class="col-md-6"> -->
+                                                    <!-- <label>RFC Applicable</label> -->
+                                                    <!-- <md-input-container class="md-icon-float md-block"> -->
+                                                        <!-- <md-checkbox   -->
+                                                            <!-- ng-model="vm.impPlan.rfcFlag"  -->
+                                                            <!-- aria-label="rfc"> RFC -->
+                                                        <!-- </md-checkbox> -->
+                                                    <!-- </md-input-container> -->
+                                                <!-- </div> -->
+                                            <!-- </div> -->
+                                        <!-- </div> -->
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <label>Project Number
+                                                    <span class="requiredField">*</span>
+                                                </label>
+                                                <md-input-container class="md-icon-float md-block mdIChange multipleSelect2" style="margin-bottom: 15px;">
+                                                    <select ng-disabled="!vm.impPlan.platformId" aria-label="csrnum" id="csrId" ng-model="vm.impPlan.projectId.id" class="form-control"
+                                                        multiple="multiple">
+                                                    </select>
+                                                    <!-- <input type="hidden" id="csrId" name='input' ng-model="vm.impPlan.projectId.id" class="form-control" /> -->
+                                                </md-input-container>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label>Dependencies</label>
+                                                <md-input-container class="md-icon-float md-block mdIChange">
+                                                    <input id="relatedPlan" type="text" name="relatedImplPlans" aria-label="sdmtktnum" ng-model="vm.impPlan.relatedPlans" />
+                                                </md-input-container>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="col-md-12">
+                                                <label>Description of change
+                                                    <span class="requiredField">*</span>
+                                                </label>
+                                                <md-input-container class="md-icon-float md-block mdIChange spacingThree">
+                                                    <textarea id="impDescription" aria-label="plandesc" name="descriptionOC" ng-model="vm.impPlan.planDesc"></textarea>
+                                                </md-input-container>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <label>Problem ticket number</label>
+                                                <span ng-if="vm.impPlan.maintanceFlag == 'Yes'" class="requiredField">*</span>
+                                                <md-input-container class="md-icon-float md-block mdIChange">
+                                                    <ul id="probTktNo">
+
+                                                    </ul>
+                                                    <!--<input id="probTktNo" type="text" name="probTktNo"-->
+                                                    <!--aria-label="sdmtktnum"-->
+                                                    <!--ng-model="vm.impPlan.sdmTktNumber"/>-->
+                                                </md-input-container>
+                                                <span class="requiredField" ng-show="vm.showTtktNumberError" style="font-style: italic;">{{vm.ticketErrorMessage}}</span>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label>Dev Manager
+                                                    <span class="requiredField">*</span>
+                                                </label>
+                                                <md-input-container class="md-icon-float md-block mdIChange multipleSelect2" style="margin-bottom: 15px;">
+                                                    <select aria-label="approver" id="approver" ng-model="vm.impPlan.devManager" class="form-control" multiple="multiple">
+                                                        <option value="" ng-if=""></option>
+                                                        <option ng-value="dv.id"  ng-repeat="dv in vm.devManagerList  | orderBy :'displayName'">
+                                                            {{ dv.displayName }}
+                                                        </option>
+                                                    </select>
+                                                </md-input-container>
+                                                <!-- title={{dv.id}} -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6" style="border-left:1px solid #eee;">
+                                        <div class="row">
+                                            <div class="col-md-8">
+                                                <label>Project name
+                                                </label>
+                                                <md-input-container class="md-icon-float md-block mdIChange">
+                                                    <input type="text" aria-label="projectName" ng-model="vm.impPlan.projectName" class="projectName" style="color: green;font-weight: bold;"
+                                                        disabled/>
+                                                </md-input-container>
+                                            </div>
+                                            <div class="col-md-4"></div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-8">
+                                                <label>LoB(Line of Business)</label>
+                                                <md-input-container class="md-icon-float md-block mdIChange sizeError">
+                                                    <input type="text" aria-label="lobid" ng-model="vm.impPlan.lobName" class="lobId" style="color: green;font-weight: bold;"
+                                                        disabled/>
+                                                </md-input-container>
+                                            </div>
+                                            <div class="col-md-4"></div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-6" ng-if="vm.impPlan.isDeltaFlag">
+                                                <label>Project manager name</label>
+                                                <md-input-container class="md-icon-float md-block mdIChange">
+                                                    <input type="text" aria-label="pmid" ng-model="vm.impPlan.projectManagerName" class="projMngrId" style="color: green;font-weight: bold;"
+                                                        disabled/>
+                                                </md-input-container>
+                                            </div>
+                                            <div class="col-md-6" ng-if="!vm.impPlan.isDeltaFlag">
+                                                <label>Project manager name</label>
+                                                <md-input-container class="md-icon-float md-block mdIChange">
+                                                    <input type="text" aria-label="pmid" ng-model="vm.impPlan.projectManagerId" class="projMngrId" style="color: green;font-weight: bold;"
+                                                        disabled/>
+                                                </md-input-container>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label>Project Sponsor name</label>
+                                                <md-input-container class="md-icon-float md-block mdIChange">
+                                                    <input type="text" aria-label="projSpnsrId" ng-model="vm.impPlan.projectSponsorId" class="projSpnsrId" style="color: green;font-weight: bold;"
+                                                        disabled/>
+                                                </md-input-container>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-12">
+                                                <label>Comments</label>
+                                                <md-input-container class="md-icon-float md-block spacingTwo">
+                                                    <textarea name="managementComment" aria-label="managementComment" ng-model="vm.impPlan.mgmtComment"></textarea>
+                                                </md-input-container>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                            <div class="col-md-3">
+                                                    <label>Stakeholder(s) to be notified for Production deployment (Activate/Deactivate):
+                                                    </label>
+                                                    <md-input-container class="md-icon-float md-block mdIChange spacingThree">
+                                                        <input aria-label="stackHolderEmail" name="stackholder" ng-model="vm.impPlan.stackHolderEmail">
+                                                    </md-input-container>
+                                                </div>
+                                        </div>
+
+                                </div>
+                            </fieldset>
+                        </div>
+                        <div class="col-md-12 row">
+                            <!--<pre>{{vm.systemDetailsList | json}}</pre>-->
+                            <fieldset ng-show="vm.showSystemDetails" ng-repeat="sList in vm.systemDetailsList" style="position:relative;" aria-label="{{sList.name}}">
+                                <legend>{{sList.name}}</legend>
+                                <span ng-if="vm.impPlan.loadType=='STANDARD'" class="text-primary bold" style="position: absolute;right: 10px;top: 25px;">Selected Load date/time : {{vm.impPlan.system[sList.id].loadDateTime | shrinkTimezone}}
+                                </span>
+                                <span ng-if="vm.impPlan.loadType=='EXCEPTION' || vm.impPlan.loadType== 'EMERGENCY'" class="text-primary bold" style="position: absolute;right: 10px;top: 25px;">Selected Load date/time : {{vm.impPlan.system[sList.id].exceptionLoaddate}} {{vm.impPlan.system[sList.id].exceptionLoadtime}}
+                                    {{timeZone}}
+                                </span>
+                                <div class="row">
+                                    <div class="col-md-3" ng-show="vm.impPlan.loadType == null || vm.showLoadWindow">
+                                        <label class="labelRedefine">Load Window
+                                            <span class="requiredField">*</span>
+                                            <label style="color:#9E9E9E;" ng-if="vm.impPlan.loadType == null">Choose Load Type
+                                            </label>
+                                        </label>
+
+                                        <md-input-container class="md-icon-float md-block" ng-show="vm.showLoadWindow">
+                                            <md-radio-group layout="row" ng-model="vm.impPlan.system[sList.id].loadWindowType">
+                                                <md-radio-button ng-click="vm.selectByDate(sList.id,sList.name)" value="1">By Date
+                                                </md-radio-button>
+                                                <md-radio-button ng-click="vm.selectByCategory(sList.id,sList.name);" value="2">By Category
+                                                </md-radio-button>
+                                            </md-radio-group>
+                                        </md-input-container>
+
+                                    </div>
+                                    <div class="col-md-3" ng-show="vm.showLoadDate[sList.id]">
+                                        <label class="">Load date
+                                            <span class="requiredField">*</span>
+                                        </label>
+                                        <div class="input-group">
+                                            <input type="text" name="loadCDate" aria-label="loadCDate" class="form-control" ng-model="vm.impPlan.system[sList.id].loaddate"
+                                                readonly/>
+                                            <span class="input-group-addon" ng-click="vm.showDateCalendar($event,sList.id)">
+                                                <i class="fa fa-calendar" style="color:#000;"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3 ip" ng-show="vm.showExceptionLoadDate[sList.id]">
+                                        <label class="">Load date
+                                            <span class="requiredField">*</span>
+                                        </label>
+                                        <input style="margin-bottom:10px;" class="form-control" ng-model="vm.impPlan.system[sList.id].exceptionLoaddate" ng-model-options="{ updateOn: 'blur' }"
+                                            placeholder="Choose date" moment-picker="vm.impPlan.system[sList.id].exceptionLoaddate"
+                                            format="MM-DD-YYYY" min-view="month" min-date="vm.startDate" change="vm.onDateSelect(newValue, oldValue, sList.id)">
+                                    </div>
+                                    <div class="col-md-3" ng-show="vm.showLoadCategory[sList.id]">
+                                        <label>Load Category
+                                            <span class="requiredField">*</span>
+                                            <span style="color:#aaa;" ng-if="vm.loadWindowCategories[sList.id].length == 0 || vm.loadWindowCategories[sList.id] == null">
+                                                No data found</span>
+                                        </label>
+                                        <!--<pre>{{vm.loadCategories | json}}</pre>-->
+                                        <select ng-if="!vm.impPlan.macroHeader" name="loadCategories" ng-model="vm.impPlan.system[sList.id].loadCategoryId" class="form-control"
+                                            ng-change="vm.loadWindowCalendar(sList.id)">
+                                            <option value="">Select</option>
+                                            <option ng-hide="{{loadWCategory.name === 'M' || loadWCategory.active ==='N'}}"
+                                             value="{{loadWCategory.id}}" title="{{loadWCategory.description}}"
+                                                ng-repeat="loadWCategory in vm.loadWindowCategories[sList.id] | orderBy:'name' track by $index"
+                                                aria-label="{{sList.name}}_{{loadWCategory.name}}">
+                                                {{ loadWCategory.name }}
+                                            </option>
+                                        </select>
+                                        <select disabled ng-if="vm.impPlan.macroHeader" name="loadCategories" ng-model="vm.impPlan.system[sList.id].loadCategoryId"
+                                            class="form-control">
+                                            <option value="">Select</option>
+                                            <option ng-selected="{{loadWCategory.name =='M'}}" value="{{loadWCategory.id}}" title="{{loadWCategory.description}}" ng-repeat="loadWCategory in vm.loadWindowMacroCategories[sList.id] track by $index"
+                                                aria-label="{{sList.name}}_{{loadWCategory.name}}">
+                                                {{ loadWCategory.name }}
+                                            </option>
+                                        </select>
+                                        <!-- <input class="form-control" disabled type="text" name="loadCalendar" aria-label="loadCalendar" class="form-control"  ng-model="vm.impPlan.system[sList.id].loadCategoryId" readonly> -->
+
+                                    </div>
+                                    <div class="col-md-3" ng-show="vm.showCategoryLoadDate[sList.id]">
+                                        <label class="">Load date
+                                            <span class="requiredField">*</span>
+                                        </label>
+                                        <div class="input-group">
+                                            <input type="text" name="loadCalendar" aria-label="loadCalendar" class="form-control" ng-model="vm.impPlan.system[sList.id].loadCategoryDate"
+                                                readonly>
+                                            <span class="input-group-addon" ng-click="vm.showLoadCalendar($event,sList.id,sList.name)">
+                                                <i class="fa fa-calendar" style="color:#000;"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3" ng-show="vm.showLoadTime[sList.id]">
+                                        <label>Load Time
+                                            <span class="requiredField">*</span>
+                                            <span style="color:#aaa;" ng-if="vm.loadTime[sList.id].length == 0 || vm.loadTime[sList.id] == null">No data found</span>
+                                        </label>
+                                        <select name="loadTime" ng-model="vm.impPlan.system[sList.id].loadDateTime" class="form-control" ng-change="vm.chooseLoadTime(sList.id)">
+                                            <option value="">Select</option>
+                                            <option ng-value="lT.timeSlot" ng-repeat="lT in vm.loadTime[sList.id] | orderBy: 'timeSlot' track by $index">
+                                                {{ lT.timeSlot | getTimeslot}}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 ip" ng-show="vm.showExceptionLoadTime[sList.id]">
+                                        <label>Load Time
+                                            <span class="requiredField">*</span>
+                                        </label>
+                                        <input class="form-control" ng-model="vm.impPlan.system[sList.id].exceptionLoadtime" change="changeLoadTime(vm.impPlan.system[sList.id].exceptionLoaddate,vm.impPlan.system[sList.id].exceptionLoadtime,sList.id)"
+                                            ng-model-options="{ updateOn: 'blur' }" placeholder="Choose time" format="HH:mm"
+                                            locale="de" moment-picker="vm.impPlan.system[sList.id].exceptionLoadtime">
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label>Load attendee (Primary contact)
+                                                <span ng-if="!vm.impPlan.macroHeader" class="requiredField">*</span>
+
+                                        </label>
+                                        <md-input-container class="md-icon-float md-block multipleSelect2">
+                                            <select name="loadAttendee" select2single ng-model="vm.impPlan.system[sList.id].loadAttendee" class="form-control" multiple="multiple"
+                                                aria-label="loadAttendee">
+                                                <option ng-value="item.id"  ng-repeat="item in vm.loadAttendeeList | orderBy: 'displayName'">{{ item.displayName }}
+                                                </option>
+                                            </select>
+                                        </md-input-container>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label>zTPF Level &nbsp;
+                                            <label ng-if="vm.systemDefaults[sList.id].defaultPutForSystem" class="label label-info">{{vm.systemDefaults[sList.id].defaultPutForSystem}}</label>
+                                            <!-- <span style="color:#aaa;"
+                                                      ng-if="vm.putLevels[sList.id].length == 0 || vm.putLevels[sList.id] == null">No data found</span></label> -->
+                                            <div class="input-group" style="margin-top: 6px;">
+                                                <span class="input-group-addon" style="padding-right: 2px;border: 1px solid #eee;">
+                                                    <md-checkbox ng-model="vm.impPlan.system[sList.id].putIndicator" style="margin-bottom: 0px;" ng-change="vm.impPlan.system[sList.id].putIndicator ? (vm.impPlan.system[sList.id].putLevelId = '') : ''"
+                                                        aria-label="putIndicator" ng-disabled="vm.impPlan.macroHeader">{{system.name}}
+                                                    </md-checkbox>
+                                                </span>
+                                                <div>
+                                                    <select style="font-weight: normal;" ng-model="vm.impPlan.system[sList.id].putLevelId" ng-if="vm.impPlan.system[sList.id].putIndicator"
+                                                        class="form-control" ng-disabled="vm.impPlan.macroHeader">
+                                                        <option value="">Select</option>
+                                                        <option value="{{putObj.id}}" ng-if="putObj.id != putObj.systemId.defalutPutLevel && putObj.status !='BACKUP' " title="{{putObj.putDateTime | formattedDateTime}}"
+                                                            ng-repeat="putObj in vm.putLevels[sList.id] track by $index">
+                                                            {{ putObj.putLevel }}
+                                                        </option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label>IPL required
+                                            <span class="requiredField">*</span>
+                                        </label>
+                                        <md-input-container class="md-icon-float md-block">
+                                            <md-radio-group layout="row" ng-model="vm.impPlan.system[sList.id].iplRequired">
+                                                <md-radio-button value="Yes">Yes</md-radio-button>
+                                                <md-radio-button value="No">No</md-radio-button>
+                                            </md-radio-group>
+                                        </md-input-container>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label>Special Load Instruction for TSD
+                                         <span ng-if="vm.impPlan.system[sList.id].iplRequired == 'Yes' ||  vm.rflag " class="requiredField">*</span>
+                                        </label>
+                                        <md-input-container class="md-icon-float md-block spacingTwo">
+                                            <textarea name="loadInstruction_{{sList.id}}" aria-label="loadInstruction" ng-model="vm.impPlan.system[sList.id].loadInstruction"></textarea>
+                                        </md-input-container>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label>Preload
+                                            <span class="requiredField">*</span>
+                                        </label>
+                                        <md-input-container class="md-icon-float md-block">
+                                            <md-radio-group layout="row" ng-model="vm.impPlan.system[sList.id].preload">
+                                                <md-radio-button value="Yes">Yes</md-radio-button>
+                                                <md-radio-button value="No">No</md-radio-button>
+                                            </md-radio-group>
+                                        </md-input-container>
+                                    </div>
+
+
+                                    <div class="col-md-3" ng-if="vm.impPlan.system[sList.id].preload === 'Yes'">
+                                        <label>Code activated
+                                            <span class="requiredField">*</span>
+                                        </label>
+                                        <md-input-container class="md-icon-float md-block margin-none">
+                                            <select name="codeActivate_{{sList.id}}" ng-model="vm.impPlan.system[sList.id].preloadDesc" class="form-control">
+                                                <option value="" ng-if="false">Select</option>
+                                                <option ng-value="preloadOption.value" ng-repeat="preloadOption in vm.preloadOptions">
+                                                    {{ preloadOption.value }}
+                                                </option>
+                                            </select>
+                                        </md-input-container>
+                                    </div>
+                                    <div class="col-md-3" ng-if="vm.impPlan.system[sList.id].preload === 'Yes'">
+                                        <label>Justification for preload
+                                            <span class="requiredField">*</span>
+                                        </label>
+                                        <md-input-container class="md-icon-float md-block margin-none">
+                                            <textarea name="description_{{sList.id}}" aria-label="preloadJust" ng-model="vm.impPlan.system[sList.id].preloadJust"></textarea>
+                                        </md-input-container>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="">DBCR #
+                                            <!--span class="requiredField">*</span-->
+                                            <a ng-click="addDbcrNum($event, sList.id, sList.name)" ng-if="!vm.impPlan.macroHeader">
+                                                <u>Manage</u>
+                                            </a>
+                                        </label>
+                                        <!-- <div class="input-group" style="width: 100%;">
+                                                <input disablefield type="text" ng-model="vm.systemDBCR[sList.id]" aria-label="dbcr" class="form-control" readonly>
+                                                <span class="input-group-addon input-addition-btn" ng-click="addDbcrNum($event, sList.id, sList.name)">
+                                                                <i class="fa fa-plus-square" style="color:#000;"></i></span>
+                                            </div> -->
+                                        <div class="dbcr-item" ng-if="vm.systemDBCR[sList.id].length > 0">
+                                            <span ng-repeat="dbcrObj in vm.systemDBCR[sList.id] track by $index">
+                                                <b ng-if="dbcrObj.mandatory == 'Y'">{{dbcrObj.dbcrName}}</b>
+                                                <span ng-if="dbcrObj.mandatory != 'Y'">{{dbcrObj.dbcrName}}</span>
+                                                <span ng-if="$index != (vm.systemDBCR[sList.id].length-1)">, &nbsp;</span>
+                                            </span>
+                                        </div>
+                                        <div class="dbcr-item-empty" ng-if="!vm.systemDBCR[sList.id] || vm.systemDBCR[sList.id].length === 0">
+
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label>QA Functional Tester
+                                        </label>
+                                        <md-input-container class="md-icon-float md-block multipleSelect2">
+                                            <select name="qafunctionaltester" select2singleqa ng-model="vm.impPlan.system[sList.id].qaFunctionalTesters" class="form-control"
+                                                multiple="multiple" aria-label="qafunctionaltester">
+                                                <option ng-value="item.id"  ng-repeat="item in vm.qaFunctionalTesterList | orderBy: 'displayName'">{{ item.displayName }}
+                                                </option>
+                                            </select>
+                                        </md-input-container>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label>Special instructions for QA Functional Tester</label>
+                                        <md-input-container class="md-icon-float md-block spacingTwo">
+                                            <textarea name="loadQaInstruction_{{sList.id}}" aria-label="loadQaInstruction" ng-model="vm.impPlan.system[sList.id].specialInstructionQA"></textarea>
+                                        </md-input-container>
+                                    </div>
+                                    
+                                        <div class="col-md-3">
+                                        <label>Load attendee phone number
+                                            <span ng-if="vm.impPlan.rfcFlag" class="requiredField">*</span>
+                                           </label>
+                                        <input type="text" maxlength="15" class="form-control" ng-intl-tel-input data-default-country='us' name="loadAttendeeContact"
+                                            aria-label="loadAttendeeContact" ng-model="vm.impPlan.system[sList.id].loadAttendeeContact" />
+                                        <span class="help-block " style="color:red;margin:0px" ng-show="impPlanForm.loadAttendeeContact.$invalid && impPlanForm.loadAttendeeContact.$touched">Invalid contact number</span>
+                                    </div>
+                                </div>
+                            </fieldset>
+                        </div>
+                        <div class="col-md-12 row">
+                            <fieldset>
+                                <legend>
+                                    ADL Details
+                                </legend>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <label>Development lead name
+                                            <span ng-model="vm.impPlan.leadcontact" class="requiredField"></span>
+                                        </label>
+                                        <md-input-container class="md-icon-float md-block mdIChange">
+                                            <input type="text" aria-label="leadname" ng-model="vm.impPlan.leadName" ng-value="vm.impPlan.leadName=vm.leadName" style="color: green;font-weight: bold;"
+                                                disabled/>
+
+                                        </md-input-container>
+                                        <input type="hidden" aria-label="leadid" ng-model="vm.impPlan.leadId" ng-init="vm.impPlan.leadId=vm.leadId" />
+                                        <!--<md-input-container class="md-icon-float md-block mdIChange">-->
+                                        <!--<input type="text" name="devLeadId" ng-value="vm.displayName"-->
+                                        <!--ng-model="vm.impPlan.devLeadId"/>-->
+                                        <!--</md-input-container>-->
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label>Development lead phone number
+                                            <span class="requiredField">*</span>
+                                        </label>
+                                        <input type="text" maxlength="15" class="form-control" ng-intl-tel-input data-default-country='us' name="devLeadContact"
+                                            aria-label="leadcontact" ng-model="vm.impPlan.leadContact" />
+                                        <span class="help-block " style="color:red;margin:0px" ng-show="impPlanForm.devLeadContact.$invalid && impPlanForm.devLeadContact.$touched">Invalid contact number</span>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label>Other contact</label>
+                                        <md-input-container class="md-icon-float md-block mdIChange">
+                                            <textarea name="otherContact" aria-label="othcontact" ng-model="vm.impPlan.othContact"></textarea>
+                                        </md-input-container>
+                                    </div>
+                                </div>
+                            </fieldset>
+                        </div>
+                        <div style="position:absolute;right: 0px;bottom:-15px;z-index: 10;">
+                            <md-button class="md-raised  planCancelBtn" ng-click='cancel_click()' style="background: #fff;color: black;">
+                                Cancel
+                            </md-button>
+                            <md-button ng-click="vm.submitImpPlanForm(vm.impPlan)" class="md-raised  planSaveBtn" ng-disabled="http_loading" style="background: #009688;color: white;">
+                                <!--<i  class="fa fa-save"></i> -->
+                                <span ng-if="vm.loader.save">
+                                    <i class="fa fa-spinner fa-pulse" style="color:white"></i>
+                                </span>
+                                <span ng-if="!vm.loader.save">Save</span>
+                            </md-button>
+                        </div>
+                    </md-content>
+
+
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- /.content -->

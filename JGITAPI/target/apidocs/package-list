@@ -1,0 +1,9 @@
+com.tsi.workflow
+com.tsi.workflow.cache
+com.tsi.workflow.controller
+com.tsi.workflow.git
+com.tsi.workflow.schedular
+com.tsi.workflow.security
+com.tsi.workflow.service
+com.tsi.workflow.ssh
+com.tsi.workflow.utils

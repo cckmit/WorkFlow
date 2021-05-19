@@ -1,0 +1,89 @@
+<md-dialog aria-label="lc" style="width: 65%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <label style="color:white;">Update Freeze Dates</label>
+                <!--<span flex></span>-->
+                <!--<md-button class="md-icon-button" ng-click="cancel()">-->
+                <!--<i class="fa fa-close"></i>-->
+                <!--</md-button>-->
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content" style="height:35vh;">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label>Target System(s) <span class="requiredField">*</span></label>
+                        <md-input-container class="md-icon-float md-block clearMargin">
+                            <select name="systems" ng-disabled=true ng-model="vmid.form.loadCategoryId.systemId.id" ng-change="selectSystem(vmid.form.loadCategoryId.systemId.id)" class="form-control">
+                                <option value="">{{vmid.form.name}}</option>
+                                <!-- <option ng-value="system.id"
+                                        ng-repeat="system in vmid.systemsList" ng-selected="system.id == vmid.form.loadCategoryId.systemId.id">
+                                    {{system.name}}
+                                </option> -->
+                            </select>
+                        </md-input-container>
+                    </div>
+                    <div class="col-md-6">
+                        <label>Load Category <span class="requiredField">*</span></label>
+                        <md-input-container class="md-icon-float md-block  spacingFive">
+                            <select name="systems" id="updateLoadCategoryIdData" ng-model="vmid.form.loadCategoryIdList" class="form-control" ng-change="" style="margin-left: -3px;height:35px" multiple>
+                                <option value="{{lc.id}}"
+                                        ng-repeat="lc in vmid.loadCategory" title="{{lc.description}}">
+                                    {{lc.name}}
+                                </option>
+                            </select>
+                        </md-input-container>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <label class="spacingFour">Reason <span class="requiredField">*</span></label>
+                        <md-input-container class="md-icon-float md-block clearMargin">
+                            <textarea ng-disabled=true aria-label="desc" name="desc" ng-model="vmid.form.reason"></textarea>
+                        </md-input-container>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <label>Start Date <span class="requiredField">*</span></label>
+                                <input class="form-control" ng-model="vmid.formExtra.fDate" ng-model-options="{ updateOn: 'blur' }" placeholder="Choose date" format="MM-DD-YYYY" min-view="month" selectable="vmid.isFromSelectable(date, type)" min-date="vmid.momentfDate" moment-picker="vmid.formExtra.fDate">
+                            </div>
+                            <!-- <div class="col-md-6">
+                                <label>Start Time <span class="requiredField">*</span></label>
+                                <input class="form-control" ng-model="vmid.formExtra.fTime" ng-model-options="{ updateOn: 'blur' }" placeholder="Choose time" format="HH:mm" locale="de" moment-picker="vmid.formExtra.fTime">
+                            </div> -->
+                        </div>
+                    </div>
+                    <div class="col-md-3" style="border-left: 1px solid #ddd;">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <label>End Date <span class="requiredField">*</span></label>
+                                <input class="form-control" ng-model="vmid.formExtra.tDate" ng-model-options="{ updateOn: 'blur' }" placeholder="Choose date" format="MM-DD-YYYY" min-view="month" selectable="vmid.isToSelectable(date, type)" min-date="vmid.momenttDate" moment-picker="vmid.formExtra.tDate">
+                            </div>
+                            <!-- <div class="col-md-6">
+                                <label>End Time <span class="requiredField">*</span></label>
+                                <input class="form-control" ng-model="vmid.formExtra.tTime" ng-model-options="{ updateOn: 'blur' }" placeholder="Choose time" format="HH:mm" locale="de" moment-picker="vmid.formExtra.tTime">
+                            </div> -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <span flex></span>
+            <md-button ng-click="cancel()" aria-label="cancelFreezeDate_UpdateWindow">
+                Cancel
+            </md-button>
+            <md-button class="md-primary" ng-click="vmid.submitUpdateFreezeDates(vmid.form)" aria-label="updateFreezeDateWindow">
+                Update
+            </md-button>
+
+        </md-dialog-actions>
+    </form>
+</md-dialog>

@@ -1,0 +1,134 @@
+#!/bin/bash
+#shellcheck disable=SC2164,SC2207
+#*****************************************************************************#
+#   SCRIPT NAME: mtpzrxgitallfiles                                            #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to get list of files from Production repository  with functional#
+#            package and load date/time                                       #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - list Core (res,air...)                                           #
+#      $2  - list Env  (dev,qa....)                                           #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   09252019    GOWTHAM    Created the script                                 #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+MTP_ENV="/opt/mtp"                     #Remote EXEC call from VM not resolve
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+#declare -i _ExIP=1;                    #Expected number of input parms
+#declare -i _ReIP="$#";                 #Received number of input parms
+#
+LIST_CORES="${1,,}";                    #Read Local Dest path from input
+CORE_SERV="${2,,}";                    #Read Local Dest path from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+#minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${LIST_CORES} ${CORE_SERV} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ -d /ztpfarch ] && [ -w /ztpfarch ]; then
+      if [[ "${CORE_SERV}" == dev ]]; then
+        PRD_RHOST="ztpfdevopstoolchainint.dv.tvlport.com"
+        PRD_API_PORT="9443"
+        PRD_API_RURL="${PRD_BIN_CHNL}://$(echo "${MTP_SSAL}" | base64 --decode)@${PRD_RHOST}:${PRD_API_PORT}"
+      elif [[ "${CORE_SERV}" == qa ]]; then
+        PRD_RHOST="ztpfdevopstoolchain.dv.tvlport.com"
+        PRD_API_PORT="9443"
+        PRD_API_RURL="${PRD_BIN_CHNL}://$(echo "${MTP_SSAL}" | base64 --decode)@${PRD_RHOST}:${PRD_API_PORT}"
+      elif [[ "${CORE_SERV}" == pp ]] && [[ ( "${LIST_CORE}" == +($REF_T4_CORE) ) || ( "${LIST_CORE}" == +($REF_WS_CORE) ) ]]; then
+        PRD_RHOST="ztpfdevopstoolchain.pp.tvlport.com"
+        PRD_API_PORT="9442"
+        PRD_API_RURL="${PRD_BIN_CHNL}://$(echo "${MTP_SSAL}" | base64 --decode)@${PRD_RHOST}:${PRD_API_PORT}"
+        #PRD_API_GIT="TPJGitAPI/jgit"
+      elif [[ "${CORE_SERV}" == pp ]]  && [[ "${LIST_CORE}" == +($REF_DL_CORE) ]]; then
+        PRD_RHOST="ztpfdevopstoolchaindl.pp.tvlport.com"
+        PRD_API_PORT="9443"
+        PRD_API_RURL="${PRD_BIN_CHNL}://$(echo "${MTP_SSAL}" | base64 --decode)@${PRD_RHOST}:${PRD_API_PORT}"
+        #PRD_API_GIT="DLJGitAPI/jgit"
+      elif [[ "${CORE_SERV}" == pn ]] && [[ ( "${LIST_CORE}" == +($REF_T4_CORE) ) || ( "${LIST_CORE}" == +($REF_WS_CORE) ) ]]; then
+        PRD_RHOST="ztpfdevopstoolchain.prod.tvlport.com"
+        PRD_API_PORT="9443"
+        PRD_API_RURL="${PRD_BIN_CHNL}://$(echo "${MTP_SSAL}" | base64 --decode)@${PRD_RHOST}:${PRD_API_PORT}"
+      elif [[ "${CORE_SERV}" == pn ]] && [[ "${LIST_CORE}" == +($REF_DL_CORE) ]]; then
+        PRD_RHOST="ztpfdevopstoolchaindl.prod.tvlport.com"
+        PRD_API_PORT="9443"
+        PRD_API_RURL="${PRD_BIN_CHNL}://$(echo "${MTP_SSAL}" | base64 --decode)@${PRD_RHOST}:${PRD_API_PORT}"
+      fi
+      IFS=',' read -r -a CORE_List <<< "${LIST_CORES}"
+      for LIST_CORE in "${CORE_List[@]}"
+      do
+        i="";
+        host="$(hostname)"
+        for i in {0..2}                  #Retry if it's failed
+        do
+          if [[ "${LIST_CORE}" == +($REF_T4_CORE) ]] || [[ "${LIST_CORE}" == +($REF_WS_CORE) ]]; then
+            if [[ "${host}" =~ pp ]]; then
+              repoIndex=$(curl -k -s "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_API_PORT}/WorkFlowAPI/common/getSystemBasedSegments?system=${LIST_CORE^^}")
+            else
+              repoIndex=$(curl -k -s "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_API_PORT}/${PRD_API_COM}/getSystemBasedSegments?system=${LIST_CORE^^}")
+            fi
+          elif [[ "${LIST_CORE}" == +($REF_DL_CORE) ]]; then
+            if [[ "${host}" =~ pp ]]; then
+              repoIndex=$(curl -k -s "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_API_PORT}/WorkFlowAPI/common/getSystemBasedSegments?system=${LIST_CORE^^}")
+            else
+              repoIndex=$(curl -k -s "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_API_PORT}/${PRD_API_COM}/getSystemBasedSegments?system=${LIST_CORE^^}")
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Requested core name invalid - ${LIST_CORE}. RC:$EC"
+            echo -e "ERROR: Requested core name invalid - ${LIST_CORE}"
+            RC="$EC";
+          fi
+          if [[ -z "${repoIndex[0]}" ]]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git API not accessible or return no data RC:$EC"
+            echo -e "ERROR: Git API not accessible or return no data"
+            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:git remote re-try - $i RC:$RC"
+            echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+            sleep 3;
+            RC="$EC";
+          else
+            break;
+          fi
+        done
+        if [ "$RC" -eq 0 ]; then
+            rm -f /ztpfarch/"${LIST_CORE}_onlinesegments_${CORE_SERV}.txt"
+          IFS=$'\n'
+          for rList in "${repoIndex[@]}"
+          do
+            repoL="${rList}"
+            echo -e "${repoL}" >> /ztpfarch/"${LIST_CORE}_onlinesegments_${CORE_SERV}.txt"
+          done
+          unset IFS
+        fi
+      done
+      unset IFS
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:/ztpfarch directory not found or not write permission RC:$EC"
+    echo -e "ERROR: /ztpfarch directory not found or not write permission"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${LIST_CORES} ${CORE_SERV} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,93 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitimpcntlfile                                            #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to create and update the implementation control file in         #
+#      local user workspace at zLinux                                         #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - User ID                                                          #
+#      $2  - Request (ADD/DELETE/REFRESH)                                     #
+#      $3  - Implementation name:Repository:Project Destination path          #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfully control file is updated                      #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   13072016    UVAIS   Created the script                                    #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+User=$1                                #User name
+Req=$2                                 #Request flag
+Parm=$3                                #Additional parms
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${User} ${Req} ${Parm} RC:$RC"
+#-----------------------------------------------------------------------------#
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ ${RC} -eq 0 ]; then
+  if [[ "$Req" == 'ADD' ]]; then
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Requested to add implementation RC:$RC"
+    echo -e "$Parm" >> "/home/$User/.implementation"                   #CONSOLE
+  elif [[ "$Req" == 'REFRESH' ]]; then
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Requested to refresh implementation RC:$RC"
+    #shellcheck disable=SC2002
+    cat "/home/$User/.implementation" | while read -r Line;
+    do
+      Dest_path=$(echo "$Line" | cut -d":" -f3);
+      if [ ! -d "${Dest_path}" ]; then
+        Newparm="${Line//\//\\/}";
+        sed -i "/$Newparm/d" "/home/$User/.implementation"
+      fi
+    done
+    file_name=$(cat /home/"$USER"/test.sh)
+    while read -r Line
+    do
+      Dest_path=$(echo "$Line" | cut -d":" -f3);
+      if [ ! -d "${Dest_path}" ]; then
+        Newparm="${Line//\//\\/}";
+        sed -i "/$Newparm/d" "/home/$User/.implementation"
+      fi
+    done < "$file_name"
+  elif [[ "$Req" == 'DELETE' ]]; then
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Requested to delete implementation RC:$RC"
+    Dest_path=$(echo "$Parm" | cut -d":" -f3);
+    rm -rf "$Dest_path";
+    Newparm="${Parm//\//\\/}";
+    sed -i "/$Newparm/d" "/home/$User/.implementation"
+  else
+    echo -e "ERROR: Invalid Request";                                  #CONSOLE
+    RC="$EC"
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Requested action flag invalid RC:$RC"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${User} ${Req} ${Parm} RC:$RC"
+exit "${RC}";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

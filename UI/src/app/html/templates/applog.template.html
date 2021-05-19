@@ -1,0 +1,30 @@
+<md-dialog aria-label="Jenkin Log">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2 style="color:#fff;">
+                    Application Log
+                </h2>
+                <span flex></span>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content style="overflow:hidden;">
+            <div class="md-dialog-content" style="height: 65vh;padding: 0px;background: #000;">
+                <textarea readonly class="app-applog" style="background: black;color: #CDDC39;height: 60vh;width: 800px;border:0px;word-wrap: break-word;white-space: pre-wrap;outline: none;">{{logContent}}</textarea>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+            <md-button class="md-accent" ng-click="download()">
+                Download
+            </md-button>
+            <md-button class="md-accent" ng-click="copyTo()">
+                Copy to Clipboard
+            </md-button>
+            <md-button ng-click="cancel('useful')">
+                Close
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

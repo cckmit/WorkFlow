@@ -1,0 +1,602 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164,2236
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdchkout                                              #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to checkout source from production repo to user workspace       #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation branch name with core                             #
+#      $2  - Source with path in production repostiory                        #
+#      $3  - Source SHA1 hash code from the production repository             #
+#      $4  - Production commit id where to pick the source                    #
+#      $5  - Production reposutory SSH protocol url                           #
+#      $6  - Production or Non-production checkout reference                  #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   14072016    DEEPA   Created the script                                    #
+#   12082016    ARUL    Updated the script based on implementation attachment #
+#   06032017    ARUL    Updated the script for automate checkout from workflow#
+#   09032017    ARUL    Updated the script with symbolic link for TPF Projects#
+#   14042017    ARUL    Updates the script for new SCM struct for common src  #
+#   10052017    ARUL    Updated the script for IBM modified code checkout     #
+#   02152018    ARUL    Get latest from implemenetationo plan branch of prod  #
+#   05212018    ARUL    Re-try added to git operations                        #
+#   08302018    VINOTH  Curl return fix and additional reason for fail case   #
+#   10312018    VINOTH  support INC ADD for REX call to improve performance   #
+#   01112019    GOWTHAM Validating existing Segments in user workspace        #
+#   04112019    VINOTH  Extension based comment addition function             #
+#   04292019    GOWTHAM Updated with logger support                           #
+#   02052019    VINOTH  Retry method changed with curl                        #
+#   05212019    VINOTH  Unable to chkout from prod changed removed and add    #
+#   08282019    ARUL    Update to support auto comment in .mak file with impl #
+#   03102020    ARUL    2747 NON-PROD checkout optimization to handle checkin #
+#   03172020    VINOTH  Move auto comment outside the push                    #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=6;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+RemoteBranchName="$1";                 #Read implementation branch name
+ProdSrcName="$2";                      #Read source segment name
+ProdSrcSHA="$3";                       #Read source SHA1 hashcode
+ProdSrcCommit="$4";                    #Read commit id of the source for prod
+ProdSrcURL="$5";                       #Read production repo url
+PlanRef="$6";                          #Read production repo url
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${RemoteBranchName} ${ProdSrcName} ${ProdSrcSHA} ${ProdSrcCommit} ${ProdSrcURL} ${PlanRef} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function extensionEdit {
+  local _RC=0;
+  local _envNod;
+  local _nodes;
+  _segName=$1;
+  _devOpsPlan="${USR_IMPL_PLAN}";
+  _ProdStatus="${chkProdSts}";
+  _planwithDet=($(GIT_SSL_NO_VERIFY=true git ls-remote "${ProdSrcURL}" | grep "${ProdSrcCommit}"|grep tags |awk '{print $2}'))
+  if [[ -z "${_planwithDet[0]}" ]]; then
+    retryCMD "GIT_SSL_NO_VERIFY=true git ls-remote ${ProdSrcURL} | grep ${ProdSrcCommit} | grep tags | awk '{print $2}'" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+    if [ "$_RC" -eq 0 ]; then
+      _planwithDet=($(GIT_SSL_NO_VERIFY=true git ls-remote "${ProdSrcURL}" | grep "${ProdSrcCommit}"|grep tags |awk '{print $2}'))
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git ls-remote ${ProdSrcURL} failed to get status RC:$_RC"
+      _RC="$EC"
+    fi
+  fi
+  _planwithDet1="${_planwithDet[0]%%^*}";
+  _planDetag="${_planwithDet1##*/}";
+  _oldPlanSts="${_planDetag%%-*}";
+  _planNameCmt="${_planDetag#*-}";
+  _oldPlanNam="${_planNameCmt%%-*}";
+  if [[ "${_ProdStatus}" == "Non-prod" ]]; then
+    _oldPlanNam=${PlanRef};
+  fi
+  if [[ "${_oldPlanSts}" == pending ]]; then
+    _ProdStatus=Non-prod
+  fi
+  extBasedCmt "${_segName}" "${_devOpsPlan}" "${_ProdStatus}" "${_oldPlanSts}" "${_oldPlanNam}"; _RC=$?
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+function checkoutSrc {
+  local _RC;                           #Init return code
+  local _coreDir;                      #Init core name for directory
+  local _prodImplCore;                 #Init core name for implementation name
+  local _activeBranch;                 #Init for active branch name
+  local _commitMsg;                    #Init for commit message
+  local _localSHA;                     #Init for local SHA1
+  local SrcPath;
+  local i;
+  _coreDir="${PWD##*/}";               #Get core name from currunt location
+  _prodImplCore="${USR_IMPL_PLAN}_${USR_IMPL_CORE}"; #Get impl.plan core
+  _commitMsg="${RemoteBranchName} - Checkout ${ProdSrcName} from ${ProdSrcCommit:0:6} received by $USER";
+  #Check if requested core and currunt present core are same
+  if [[ "${USR_IMPL_CORE}" == "${_coreDir}" ]]; then
+    #Check and init submodule if available
+    if [ ! -d ".gitref/" ]; then
+      mkdir ".gitref";
+      git submodule init &> /dev/null; #Init to support submodule
+    fi
+    #Add submodule if not availabble
+    if [ ! -f ".gitref/${_prodSrcSub}/.git" ]; then
+      if [ -d ".gitref/${_prodSrcSub}" ]; then
+        rm -rf ".gitref/${_prodSrcSub}" &> /dev/null
+      fi
+      retryCMD "git submodule add -f ${ProdSrcURL} .gitref/${_prodSrcSub}" ".gitref/${_prodSrcSub}" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+      if [ "$_RC" -eq 0 ]; then
+        if [ ! -f ".gitignore" ]; then touch .gitignore; fi
+        grep -qF ".gitref/*" ".gitignore" || echo ".gitref/*" >> ".gitignore";
+        git add .gitignore;            #Add a file for commit else wont't work
+        git add .gitmodules;           #Add a file for submodule
+        git commit -m "${RemoteBranchName} - New production ${_prodSrcSub} repo attached in this implementation" &> /dev/null;
+      fi
+    fi
+    #Get active production url from present workspace
+    getActiveRepo "$_prodSrcSub"; _RC=$?;
+    if [ "$_RC" -eq 0 ]; then
+      retryCMD "git submodule update --init" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+    else                               #Add local prod reference
+      retryCMD "git remote add ${_prodSrcSub} .gitref/${_prodSrcSub}" ".gitref/${_prodSrcSub}" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+      retryCMD "git submodule update --init" "N" "N"; _RC=$?;
+      getActiveRepo "$_prodSrcSub"; _RC=$?;      #Reload USR_ACT_REPO parm
+    fi
+    #Segment checkouts
+    if [ "$_RC" -eq 0 ]; then
+      #Check requested source available at local?
+      if [ -f "${ProdSrcName}" ]; then
+        rm -f "${ProdSrcName}";        # removing existing Segment from workspace
+      fi
+      if [ ! -f "${ProdSrcName}" ]; then
+        #Check requested source available at requested prod
+        #shellcheck disable=SC2164
+        pushd ".gitref/${_prodSrcSub}" &> /dev/null;
+          git fetch --all &> /dev/null;          #Refresh git repo and submodules
+          retryCMD "git pull origin ${_prodImplCore}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+          #shellcheck disable=SC2197
+          _activeBranch="$( git branch -a | fgrep -F '*' | cut -d ' ' -f2 )";
+          #Check active branch and requested implementation plan core if same
+          if [ "${_activeBranch}" == "${_prodImplCore}" ]; then
+            #Check requested source with path at local if present
+            if [ -f "${ProdSrcName}" ]; then #Fetch segment based on objects
+              i="";
+              for i in {0..2}          #Retry if it's failed
+              do
+                git checkout "${ProdSrcCommit}" "${ProdSrcName}" &> /dev/null; _RC=$?;
+                if [ "${_RC}" -eq 0 ]; then
+                  break;
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} success at .gitref/${_prodSrcSub} path RC:$_RC"
+                elif [ "${_RC}" -eq 128 ]; then
+                  sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$_RC"
+                  echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                  sleep 3;
+                  if [ -f "${ProdSrcName}" ]; then
+                    _RC="$RC";
+                  else
+                    _RC="$EC";
+                    sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} retry at .gitref/${_prodSrcSub} path RC:$_RC"
+                  fi
+                else
+                  _RC="$EC";
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} failed at .gitref/${_prodSrcSub} path RC:$_RC"
+                fi
+              done
+              if [ "${_RC}" -eq 0 ]; then
+                #Check SHA code for the prod source
+                _localSHA="$( git ls-files -s "${ProdSrcName}" | cut -d ' ' -f2 )"
+                #Check PROD SHA and local SHA status
+                #extensionEdit "${ProdSrcName}" ; _RC=$?;
+                #if [ "${_RC}" -eq 0 ]; then
+                git add "${ProdSrcName}" &> /dev/null;
+                git commit -m "${_commitMsg}" "${ProdSrcName}"  &> /dev/null;
+                retryCMD "git pull origin ${_prodImplCore}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+                #else
+                #  #if addition of comment failed.
+                #  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to add comment to the file ${ProdSrcName} RC:$EC"
+                #  echo -e "ERROR: Unable to add comment to the file ${ProdSrcName}."
+                #   _RC="$EC";
+                #fi
+              else
+                _RC="$EC";
+              fi
+            else
+              #Check branch and if not available create for it
+              git cat-file -t "${ProdSrcCommit}" &> /dev/null; _RC=$?;
+              if [ "${_RC}" -eq 0 ]; then
+                i="";
+                for i in {0..2}        #Retry if it's failed
+                do
+                  git checkout "${ProdSrcCommit}" "${ProdSrcName}" &> /dev/null; _RC=$?;
+                  if [ "${_RC}" -eq 0 ]; then
+                    break;
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment success from ${ProdSrcCommit} commit RC:$_RC"
+                  elif [ "${_RC}" -eq 128 ]; then
+                    sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$_RC"
+                    echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                    sleep 3;
+                    if [ -f "${ProdSrcName}" ]; then
+                      _RC="$RC";
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment success from ${ProdSrcCommit} commit RC:$_RC"
+                    else
+                      _RC="$EC";
+                      sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment retry from ${ProdSrcCommit} commit RC:$_RC"
+                    fi
+                  else
+                    _RC="$EC";
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment failed from ${ProdSrcCommit} commit RC:$_RC"
+                  fi
+                done
+                #Check and continue if chekout succeed
+                if [ "${_RC}" -eq 0 ]; then
+                  #Check SHA code for the prod source
+                  _localSHA="$( git ls-files -s "${ProdSrcName}" | cut -d ' ' -f2 )";
+                  #extensionEdit "${ProdSrcName}" ; _RC=$?;
+                  #if [ "${_RC}" -eq 0 ]; then
+                  git add "${ProdSrcName}" &> /dev/null;
+                  git commit -m "${_commitMsg}" "${ProdSrcName}"  &> /dev/null;
+                  retryCMD "git push -u origin ${_prodImplCore}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Commit ${ProdSrcName} segment and push to ${_prodImplCore} branch RC:$_RC"
+                  #else
+                  #  #if addition of comment failed.
+                  #  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to add comment to the file ${ProdSrcName} RC:$EC"
+                  #  echo -e "ERROR: Unable to add comment to the file ${ProdSrcName}."
+                  #   _RC="$EC";
+                  #fi
+                else
+                  #If checkout fail then return error code
+                  _RC="$EC";
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment failed from ${ProdSrcCommit} commit RC:$_RC"
+                fi
+              else
+                #If req segment not availale in prod repo then return error code
+                _RC="$EC";
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment not available at ${ProdSrcCommit} commit RC:$_RC"
+              fi
+            fi
+          else
+            #Conitnue to change the requested branch in workspace
+            git cat-file -t "${ProdSrcCommit}" &> /dev/null; _RC=$?;
+            if [ "${_RC}" -eq 0 ]; then
+              #Check if requested branch available in repo
+              git branch -a | grep "${_prodImplCore}" &> /dev/null; _RC=$?;
+              if [ "${_activeBranch}" != "master" ]; then
+                #Switch branch to master for avoid conflits
+                git checkout master &> /dev/null;
+              fi
+              #Checkout or create requested branch
+              if [ "${_RC}" -eq 0 ]; then
+                git checkout "${_prodImplCore}" &> /dev/null;
+                retryCMD "git pull origin ${_prodImplCore}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+              else
+                git checkout -b "${_prodImplCore}" &> /dev/null;
+              fi
+              #Checkout source segments
+              i=""
+              for i in {0..2}        #Retry if it's failed
+              do
+                git checkout "${ProdSrcCommit}" "${ProdSrcName}" &> /dev/null; _RC=$?
+                if [ "${_RC}" -eq 0 ]; then
+                  break;
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment success from ${ProdSrcCommit} commit RC:$_RC"
+                elif [ "${_RC}" -eq 128 ]; then
+                  sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$_RC"
+                  echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                  sleep 3;
+                  if [ -f "${ProdSrcName}" ]; then
+                    _RC="$RC";
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment success from ${ProdSrcCommit} commit RC:$_RC"
+                  else
+                    _RC="$EC";
+                    sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment retry from ${ProdSrcCommit} commit RC:$_RC"
+                  fi
+                else
+                  _RC="$EC";
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment failed from ${ProdSrcCommit} commit RC:$_RC"
+                fi
+              done
+              if [ "${_RC}" -eq 0 ]; then
+                #Check SHA code for the prod source
+                _localSHA="$( git ls-files -s "${ProdSrcName}" | cut -d ' ' -f2 )";
+                #extensionEdit "${ProdSrcName}"; _RC=$?;
+                #if [ "${_RC}" -eq 0 ]; then
+                git add "${ProdSrcName}" &> /dev/null;
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment added to ${_prodImplCore} branch at prod repo RC:$?"
+                git commit -m "${_commitMsg}" "${ProdSrcName}" &> /dev/null;
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment commited to ${_prodImplCore} branch at prod repo RC:$?"
+                retryCMD "git push -u origin ${_prodImplCore}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Commit ${ProdSrcName} segment and push to ${_prodImplCore} branch RC:$_RC"
+                #else
+                #  # if failed to add comment on file which is checked-out.
+                #  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to add comment to the file ${ProdSrcName} RC:$EC"
+                #  echo -e "ERROR: Unable to add comment to the file ${ProdSrcName}."
+                #  _RC="$EC";
+                #fi
+              else
+                _RC="$EC";             #Return error code if checkout fail
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment failed from ${ProdSrcCommit} commit RC:$_RC"
+              fi
+            else
+              _RC="$EC";               #Return error code if segment not available in prod repo
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment not available at ${ProdSrcCommit} commit RC:$_RC"
+            fi
+          fi
+          #Switch back to implementation core workspace
+          #shellcheck disable=SC2164
+        popd &> /dev/null;
+        #Refresh git repo
+        git fetch --all &> /dev/null;
+        if [ "${_RC}" -eq 0 ]; then
+          #Checkout segment from prod repo to local workspace
+          git checkout "$_prodSrcSub"/"${_prodImplCore}" "${ProdSrcName}" &> /dev/null; _RC=$?;
+          if [ "${_RC}" -ne 0 ]; then          #Retry to support parallel check-out
+            sleep 3;
+            git checkout "$_prodSrcSub"/"${_prodImplCore}" "${ProdSrcName}" &> /dev/null; _RC=$?;
+          fi
+          if [ "${_RC}" -ne 0 ]; then
+            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git checkout $_prodSrcSub/${_prodImplCore} ${ProdSrcName} failed --reading RC:$_RC"
+            git remote remove "$_prodSrcSub";
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git remote remove $_prodSrcSub RC:$_RC"
+            git remote add -t "${_prodImplCore}" "$_prodSrcSub" ".gitref/${_prodSrcSub}"
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git remote add -t ${_prodImplCore} $_prodSrcSub .gitref/${_prodSrcSub} $_prodSrcSub RC:$_RC"
+            pushd ".gitref/${_prodSrcSub}" &> /dev/null
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:PWD: .gitref/${_prodSrcSub} and git checkout ${_prodImplCore} RC:$_RC"
+              git checkout "${_prodImplCore}";
+            popd &> /dev/null
+            git fetch "$_prodSrcSub";
+          fi
+          if [ "${_RC}" -ne 0 ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:RetryCMD git checkout $_prodSrcSub/${_prodImplCore} ${ProdSrcName} RC:$_RC"
+            retryCMD "git checkout $_prodSrcSub/${_prodImplCore} ${ProdSrcName}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?
+          fi
+          #Checkout process if it's succeed
+          if [ "${_RC}" -eq 0 ]; then
+            git add "${ProdSrcName}" &> /dev/null;
+            #shellcheck disable=SC2046   #DO NOT DOUBLE QUOTE GIT-LS-FILES AND GIT STATUS -S COMMAND
+            git commit -m "${_commitMsg}" "${ProdSrcName}" $(git status -s -- .gitref/ | awk '{print $2}' ) &> /dev/null;
+            # Auto-comment for checkout .mak file reference at user workspace
+            SrcPath="${ProdSrcName}"
+            if [[ "${SrcPath}" =~ \.asm|\.c ]] && [[ "${SrcPath%%/*}" =~ src ]]; then
+              validSrc=$(grep -hw "${SrcPath##*/}" src/*.mak | grep -v '^#')
+              if [[ ! "${validSrc:61:9}" == "\#${USR_IMPL_PLAN}" ]]; then
+                SAVE_IFS=$IFS
+                IFS=$'\n'
+                makRestore=( $(grep -HvnP '^(?|#)' src/*.mak | grep -Fw "${SrcPath##*/}") )
+                if [ ! -z "${makRestore[*]}" ]; then
+                  for resData in "${makRestore[@]}"
+                  do
+                    if [[ "${resData}" =~ \.asm ]]; then
+                      tstData="ASM${resData##*ASM}"
+                      tstData="${tstData:62:8}"
+                    elif [[ "${resData}" =~ \.cpp ]]; then
+                      tstData="CXX${resData##*CXX}"
+                      tstData="${tstData:62:8}"
+                    elif [[ "${resData}" =~ \.c ]]; then
+                      tstData="C${resData##*C}"
+                      tstData="${tstData:62:8}"
+                    fi
+                    if [[ ! "${tstData}" == "${USR_IMPL_PLAN}" ]]; then
+                      makAutoComment "${resData[*]}";    #Auto-comment Restore for .mak
+                    fi
+                  done
+                fi
+                IFS=$SAVE_IFS
+              fi
+            fi
+            #
+            retryCMD "git push -u origin ${RemoteBranchName}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Commit ${ProdSrcName} segment and push to ${_prodImplCore} branch RC:$_RC"
+            if [ "${_RC}" -ne 0 ]; then
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to push into Remote repository ${USR_IMPL_PLAN}. Please make sure you have permission or Contact zTPF Devops tool support RC:$EC"
+              echo -e "ERROR: Unable to push into Remote repository ${USR_IMPL_PLAN}. Please make sure you have permission or Contact zTPF Devops tool support."
+              _RC="$EC"
+            fi
+            if [ "${_RC}" -ne 0 ]; then _RC="$EC"; fi
+          else
+            _RC="$EC";                 #Return error code if checkout fail
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Checkout ${ProdSrcName} segment failed from ${ProdSrcCommit} commit RC:$_RC"
+          fi
+        fi
+        #Check checkout status and return message
+        if [ "${_RC}" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${RemoteBranchName} ${ProdSrcName} success. RC:$RC"
+          echo "STATUS: ${RemoteBranchName} ${ProdSrcName} success.";
+          _RC="$RC";
+          extensionEdit "${ProdSrcName}"; _RC=$?;
+          if [ "${_RC}" -ne 0 ]; then
+            # if failed to add comment on file which is checked-out.  # after commit
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to add comment to the file ${ProdSrcName} RC:$EC"
+            echo -e "ERROR: Unable to add comment to the file ${ProdSrcName}."
+            _RC="$EC";
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${RemoteBranchName} ${ProdSrcName} failed RC:$EC"
+          echo "STATUS: ${RemoteBranchName} ${ProdSrcName} failed.";
+          _RC="$EC";
+        fi
+      else
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: ${RemoteBranchName} ${ProdSrcName} exists at workspace RC:$RC"
+        echo "STATUS: ${RemoteBranchName} ${ProdSrcName} exists at workspace.";
+        _RC="$RC";
+      fi
+    else
+      _RC="$EC";                       #Return error code if submodule faile
+    fi
+  else
+    _RC="$EC";                         #Return error code if requested core workspace not available
+  fi
+  return "$_RC";
+}
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+function getNonProdSrc {
+  local _RC=0;
+  local _dev_git_src;
+  local _urlString;
+  local _commitMsg;
+  local i;
+  _commitMsg="${RemoteBranchName} - Checkout ${ProdSrcName} from ${PlanRef} received by $USER"
+  if [ -f "${ProdSrcName}" ]; then
+    if [[ "${PlanRef}" =~ t ]]; then
+      _dev_git_src="tpf/tp/source/${PlanRef}.git";
+    elif [[ "${PlanRef}" =~ d ]]; then
+      _dev_git_src="tpf/dl/source/${PlanRef}.git";
+    fi
+    _urlString="${PRD_BIN_RURL_GUSR}/gitblit/raw/${_dev_git_src}/${USR_MASTER_CORE}/${ProdSrcName}";
+    mkdir -p "${ProdSrcName%/*}";
+    #shellcheck disable=SC2164
+    pushd "${ProdSrcName%/*}" &> /dev/null
+      i="";
+      for i in {0..2}                  #Retry if it's failed
+      do
+        wget -q -N --no-check-certificate "${_urlString}"; _RC=$?;
+        if [ "${_RC}" -eq 0 ]; then
+          break;
+        elif [ "${_RC}" -eq 128 ]; then
+          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$_RC"
+          echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+          sleep 3;
+          if [ -f "${ProdSrcName##*/}" ]; then
+            _RC="$RC";
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Fetch ${ProdSrcName} segment success from ${PlanRef} plan RC:$_RC"
+          else
+            _RC="$EC";
+            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Fetch ${ProdSrcName} segment retry from ${PlanRef} plan RC:$_RC"
+          fi
+        else
+          _RC="$EC";
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Fetch ${ProdSrcName} segment failed from ${PlanRef} plan RC:$_RC"
+        fi
+      done
+      if [ "$_RC" -ne 0 ]; then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${ProdSrcName} - failed to checkout from ${PlanRef} RC:$_RC"
+        echo -e "ERROR: ${ProdSrcName} - failed to checkout from ${PlanRef}.";
+        _RC="$EC";
+      #else
+      #  extensionEdit "${ProdSrcName##*/}"; _RC=$?;
+      fi
+    #shellcheck disable=SC2164
+    popd &> /dev/null;
+    if [ "${_RC}" -eq 0 ]; then
+      git add "${ProdSrcName}" &> /dev/null;
+      git commit -m "${_commitMsg}" "${ProdSrcName}" "${USR_ACT_REPO}" &> /dev/null;
+      retryCMD "git push -u origin ${RemoteBranchName}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Commit ${ProdSrcName} segment and push to ${_prodImplCore} branch RC:$_RC"
+      if [ "${_RC}" -eq 0 ]; then
+        extensionEdit "${ProdSrcName}"; _RC=$?;
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to add comment to the file ${ProdSrcName} RC:$_RC"
+        echo -e "ERROR: Unable to add comment to the file ${ProdSrcName}."
+      fi
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${ProdSrcName} - not found RC:$EC"
+    echo -e "ERROR: ${ProdSrcName} - not found.";
+  fi
+  return "$_RC";
+}
+#
+#-----------------------------------------------------------------------------#
+function nonprodVerify {
+  local _RC=0;
+  local _urlString
+  local _dev_git_src
+  if [[ "${PlanRef}" =~ t ]]; then
+    _dev_git_src="tpf/tp/source/${PlanRef}.git";
+  elif [[ "${PlanRef}" =~ d ]]; then
+    _dev_git_src="tpf/dl/source/${PlanRef}.git";
+  fi
+  _urlString="${PRD_BIN_RURL_GUSR}/gitblit/raw/${_dev_git_src}/${USR_MASTER_CORE}/${ProdSrcName}";
+  i="";
+    for i in {0..2}                    #Retry if it's failed
+    do
+      curl -k -s --request GET --url  "${_urlString}" | grep "<h1>Error</h1><p>Sorry" &> /dev/null; _RC=$?;
+      if [ "${_RC}" -eq 0 ]; then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Segment ${ProdSrcName} is not found in ${PlanRef} RC:$EC"
+        echo -e "ERROR: Segment ${ProdSrcName} is not found in ${PlanRef}."
+        _RC="$EC";
+      else
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Segment ${ProdSrcName} accessibility verify with remote repository ${PlanRef} RC:$_RC"
+        _RC=0;
+      fi
+    done
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+function sabreAddinc {
+ local sabreFile=${ProdSrcName##*/};
+ local devlPath=${ProdSrcName%/*}
+ local _RC=0;
+  if [[ "${USR_IMPL_CORE}" == "${REF_DL_CORE}" ]] || [[ "${USR_IMPL_CORE}" == "${REF_WS_CORE}" ]]; then
+    if [ -n "${sabreFile[0]// /}" ] && [[ "${sabreFile}" =~ .inc ]]; then
+      "${SAB_DEV_INC}" "${USR_IMPL_CORE}" "${USR_IMPL_CWRK}/${devlPath}" "ADD" "${sabreFile}" ; _RC=$?;
+      if [ "${_RC}" -ne 0 ]; then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Adding include ${sabreFile} to the REXX worker machine failed RC:$_RC"
+        echo -e "ERROR: Adding include ${sabreFile} to the REXX worker machine failed."
+        _RC="$EC";
+      fi
+    fi
+  fi
+return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  getRepoUrlStatus "$ProdSrcURL"; RC=$?; #Get requested repo url status
+  if [ "${RC}" -eq 0 ]; then
+    getParmFromBranch "${RemoteBranchName}" "USR"; RC=$?; #Get workspace parm
+    if [ "${RC}" -eq 0 ]; then           #Continue if workspace available
+      #shellcheck disable=SC2164
+      pushd "${USR_IMPL_CWRK}" &> /dev/null;     #Switch to developer workspace
+        getActiveBranch; RC=$?;        #Get active branch from workspace
+        if [ "$RC" -eq 0 ]; then
+          getOriginRepo; RC=$?;        #Get origin repo url from workspace
+          if [ "$RC" -eq 0 ]; then
+            #Get origin and production source repo basename from input
+            _originUrl="$( ( basename "${USR_ORIG_REPO}" ".${USR_ORIG_REPO##*.}" ) )";
+            _prodSrcSub="$( ( basename "${ProdSrcURL}" ".${ProdSrcURL##*.}" ) )";
+            if [[ "$PlanRef" != "$USR_IMPL_PLAN" ]]; then
+              nonprodVerify; RC=$?;    # Lets verify if whether nonprod having files first.
+              chkProdSts="Non-prod";   # Assign Nonprod status to extension writer to update.
+            elif [[ "$PlanRef" == "$USR_IMPL_PLAN" ]]; then
+              chkProdSts="Prod";       # Assign Nonprod status to extension writer to update.
+            fi
+            if [ "$RC" -eq 0 ]; then
+              if [[ "${_originUrl}" == "${USR_IMPL_PLAN}" ]]; then #Compare
+                checkoutSrc; RC=$?;    #Lets checkout source
+                if [ "$RC" -eq 0 ]; then
+                  if [[ "$PlanRef" != "$USR_IMPL_PLAN" ]]; then
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:PWD-$PWD RC:$RC"
+                    echo "PWD-$PWD";
+                    getNonProdSrc; RC=$?;
+                    if [ ${RC} -eq 0 ]; then
+                      sabreFilext=${ProdSrcName##*.};
+                      if [[ "${sabreFilext}" == "inc" ]]; then
+                       sabreAddinc; RC=$?
+                      fi
+                    fi
+                  else
+                    sabreFilext=${ProdSrcName##*.};
+                    if [[ "${sabreFilext}" == "inc" ]]; then
+                      sabreAddinc; RC=$?
+                    fi
+                  fi
+                fi
+              fi
+            fi
+          fi
+        fi
+        #shellcheck disable=SC2164
+      popd &> /dev/null;
+    fi
+    #makAutoComment;
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:${RC}"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${RemoteBranchName} ${ProdSrcName} ${ProdSrcSHA} ${ProdSrcCommit} ${ProdSrcURL} ${PlanRef} RC:${RC}"
+exit "${RC}";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,177 @@
+<div class="row well animated fadeIn labelFix" ng-if="iObj.showImpl[[iObj.id]]" style="margin: 0px;">
+    <div class="col-md-6">
+        <div class="row">
+            <div class="col-md-6">
+                <span class="colorBlack">Sub-Status</span>
+                <span class="pull-right semiColon">:</span>
+            </div>
+            <div class="col-md-6">
+                <label class="boldFont pureBlack">
+                    <span imp-sub-status-label="{{iObj.substatus}}">{{iObj.substatus}}</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <span class="colorBlack">Developer name</span>
+                <span class="pull-right semiColon">:</span>
+            </div>
+            <div class="col-md-6">
+                <label class="boldFont pureBlack">
+                    {{iObj.devName}}
+                </label>
+            </div>
+        </div>
+
+
+
+        <div class="row">
+            <div class="col-md-6">
+                <span class="colorBlack">Peer reviewer(s)</span>
+                <span class="pull-right semiColon">:</span>
+            </div>
+            <div class="col-md-6">
+                <label ng-if="iObj.peerReviewersName!='null'" class="boldFont pureBlack">
+                    {{iObj.peerReviewersName}}
+                </label>
+                <label ng-if="iObj.peerReviewersName=='null'" class="boldFont pureBlack">
+                        -
+                </label>
+            </div>
+        </div>
+
+        <br>
+
+        <div class="list-group">
+            <li class="list-group-item uploadHeader">
+                Segments
+            </li>
+            <li ng-if='iObj.segments.length==0' class="list-group-item">
+                No segments checked out
+            </li>
+            <li ng-if='iObj.segments.length!=0' style="list-style:none;"> 
+                <ul class="nav header" style="background: rgba(44, 150, 133, 0.4);">
+                    <li class="col-md-3">Segment Name
+                    </li>
+                    <li class="col-md-3" title="">
+                        Target Systems
+                    </li>
+                    <li class="col-md-3" title="">
+                        Functional Area
+                    </li>
+                    <li class="col-md-3" title="">
+                        URL
+                    </li>
+                </ul>
+                <div style="padding:0px;max-height: 150px;" class="list-group-item maxFileList col-md-12">
+                    <div style="overflow:hidden;">
+                        <div class="nav" ng-repeat="workspace in iObj.segments" style="border-bottom: 1px solid #ddd;display: flex;align-items: center;">
+                            <div class="col-md-3 word-wrap padding-right-none">
+                                {{workspace.fileName}}
+                            </div>
+                            <div class="col-md-9">
+                                <div class="row" ng-repeat="branch in workspace.branch">
+                                    <div class="col-md-4">
+                                        {{branch.targetSystem}}
+                                    </div>
+                                    <div class="col-md-4">
+                                        {{branch.funcArea}}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <a href="{{branch.gitSourceURL}}" aria-label="{{workspace.fileName}}_{{branch.targetSystem}}_{{branch.funcArea}}_{{branch.gitSourceURL}}" target="_blank">URL</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </li>
+        </div>
+
+        <!-- <div class="row">
+            <div class="col-md-6">
+                <span class="colorBlack">DBCR cross reference(s)</span>
+                <span class="pull-right semiColon">:</span>
+            </div>
+            <div class="col-md-6">
+                <label class="boldFont pureBlack">
+                                        {{iObj.dbcrRef}}
+                                    </label>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <span class="colorBlack">Production verification</span>
+                <span class="pull-right semiColon">:</span>
+            </div>
+            <div class="col-md-6">
+                <label class="boldFont pureBlack">
+                                        {{iObj.prodVer}}
+                                    </label>
+            </div>
+        </div> -->
+    </div>
+    <div class="col-md-6">
+        <div class="row">
+            <div class="col-md-6">
+                <span class="colorBlack">Developer phone number</span>
+                <span class="pull-right semiColon">:</span>
+            </div>
+            <div class="col-md-6">
+                <label class="boldFont pureBlack">
+                    {{iObj.devContact}}
+                </label>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <span class="colorBlack">Developer location</span>
+                <span class="pull-right semiColon">:</span>
+            </div>
+            <div class="col-md-6">
+                <label class="boldFont pureBlack">
+                    {{iObj.devLocation}}
+                </label>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6">
+                <span class="colorBlack">Problem ticket number</span>
+                <span class="pull-right semiColon">:</span>
+            </div>
+            <div class="col-md-6">
+                <label class="boldFont pureBlack word-wrap">
+                    {{iObj.prTktNum}}
+                </label>
+            </div>
+        </div>
+        <br>
+        <div class="list-group">
+            <li class="list-group-item uploadHeader">
+                Test Result Documents
+                <!-- <button ngf-select="uploadFiles($files, $invalidFiles)" multiple ng-disabled="!vm.userAccess" name="file" ngf-max-size="1MB" class="btn themeButton searchSegmentBtn pull-right" style="margin-top: -8px;margin-right: -15px;border:0px;">
+                                    <i class="fa fa-paperclip "></i>
+                                    &nbsp;
+                                    Choose Files
+                                </button> -->
+            </li>
+            <li ng-if='iObj.uploadedFiles.length!=0' class="list-group-item" style="background:#aad5ce;padding:0px;font-weight:bold;">
+                <span style="margin-left:10px;">Filename</span>
+            </li>
+            <div ng-if='iObj.uploadedFiles.length==0' class="list-group-item">
+                No files uploaded
+            </div>
+            <div ng-if='iObj.uploadedFiles.length!=0' class="maxFileList">
+                <li ng-repeat="file in iObj.uploadedFiles" class="list-group-item" style="font:smaller;padding:5px;border-bottom: 0px;">
+                    <a ng-click='downloadTestCaseImpl(file,iObj)' style="color:#2c9685;">
+                        {{file}} </a>
+                </li>
+            </div>
+        </div>
+
+    </div>
+
+</div>

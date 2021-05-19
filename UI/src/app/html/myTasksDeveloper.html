@@ -1,0 +1,73 @@
+<section class="content-header">
+
+    </section>
+    <!-- Main content -->
+    <section class="content animated slideInLeft scrollingFunction" id="scroll_function">
+        <div class="col-md-12">
+            <div class="row">
+                <div class="well well-sm" style="background-color:#fff;min-height:400px">
+                    <div ng-if="vm.implementationList.length == 0" style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                        <b>No tasks found</b>
+                    </div>
+                    <div class="row" ng-if="vm.implementationList.length !== 0">
+                        <div class="col-md-12 leadTotalCount">
+                            <span > Total number of items: <span class="templateCountSize"> {{vm.totalNumberOfItem}}</span> </span>
+                        </div>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;" ng-if="vm.implementationList.length !== 0">
+                        <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                        <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                            <span style="padding: 10px;">Show</span>
+                            <select class="form-control" style="padding:10px;width: 40%;" ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}" ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                            </select>
+                            <span style="padding:10px">entries</span>
+                        </div>
+                        <div class="col-md-3"></div>
+                        <div class="col-md-6">
+                            <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination"></dir-pagination-controls>
+                        </div>
+                    </div>
+                    <div class="row" ng-if="vm.implementationList.length !== 0">
+                        <div class="col-md-12">
+                            <table class="table" style="border-color:rgba(187, 187, 187, 0.17);">
+                                <thead>
+                                    <tr class="tableHeader alignText">
+                                        <th>Implementation ID</th>
+                                        <th>Description</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="myTasks">
+                                    <!--ng-repeat="iList in vm.implList[impPlan.planid]"-->
+                                    <tr dir-paginate="iObj in vm.implementationList | filter: q | itemsPerPage: tableConfig.pageSize" total-items="tableConfig.totalItems" current-page="tableConfig.currentPage" pagination-id="tablePagination" style="text-align:center;">
+                                        <td>{{iObj.id}}</td>
+                                        <td>{{iObj.impDesc}}</td>
+                                        <td>
+                                            <span imp-status-label="{{iObj.impStatus}}">{{iObj.impStatus}}</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;" ng-if="vm.implementationList.length !== 0">
+                        <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                        <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                            <span style="padding: 10px;">Show</span>
+                            <select class="form-control" style="padding:10px;width: 40%;" ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}" ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                            </select>
+                            <span style="padding:10px">entries</span>
+                        </div>
+                        <div class="col-md-3"></div>
+                        <div class="col-md-6">
+                            <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination"></dir-pagination-controls>
+                        </div>
+                    </div>
+                </div>
+    
+            </div>
+        </div>
+    </section>
+    <!-- /.content -->

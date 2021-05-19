@@ -1,0 +1,269 @@
+<md-dialog aria-label="lc" style="width: 64%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <label style="color:white;">Request New File Creation</label>
+            </div>
+        </md-toolbar>
+        <div style="background:#cce2f3;padding:5px;" ng-hide="self.reportView">
+            <!-- <div style="display:inline-flex;margin-left:100px;"> -->
+            <button class="btn btn-primary btn-primary-t btn-sm themeButton pull-left"
+                ng-click="addSourceSet('NON_IBM')">
+                <i class="fa fa-plus"></i> &nbsp; Add Application File
+            </button>
+            <button class="btn btn-primary btn-primary-t btn-sm  themeButton pull-right" ng-click="addSourceSet('IBM')">
+                <i class="fa fa-plus"></i> &nbsp; Add IBM File
+            </button> &nbsp;&nbsp;&nbsp;
+            <!--</div>-->
+        </div>
+        <md-dialog-content>
+            <div class="md-dialog-content" style="height: 50vh;padding:0px;overflow-x: hidden;">
+                <md-card-content ng-if="self.fileList.length === 0">
+                    <div class="col-md-12" style="background-color: rgba(158, 158, 158, 0.13);height: 100%;">
+                        <!--<div class="well well-sm" style="padding:50px;text-align:center;margin-top:25px;">-->
+                        <p style="text-align:center;margin-top:100px">
+                            <i class="fa fa-plus"></i> Add IBM / Application Files</p>
+                        <!--</div>-->
+                    </div>
+                </md-card-content>
+
+                <md-card ng-hide="self.reportView" ng-repeat="fileObj in self.fileList" style="position:relative;"
+                    ng-init="self.newFile[fileObj.id].fileType = fileObj.sType;self.newFile[fileObj.id].id = fileObj.id">
+                    <span class="show">
+                        <label style="position:absolute;right:20px;" ng-if="fileObj.sType === 'IBM'"
+                            class="label label-success">IBM </label>
+                        <label style="position:absolute;right:0px;" ng-if="fileObj.sType === 'IBM'"
+                            class="label label-danger">
+                            <i ng-click="deleteArtifact(fileObj.id,$index)" class="fa fa-close"></i>
+                        </label>
+                    </span>
+                    <span style="position:absolute;bottom:0px;right:2px;color:#ccc;">
+                        {{$index + 1}}
+                    </span>
+                    <label style="position:absolute;right:20px;" ng-if="fileObj.sType !== 'IBM'"
+                        class="label label-info">NON_IBM</label>
+                    <label style="position:absolute;right:0px;" ng-if="fileObj.sType !== 'IBM'"
+                        class="label label-danger">
+                        <i ng-click="deleteArtifact(fileObj.id,$index)" class="fa fa-close"></i>
+                    </label>
+                    <md-card-content>
+                        <div class="row">
+                            <div class="col-md-2">
+                                <label>File Name
+                                    <span class="requiredField">*</span>
+                                </label>
+                                <input remove-dots-from-file ng-model="self.newFile[fileObj.id].programName"
+                                    ng-init="self.newFile[fileObj.id].programName = ''"
+                                    class="form-control notallowenterkey" type="text" />
+                                <span ng-if="self.newFile[fileObj.id].fileExt == 'asm'" class="text-warning">
+                                    <my-notification message="Allocate so name for the specified asm"></my-notification>
+                                </span>
+                                <span ng-if="self.newFile[fileObj.id].errorprogramName" style="color:red">Provide
+                                    filename</span>
+                            </div>
+                            <div class="col-md-2" ng-if="fileObj.sType === 'IBM'">
+                                <label>File Type
+                                    <span class="requiredField">*</span>
+                                </label>
+                                <select name="systems" ng-model="self.newFile[fileObj.id].fileExt"
+                                    ng-init="self.newFile[fileObj.id].fileExt = ''" ng-show="!self.otherExt[fileObj.id]"
+                                    ng-change="changeFileType(fileObj.id)" class="form-control">
+                                    <option ng-repeat="ext in self.ibmExtensionList" ng-value="ext">{{ext}}</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                <input remove-dots-from-file ng-model="self.newFile[fileObj.id].fileExt"
+                                    ng-show="self.otherExt[fileObj.id]" ng-init="self.otherExt[fileObj.id] = false"
+                                    class="form-control" type="text" />
+                                <a ng-show="self.otherExt[fileObj.id]" data-ng-click="clearExt(fileObj.id)">Clear</a>
+                                <span ng-if="self.newFile[fileObj.id].errorfileExt" style="color:red">Choose
+                                    filetype</span>
+                            </div>
+                            <div class="col-md-2" ng-if="fileObj.sType !== 'IBM'">
+                                <label>File Type
+                                    <span class="requiredField">*</span>
+                                </label>
+                                <select name="systems" ng-model="self.newFile[fileObj.id].fileExt"
+                                    ng-init="self.newFile[fileObj.id].fileExt = ''" ng-show="!self.otherExt[fileObj.id]"
+                                    ng-change="changeFileType(fileObj.id)" class="form-control">
+                                    <option ng-repeat="ext in self.nonibmExtensionList" ng-value="ext">{{ext}}</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                <input remove-dots-from-file ng-model="self.newFile[fileObj.id].fileExt"
+                                    ng-show="self.otherExt[fileObj.id]" ng-init="self.otherExt[fileObj.id] = false"
+                                    class="form-control" type="text" />
+                                <a ng-show="self.otherExt[fileObj.id]" data-ng-click="clearExt(fileObj.id)">Clear</a>
+                                <span ng-if="self.newFile[fileObj.id].errorfileExt" style="color:red">Choose
+                                    filetype</span>
+                            </div>
+                            <div class="col-md-3">
+                                <label>Target System(s)
+                                    <span class="requiredField">*</span>
+                                </label>
+                                <select select2 name="systems" ng-model="self.newFile[fileObj.id].targetSystemList" 
+                                    ng-init="self.newFile[fileObj.id].targetSystemList = ''" class="form-control" 
+									ng-change="self.selectPSS(self.newFile[fileObj.id].targetSystemList, fileObj)"
+                                    multiple>
+                                    <!--<option value="">Select</option>-->
+                                    <option value="{{system.name}}" ng-repeat="system in self.newFile[fileObj.id].systemsList">
+                                        {{system.name}}
+                                    </option>
+                                </select>
+                                <span ng-if="self.newFile[fileObj.id].errortargetSystemList" style="color:red">Choose
+                                    target system(s)</span>
+                            </div>
+                            <div class="col-md-2" ng-if="fileObj.sType === 'IBM'">
+                                <label>zTPF Level
+                                    <span class="requiredField">*</span>
+                                </label>
+                                <!-- <input ng-model="self.newFile[fileObj.id].funcArea" ng-init="self.newFile[fileObj.id].funcArea = ''" class="form-control" type="text" /> -->
+                                <select ng-change="putLevelChangeAction(fileObj)" name="putLevel"
+                                    ng-model="self.newFile[fileObj.id].funcArea"
+                                    ng-init="self.newFile[fileObj.id].funcArea = ''" class="form-control">
+                                    <option ng-repeat="putObj in fileObj.putList track by $index"
+                                        aria-label="{{putObj.putNameDesc}}" title="{{putObj.putNameDesc}}"
+                                        value="{{putObj.putNameDesc}}">{{putObj.putNameDesc | limitTo : 13}}
+                                    </option>
+                                </select>
+                                <span
+                                    ng-if="self.newFile[fileObj.id].errorfuncArea && (!self.newFile[fileObj.id].funcArea || self.newFile[fileObj.id].funcArea.length == 0) "
+                                    style="color:red">Provide zTPF Level</span>
+                                <span
+                                    ng-if="self.newFile[fileObj.id].errorfuncArea && self.newFile[fileObj.id].funcArea && self.newFile[fileObj.id].funcArea.length > 0"
+                                    style="color:red">{{self.newFile[fileObj.id].putLevelErrorMessage}}</span>
+                            </div>
+                            <div class="col-md-2" ng-if="fileObj.sType !== 'IBM'">
+                                <label>Package Name
+                                    <span class="requiredField">*</span>
+                                </label>
+                                <select name="package" ng-model="self.newFile[fileObj.id].funcArea"
+                                    ng-init="self.newFile[fileObj.id].funcArea = ''" class="form-control">
+                                    <option ng-repeat="package in fileObj.NonIBMputList track by $index"
+                                        aria-label="{{package}}" title="{{package}}" value="{{package}}">
+                                        {{package | limitTo : 13}}</option>
+                                </select>
+                                <!-- <option ng-repeat="package in fileObj.NonIBMputList track by $index" -->
+                                <!-- aria-label="{{package}}" title="{{package}}" ng-value="package"> -->
+                                <!-- {{getLimitedWord(package,10)}}</option> -->
+                                </select>
+                                <span
+                                    ng-if="self.newFile[fileObj.id].errorfuncArea && (!self.newFile[fileObj.id].funcArea || self.newFile[fileObj.id].funcArea.length == 0) "
+                                    style="color:red">Provide Package Name</span>
+                                <span
+                                    ng-if="self.newFile[fileObj.id].errorfuncArea && self.newFile[fileObj.id].funcArea && self.newFile[fileObj.id].funcArea.length > 0"
+                                    style="color:red">{{self.newFile[fileObj.id].putLevelErrorMessage}}</span>
+                            </div>
+
+                            <div class="col-md-3">
+                                <label>File Path
+                                    <span ng-if="fileObj.sType === 'IBM'" class="requiredField">*</span>
+                                    <span ng-if="self.otherExt[fileObj.id] && fileObj.sType !== 'IBM'"
+                                        class="requiredField">*</span>
+                                </label>
+                                <span ng-show="self.newFile[fileObj.id].programName" style="color:#aaa"
+                                    class=" word-wrap">
+                                    <b>(</b>{{self.newFile[fileObj.id].fileName}}/{{self.newFile[fileObj.id].programName}}.{{self.newFile[fileObj.id].fileExt}}
+                                    <b>)</b>
+                                </span>
+                                <input ng-disabled="(!self.otherExt[fileObj.id] && fileObj.sType == 'NON_IBM')"
+                                    ng-model="self.newFile[fileObj.id].fileName"
+                                    ng-init="self.newFile[fileObj.id].fileName = ''"
+                                    class="form-control notallowenterfilename" placeholder="(Ex. /base/src/rt)"
+                                    type="text" />
+                                <span ng-if="self.newFile[fileObj.id].errorfileName" style="color:red">Provide
+                                    filepath</span>
+
+                            </div>
+                        </div>
+                    </md-card-content>
+                </md-card>
+                <md-card ng-hide="!self.reportView">
+                    <md-card-content style="padding:0px;border-bottom: 1px dashed #ccc;">
+                        <div class="row">
+                            <div class="col-md-2 textCenter">
+                                <label>Type</label>
+                            </div>
+                            <div class="col-md-3 textCenter">
+                                <label>File</label>
+                            </div>
+                            <div class="col-md-3 textCenter">
+                                <label>zTPF Level/Package Name</label>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="row">
+                                    <div class="col-md-2 textCenter">
+                                        <label>System</label>
+                                    </div>
+                                    <div class="col-md-10 textCenter">
+                                        <label>Status</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </md-card-content>
+                    <md-card-content style="padding:10px 0px 10px 0px;border-bottom: 1px dotted #ddd;"
+                        ng-repeat="fileObj in self.resultFileList">
+                        <div class="row flexCenter">
+                            <!--<div class="col-md-2 textCenter"> <label ng-if=
+                               "fileObj.fileType === 'IBM'"
+                                       class="label label-success">IBM</label>
+                                <label ng-if="fileObj.fileType !== 'IBM'" class="label label-info">NON_IBM</label>
+                            </div>-->
+
+                            <div class="col-md-2 textCenter">
+                                <label ng-if="fileObj.branch[0].fileType === 'IBM'"
+                                    class="label label-success">IBM</label>
+                                <label ng-if="fileObj.branch[0].fileType !== 'IBM'"
+                                    class="label label-info">NON_IBM</label>
+                            </div>
+                            <div class="col-md-3 textCenter">
+                                <span>{{fileObj.fileName}}</span>
+                            </div>
+                            <div class="col-md-3 textCenter">
+                                <span>{{fileObj.branch[0].funcArea}}</span>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="row" data-ng-repeat="branch in fileObj.branch">
+                                    <div class="col-md-2 textCenter">
+                                        <span>{{branch.targetSystem}}</span>
+                                    </div>
+                                    <div class="col-md-10 textCenter">
+                                        <span ng-show="branch.status === 'Y'" style="color: green;">
+                                            <i class="fa fa-check"></i> {{branch.additionalInfo.statusMsg}}
+                                        </span>
+                                        <span ng-show="branch.status === 'N'" style="color: red;">
+                                            <i class="fa fa-times"></i> {{branch.additionalInfo.statusMsg}}
+                                        </span>
+                                        <span ng-show="branch.status === 'W'">
+                                            <i class="fa fa-warning" style="color: orange;"></i> &nbsp;
+                                            {{branch.additionalInfo.statusMsg}}
+                                        </span>
+                                        <span ng-show="branch.status === null" style="color: red;">
+                                            <i class="fa fa-warning"></i> Unknown
+                                        </span>
+                                    </div>
+
+                                </div>
+                            </div>
+
+
+                        </div>
+                    </md-card-content>
+                </md-card>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <span flex></span>
+            <md-button ng-click="cancel()">
+                Close
+            </md-button>
+            <md-button ng-hide="self.reportView" ng-disabled="self.createFile" class="md-primary"
+                ng-click="createSourceArtifact(self.newFile)">
+                Create New Files
+            </md-button>
+
+        </md-dialog-actions>
+    </form>
+</md-dialog>

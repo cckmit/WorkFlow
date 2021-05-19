@@ -1,0 +1,11 @@
+{
+	"id": 87,
+	"name": "DELEGATION",
+	"value": "TRUE",
+	"userId": "aravinth.palanisamy",
+	"active": "Y",
+	"createdBy": "Aravinth Palanisamy",
+	"createdDt": "2017-10-27 09:31:34 +0000",
+	"modifiedBy": "Aravinth Palanisamy",
+	"modifiedDt": "2017-10-27 09:31:34 +0000"
+}

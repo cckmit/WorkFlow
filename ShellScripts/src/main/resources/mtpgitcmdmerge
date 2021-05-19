@@ -1,0 +1,80 @@
+#!/bin/bash
+# shellcheck disable=2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdmerge                                               #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to do 2 way merge with remote master and local branch repository#
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Destination Project Path                                         #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull Pull process                                  #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   13072016    UVAIS   Created the script                                    #
+#   18042017    Uvais   Code refactor as per new SCM structure                #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#------------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+Proj_Dest_path="$1";                   #Read Local Dest path from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${Proj_Dest_path} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ -d "${Proj_Dest_path}" ]; then
+    pushd "$Proj_Dest_path" &> /dev/null
+      git status; RC=$?;
+      if [ "$RC" -ne 0 ]; then
+        echo -e "ERROR: $Proj_Dest_path is not a valid GIT Directory"; #CONSOLE
+        RC="$EC";
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$Proj_Dest_path is not a valid Directory RC:$RC"
+      fi
+      core="${Proj_Dest_path##*/}"
+      core_master="master_$core";
+      git merge "origin/$core_master" --stat; RC=$?;
+      if [ "$RC" -ne 0 ]; then
+        echo -e "ERROR: Merge process failed";                         #CONSOLE
+        RC="$EC"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Merge process failed RC:$RC"
+      else
+        echo -e "STATUS: Merged successfully";                         #CONSOLE
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Merged successfully RC:$RC"
+      fi
+    popd &> /dev/null
+  else
+    echo "ERROR: $Proj_Dest_path is not a valid Directory";
+    RC="$EC";
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$Proj_Dest_path is not a valid Directory RC:$RC"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${Proj_Dest_path} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

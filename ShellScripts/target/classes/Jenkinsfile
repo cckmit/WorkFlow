@@ -1,0 +1,37 @@
+#!/usr/bin/env groovy
+node {
+
+  properties([buildDiscarder(logRotator(artifactDaysToKeepStr: '', artifactNumToKeepStr: '', numToKeepStr: '3')), disableConcurrentBuilds(), pipelineTriggers([])])
+
+  stage ('Checkout') {
+//    checkout([$class: 'GitSCM', branches: [[name: "*/${env.BRANCH_NAME}"]]]) scm
+    checkout scm
+    sh 'git submodule update --init'
+    echo "My branch is: ${env.BRANCH_NAME}"
+  }
+
+//  stage ('Build') {
+//    sh "./build.sh"
+//  }
+
+//  stage ('Test') {
+//   withCredentials([usernamePassword(credentialsId: 'c89297ec-39a8-44bd-83b1-e7cf13c9b58e', passwordVariable: 'SRV_PASS', usernameVariable: 'SRV_USER')]) {
+//    def SRV_PWD = pwd()
+//    sh """
+//       sshpass -p $SRV_PASS ssh -o StrictHostKeyChecking=no -l $SRV_USER dev-mtp.tpfsoftware.com "cd $SRV_PWD; ./test.sh"
+//       """
+//   }
+//  }
+
+  stage ('Prepare Deploy') {
+    sh 'tar czvf ShellScript.tgz mtp* .mtp* tsiwfcreateimplementation.sh tsigitrepofilesearch.sh tsigitimpcntlfile.sh'
+  }
+
+  stage ('Deploy') {
+    sh "mkdir -p /tmp/ShellScript && tar xzvf ShellScript.tgz -C /tmp/ShellScript/"
+    sh "cp -pRuv /tmp/ShellScript/. $MTP_ENV/"
+    sh "mkdir -p /opt/delivery/ShellScript/ && cp -pRuv ShellScript.tgz /opt/delivery/ShellScript/"
+  }
+
+}
+

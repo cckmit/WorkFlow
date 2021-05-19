@@ -1,0 +1,223 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdadd                                                 #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to perform the new file add at local workspace and remote sync  #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation ID                                                #
+#      $2  - Core or system                                                   #
+#      $3  - Production path                                                  #
+#      $4  - Segment full path                                                #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   05302017    ARUL    Created the script                                    #
+#   12222017    ARUL    Updated the script                                    #
+#   05212018    ARUL    Re-try added to git operations                        #
+#   08192018    ARUL    ZTPFM-1439 Git GC Support added                       #
+#   01022019    GOWTHAM PROD ref extension check                              #
+#   02052019    VINOTH  Retry method changed with curl                        #
+#   05302019    GOWTHAM Updated with logger support                           #
+#   10182019    VINOTH  pull request at submodule level for the prod branch   #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=4;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+
+ImplId="$1";                           #Read Implementation name
+ImplCore="$2";                         #Read Implementation core
+ProdSrcURL="$3";                       #Read Prod repo reference
+ProdSrcName="$4";                      #Read source with path
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplId} ${ImplCore} ${ProdSrcURL} ${ProdSrcName} RC:$RC"
+#-----------------------------------------------------------------------------#
+function prodAttach {
+  local _RC=0;                         #Init return code
+  local _prodImplCore;                 #Init core name for impl name
+  local _activeBranch;                 #Init active branch
+  local _prodSrcSub;                   #Init prod submodule src repo url
+  #local _DEV_SRC_MOD;                  #ssh url
+  local _output;                       #Output temp string
+  local i;                             #
+  _prodImplCore="${USR_IMPL_PLAN}_${USR_IMPL_CORE}"; #Get impl.plan core
+  _prodSrcSub="$( ( basename "${ProdSrcURL}" ".${ProdSrcURL##*.}" ) )"; #Form Prod SRC SSH URL
+  if [ ! -d ".gitref/" ]; then
+    mkdir ".gitref";
+    retryCMD "git submodule init" "N" "N"; _RC=$?;
+    if [ "${_RC}" -eq 0 ]; then
+      git add ".gitref/";
+    fi
+  fi
+  if [ ! -d ".gitref/${_prodSrcSub}" ]; then
+    retryCMD "git submodule add -f ${ProdSrcURL} .gitref/${_prodSrcSub}" ".gitref/${_prodSrcSub}" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+    #Process submodule if add submodule succeed-------------------------------#
+    if [ "${_RC}" -eq 0 ]; then
+      if [ ! -f ".gitignore" ]; then touch .gitignore; fi
+      grep -qF ".gitref/*" ".gitignore" || echo ".gitref/*" >> ".gitignore";
+      git add .gitignore;
+      git add .gitmodules;
+      git commit -m "Production repo attached - ${_prodSrcSub}" .gitignore .gitmodules $(git status -s -- .gitref/ | awk '{print $2}' | tr '\n' ' ' | awk '{$1=$1};1' ) &> /dev/null;
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Production repo attached failed - ${_prodSrcSub} RC:$EC"
+      echo -e "ERROR: Production repo attached failed - ${_prodSrcSub}";
+      _RC="${EC}";
+    fi
+  fi
+  if [ "${_RC}" -eq 0 ]; then
+    getActiveRepo "${_prodSrcSub}"; _RC=$?;
+    if [ "${_RC}" -eq 0 ]; then
+      retryCMD "git submodule update --init" "N" "N"; _RC=$?;
+    else
+      retryCMD "git remote add ${_prodSrcSub} .gitref/${_prodSrcSub}" ".gitref/${_prodSrcSub}" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+      if [ "${_RC}" -eq 0 ]; then
+        retryCMD "git submodule update --init" "N" "N"; _RC=$?;
+      fi
+    fi
+    #File add to the prod repo--------------------------------------------------#
+    if [ "$_RC" -eq 0 ]; then
+      getActiveRepo "${_prodSrcSub}"; _RC=$?;
+      #Check requested source availabel at local?
+      if [ ! -f "${ProdSrcName}" ] && [ -d ".gitref/${_prodSrcSub}" ]; then
+        #Check requested source available at requested prod
+        pushd ".gitref/${_prodSrcSub}" &> /dev/null;
+          retryCMD "git fetch --all" "N" "N"; _RC=$?;
+          _activeBranch="$( git branch -a | grep -F '*' | cut -d ' ' -f2 )";
+          #Check active branch and requested implementation plan core if it's same
+          if [ "${_activeBranch}" != "${_prodImplCore}" ] && [ "${_RC}" -eq 0 ]; then
+            if [ "${_activeBranch}" != "master" ]; then
+              #Switch branch to master for avoid conflicts
+              git checkout master &> /dev/null;
+            fi
+            git branch -a | grep "${_prodImplCore}" &> /dev/null; _RC=$?;
+            if [ "${_RC}" -eq 0 ]; then
+              git checkout "${_prodImplCore}" &> /dev/null;
+              retryCMD "git pull origin ${_prodImplCore}" "N" "N";
+            else
+              git checkout -b "${_prodImplCore}" &> /dev/null;
+            fi
+          fi
+          _activeBranch="$( git branch -a | grep -F '*' | cut -d ' ' -f2 )";
+          if [ "${_activeBranch}" == "${_prodImplCore}" ]; then
+            #Check requested source with path at local if present
+            if [ ! -f "${ProdSrcName}" ]; then
+              #Check branch and if not available then create for it
+              for i in {0..2}          #Retry if it's failed
+              do
+                _output="";            #Empty output
+                _output=$(git ls-tree -r --name-only "origin/${_prodImplCore}" | grep "${ProdSrcName}" 2> /dev/null); #_RC=$?;
+                if [[ "${_output}" == "${ProdSrcName}" ]]; then
+                  break;
+                  _RC="$RC";
+                elif [ "${_RC}" -eq 128 ]; then
+                  sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:git remote re-try - $i RC:$_RC"
+                  echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                  sleep 3;
+                  _RC="$EC";
+                else
+                  _RC="$EC";
+                fi
+              done
+              if [ "${_RC}" -ne 0 ]; then
+                mkdir -p "$(dirname "${ProdSrcName}")" && touch "${ProdSrcName}";
+                git pull origin "${_prodImplCore}" &> /dev/null
+                git add "${ProdSrcName}";
+                git commit -m "${ProdSrcName} new file added by ${USER} from ${USR_IMPL_PLAN}" "${ProdSrcName}" $(git status -s -- .gitref/ | awk '{print $2}' | tr '\n' ' ' | awk '{$1=$1};1' ) &> /dev/null;
+                retryCMD "git push -u origin ${_prodImplCore}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+              fi
+            else
+              #multiple creation so adding push command just to push files available in local
+              retryCMD "git push -u origin ${_prodImplCore}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; _RC=$?;
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Implementation branch not found at production RC:$EC"
+            echo -e "ERROR: Implementation branch not found at production";
+            _RC="${EC}";
+          fi
+        popd &> /dev/null;
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:New Source file already exist on your local workspace remove and try again RC:$EC"
+        echo -e "ERROR: New Source file already exist on your local workspace remove and try again";
+        _RC="${EC}";
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Production repository remote url setup fail RC:$EC"
+      echo -e "ERROR: Production repository remote url setup fail";
+      _RC="${EC}";
+    fi
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+#
+#LOCAL_DEST_PATH="${USR_TPF_PROJ}/${ImplId}/${ImplCore}"; #Form users local workspace
+if [ "$RC" -eq 0 ]; then
+  RemoteBranchName="${ImplId}_${ImplCore}";
+  getParmFromBranch "${RemoteBranchName}" "USR";
+  if [ -d "${USR_IMPL_CWRK}" ]; then
+    #Change developer local workspace directory
+    pushd "${USR_IMPL_CWRK}" &> /dev/null;
+      git status &> /dev/null; RC=$?;
+      if [ "$RC" -ne 0 ];  then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_IMPL_CWRK} is not a valid git project RC:$EC"
+        echo -e "ERROR: ${USR_IMPL_CWRK} is not a valid git project";
+        RC="$EC";
+      else
+        prodAttach; RC=$?;
+        if [ "$RC" -eq 0 ]; then
+          #Production repo attachment for new file add
+          USR_ACT_BRANCH=$(git branch | grep -F '*' | cut -d ' ' -f2 );
+          if [[ "${USR_ACT_BRANCH}" == "${ImplId}_${ImplCore}" ]]; then
+            mkdir -p "$(dirname "${ProdSrcName}")" && touch "${ProdSrcName}";
+            git add "${ProdSrcName}";
+            git commit -m "FILE-CREATE: File ${ProdSrcName} created by ${GIT_USER}" "${ProdSrcName}" $(git status -s -- .gitref/ | awk '{print $2}' | tr '\n' ' ' | awk '{$1=$1};1' ) &>/dev/null;
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${ProdSrcName} added RC:$RC"
+            echo -e "INFO: File ${ProdSrcName} added";
+            retryCMD "git push origin ${USR_ACT_BRANCH}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${_prodSrcSub}&pisSource=true"; RC=$?;
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Local workspace in git branch differ - failed to add file RC:$EC"
+            echo -e "ERROR: Local workspace in git branch differ - failed to add file";
+            RC="$EC";
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Added file failed to auto-checkin. Try again with manual check-in RC:$EC"
+          echo -e "ERROR: Added file failed to auto-checkin. Try again with manual check-in";
+          RC="$EC";
+        fi
+      fi
+    popd &> /dev/null
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Workspace not found - ${USR_IMPL_CWRK} | Local workspace deleted possibly due to unintended user action on the project folder. Please use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:$EC"
+    echo -e "ERROR: Local workspace deleted possibly due to unintended user action on the project folder. Please use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}).";
+    RC="$EC";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplId} ${ImplCore} ${ProdSrcURL} ${ProdSrcName} RC:$RC"
+exit "$RC";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

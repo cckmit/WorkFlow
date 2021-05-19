@@ -1,0 +1,70 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpwfdbcrchk                                                 #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Check DBCR number status to check if it is implemented before the      #
+#      Implementation Plan deployed to the specific system                    #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - DBCR Number                                                      #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   06232017    NARASHI Created the script                                    #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+dbcrNumber="$1";
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${dbcrNumber} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:EXEC:${SUP_DSL_DBC} ${dbcrNumber} initialized RC:"
+  Result=$(rexec -l "${NFM_DSL_USER}" -p "${NFM_DSL_SSAL}" "${NFM_DSL_HOST}" "${SUP_DSL_DBC}" "${dbcrNumber}"); RC=$?;
+  if [ "$RC" -eq 0 ]; then
+    if [ "$Result" -eq 28 ]; then
+      echo -e "DBCR $dbcrNumber is not Found";                         #CONSOLE
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:DBCR number validated and its not found RC:$RC"
+      RC="$EC";
+    else
+      echo -e "$Result";                                               #CONSOLE
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:DBCR number validated - $Result RC:$RC"
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$Result RC:$RC"
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:DBCR number validation failed to execute RC:$RC"
+    RC="$EC";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${dbcrNumber} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

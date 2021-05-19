@@ -1,0 +1,504 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcreatelclcfg                                           #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to generate the configuration file in local workspace for       #
+#      unit testing                                                           #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Actual project path                                              #
+#      $2  - Library type D-DVL or S-STG or B-both or N-None                  #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   06092017    NARASHIMAN   created the script                               #
+#   11092017    ARUL         Update with local support                        #
+#   12052017    ARUL         Update with dependancy reference                 #
+#   08212018    ARUL         Update Future PUT Level and C and CPP FALG       #
+#   08302018    ARUL         Update same load date dependancy fix             #
+#   18022019    VINOTH       Updated dvl build code for DEVL and PROD         #
+#   04292019    GOWTHAM      Updated with logger support                      #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+#ImplPlanId="$1";
+#Core="$2";
+#LibType="$3";
+ProjectDir="$1";
+LibType="$2";
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ProjectDir} ${LibType} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function updateConfig {
+  local _RC=0;
+  local _implementation="$1";
+  local _implPutLevel="$2";
+  local _putStatus="$3"
+  local _implDependancyDvl="$4";
+  local _implDependancyStg="$5";
+  local _currentDate;
+  local _syslineNo;
+  local _temp="";
+  local _cfgFlag=0;
+  local _XrefPlanName;
+  local _XrefPlanDate;
+  local _XrefPlanPath;
+  local _jTemp;
+  local _putlineNo;
+  local _putPtr;
+  declare -a _dvlList;
+  declare -a _stgList;
+  _currentDate="$(date +%Y%m%d)"
+  _implLoadDate="${_implementation##*_}"
+  #shellcheck disable=2086
+  _implDependancyDvl="$(echo ${_implDependancyDvl} | tr -s ' ')"     #TEMP fix
+  _implDependancyDvl="${_implDependancyDvl//\,/ }";
+  #shellcheck disable=2086
+  _implDependancyStg="$(echo ${_implDependancyStg} | tr -s ' ')"     #TEMP fix
+  _implDependancyStg="${_implDependancyStg//\,/ }";
+  _implReferenceCore="${implementation%%_*}/${USR_IMPL_CORE}";
+#DVL Dependancy added from modernization project------------------------------#
+  if [ -n "${_implDependancyDvl// /}" ]; then
+    _temp=( ${_implDependancyDvl} );
+    for((i=1; i<${#_temp[@]}; i++));   #Skip first data start from 1
+    do
+      _seqNum="${_temp[i]##*_}"        #Temp fix to apend 2 digit year prefix
+      [ "${#_seqNum}" -eq 12 ] && _seqNum="20${_seqNum}"   #Temp fix
+      if [ -d "${DVL_TPF_APP}/${_temp[i]%%_*}/${USR_IMPL_CORE}" ]; then
+        _dvlList+="${_stgList[i]} ${_seqNum},${DVL_TPF_APP}/${_temp[i]%%_*}/${USR_IMPL_CORE}";
+      fi
+      if [ -d "${DVL_TPF_SYS}/${_temp[i]%%_*}/${USR_IMPL_CORE}" ]; then
+        _dvlList+="${_stgList[i]} ${_seqNum},${DVL_TPF_SYS}/${_temp[i]%%_*}/${USR_IMPL_CORE}";
+      fi
+    done
+    _temp=()                           #Unset
+  else
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:No DVL workspace dependancy provided to SKIP RC:$_RC"
+    echo -e "INFO: No DVL workspace dependancy provided to SKIP"
+  fi
+#DVL Sort order---------------------------------------------------------------#
+  IFS=' ' read -r -a _devlList <<< "${_dvlList[*]}"
+  for ((i=0;i<"${#_devlList[@]}";i++))
+  do
+    #shellcheck disable=SC2004
+    for ((j=$i;j<"${#_devlList[@]}";j++))
+    do
+      if [ -n "${_devlList[$i]%,*}" ] && [ "${_devlList[$i]%,*}" -lt "${_devlList[$j]%,*}" ]; then
+        _dvlLst="${_devlList[$i]}"
+        _devlList[$i]="${_devlList[$j]}"
+        _devlList[$j]="${_dvlLst}"
+      fi
+    done
+  done
+  unset IFS
+#STG Dependancy added from modernization--------------------------------------#
+  if [ -n "${_implDependancyStg// /}" ]; then
+    _temp=( ${_implDependancyStg} );
+    for((i=1; i<${#_temp[@]}; i++));   #Skip first data start from 1
+    do
+      _seqNum="${_temp[i]##*_}"        #Temp fix to apend 2 digit year prefix
+      [ "${#_seqNum}" -eq 12 ] && _seqNum="20${_seqNum}"   #Temp fix 2 digit year
+      if [ -d "${STG_TPF_APP}/${_temp[i]%%_*}/${USR_IMPL_CORE}" ]; then
+        _stgList+="${_stgList[i]} ${_seqNum},${STG_TPF_APP}/${_temp[i]%%_*}/${USR_IMPL_CORE} ";
+      fi
+      if [ -d "${STG_TPF_SYS}/${_temp[i]%%_*}/${USR_IMPL_CORE}" ]; then
+        _stgList+="${_stgList[i]} ${_seqNum},${STG_TPF_SYS}/${_temp[i]%%_*}/${USR_IMPL_CORE} ";
+      fi
+    done
+    _temp=()                           #Unset
+  else
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:No STG workspace dependancy provided to SKIP RC:$RC"
+    echo -e "INFO: No STG workspace dependancy provided to SKIP"
+  fi
+#Define PEND and XREF paths as per core/systems
+  case "${USR_IMPL_CORE,,}" in
+    res)
+      _pendPath="$PRD_RES_PND";
+    ;;
+    air)
+      _pendPath="$PRD_AIR_PND";
+    ;;
+    oss)
+      _pendPath="$PRD_OSS_PND";
+    ;;
+    wsp)
+      _pendPath="$PRD_WSP_PND";
+    ;;
+    apo)
+      _pendPath="$PRD_APO_PND";
+      _pendXref="$PRD_APO_XRF";
+    ;;
+    pgr)
+      _pendPath="$PRD_PGR_PND";
+      _pendXref="$PRD_PGR_XRF";
+    ;;
+    pre)
+      _pendPath="$PRD_PRE_PND";
+      _pendXref="$PRD_PRE_XRF";
+    ;;
+    *)
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:No systems selected. RC:$EC"
+      echo -e "ERROR: No systems selected"
+    ;;
+  esac
+#Load PEND File path----------------------------------------------------------#
+  if [ "${USR_IMPL_CORE,,}" == "apo" ] || [ "${USR_IMPL_CORE,,}" == "pgr" ] || [ "${USR_IMPL_CORE,,}" == "pre" ]; then
+    _XrefImplID=( $(awk ' $3 <= '"${_implLoadDate:0:8}"' ' "${_pendXref}" | grep ' APZ ' | tr -s ' ' | sort -nrk 3.1 | cut -d' ' -f1,3,8 | sed 's/ //2' | sed 's/ /,/g' | uniq -u) )
+    for((i=0; i<${#_XrefImplID[@]}; i++));
+    do
+      _XrefPlanName="${_XrefImplID[i]%%,*}"
+      _XrefTempDate="${_XrefImplID[i]#*,}"
+      _XrefPlanDate="${_XrefTempDate/,/}"
+      _XrefPlanPath=( $(grep "${_XrefPlanName}" "${_pendPath}" | grep "${USR_IMPL_CORE}" | grep 'ztpfrepos' | tr -s " " | sort -nrk 5.1 | cut -d' ' -f6 ) )
+      _seqNum=0;
+      if [ -n "${_XrefPlanPath[0]// /}" ];  then
+        for x in "${_XrefPlanPath[@]}"
+        do
+          _seqNum=$((_seqNum + 1))
+          printf -v snum "%06d" "$_seqNum" #Append 6-digit sequence number (12-digit time stamp, 4-digit sequnce number)
+          _jTemp="${_XrefPlanDate},${x}"
+          _stgList+="${_jTemp/,/${snum},} "
+        done
+      fi
+      _XrefPlanPath=( $(grep "${_XrefPlanName}" "${_pendPath}" | grep "${USR_IMPL_CORE}" | grep 'ztpfsys' | tr -s " " | sort -nrk 5.1 | cut -d' ' -f6 ) )
+      _seqNum=0;
+      if [ -n "${_XrefPlanPath[0]// /}" ];  then
+        for x in "${_XrefPlanPath[@]}"
+        do
+          _seqNum=$((_seqNum + 1))
+          printf -v snum "%06d" "$_seqNum" #Append 6-digit sequence number (12-digit time stamp, 4-digit sequnce number)
+          _jTemp="${_XrefPlanDate},${x}"
+          _stgList+="${_jTemp/,/${snum},} "
+        done
+      fi
+    done
+  elif [ "${USR_IMPL_CORE,,}" == "wsp" ] || [ "${USR_IMPL_CORE,,}" == "air" ] || [ "${USR_IMPL_CORE,,}" == "res" ] || [ "${USR_IMPL_CORE,,}" == "oss" ]; then
+    #shellcheck disable=SC2086
+    _stgTemp=( $(grep "${USR_IMPL_CORE}" ${_pendPath} | grep 'ztpfsys\|ztpfrepos' | tr -s " " | cut -d" " -f4,5 | sed 's/ /,/g') )
+    _seqNum=0;
+    for i in "${_stgTemp[@]}"
+    do
+      _seqNum=$((_seqNum + 1))
+      printf -v snum "%010d" "$_seqNum"   #Append 10-digit sequence number (6-digit time format, 4-digit sequnce number)
+      _stgList+="${i/,/${snum},} "
+    done
+  fi
+#STG Sort order---------------------------------------------------------------#
+  IFS=' ' read -r -a _stagingList <<< "${_stgList[*]}"
+  for ((i=0;i<"${#_stagingList[@]}";i++))
+  do
+    #shellcheck disable=SC2004
+    for ((j=$i;j<"${#_stagingList[@]}";j++))
+    do
+      if [ -n "${_stagingList[$i]%,*}" ] && [ "${_stagingList[$i]%,*}" -lt "${_stagingList[$j]%,*}" ]; then
+        _stgLst="${_stagingList[$i]}"
+        _stagingList[$i]="${_stagingList[$j]}"
+        _stagingList[$j]="${_stgLst}"
+      fi
+    done
+  done
+  unset IFS
+#-----------------------------------------------------------------------------#
+# Update configuration file                                                   #
+#-----------------------------------------------------------------------------#
+  if [ -f "maketpf.cfg" ]; then
+#TPF_ROOT Update--------------------------------------------------------------#
+    _syslineNo=($(grep -n '^TPF_ROOT \|#TPF_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+    for((i=0; i<${#_syslineNo[@]}; i++)); #Remove all exsiting TPF_ROOT lines
+    do
+      sed -i "${_syslineNo[0]}d" maketpf.cfg
+    done
+    if [ -d "$USR_IMPL_CWRK/derived" ]; then
+      sed -i "${_syslineNo[0]} i TPF_ROOT := $USR_IMPL_CWRK/derived" maketpf.cfg
+      sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += $USR_IMPL_CWRK" maketpf.cfg
+    elif [ -d "$USR_IMPL_CWRK" ]; then
+      sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT := $USR_IMPL_CWRK" maketpf.cfg
+    fi
+    if [ "$LibType" == D ] || [ "$LibType" == B ]; then    #DVL Workspace
+      if [ -d "${DVL_TPF_SYS}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" ]; then
+        sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${DVL_TPF_SYS}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" maketpf.cfg
+      fi
+      for((i=0; i<=${#_devlList[@]}; i++));
+      do
+        _temp=( ${_devlList[i]/,/ } );
+        if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}" maketpf.cfg
+          elif [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${_temp[1]}" maketpf.cfg
+          fi
+        elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}" maketpf.cfg
+          elif [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${_temp[1]}" maketpf.cfg
+          fi
+        fi
+      done
+    fi
+    if [ "$LibType" == S ] || [ "$LibType" == B ]; then    #STG Workspace
+      for((i=0; i<=${#_stagingList[@]}; i++));
+      do
+        _temp=( ${_stagingList[i]/,/ } );
+        if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}" maketpf.cfg
+          elif [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${_temp[1]}" maketpf.cfg
+          fi
+        elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}" maketpf.cfg
+          elif [[ "${_temp[1]}" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${_temp[1]}" maketpf.cfg
+          fi
+        fi
+      done
+    fi
+    if [ -d "${PRD_ORIGIN_SYS}/derived" ] && [ -n "${PRD_ORIGIN_SYS// /}" ]; then
+      sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_ORIGIN_SYS}/derived" maketpf.cfg
+    fi
+    if [ -d "${PRD_ORIGIN_SYS}" ] && [ -n "${PRD_ORIGIN_SYS// /}" ]; then
+      sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_ORIGIN_SYS}" maketpf.cfg
+    elif [ -n "${PRD_ORIGIN_SYS// /}" ]; then
+      sed -i "$((_syslineNo=_syslineNo + 1)) i #TPF_ROOT += ${PRD_ORIGIN_SYS}" maketpf.cfg
+    fi
+    if [[ "${USR_IMPL_CORE,,}" =~ ^(apo|pgr|pre)$ ]]; then
+      if [ "$LibType" == D ] || [ "$LibType" == B ]; then  #DVL Workspace
+        for((i=0; i<=${#_devlList[@]}; i++));
+        do
+          _temp=( ${_devlList[i]/,/ } );
+          if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+            if [ -d "${_temp[1]}/common" ] && [[ "${_temp[1]}/common" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+              sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}/common" maketpf.cfg
+            fi
+          elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+            if [ -d "${_temp[1]}/common" ] && [[ "${_temp[1]}/common" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+              sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}/common" maketpf.cfg
+            fi
+          fi
+        done
+      fi
+      if [ "$LibType" == S ] || [ "$LibType" == B ]; then  #STG Workspace
+        for((i=0; i<=${#_stagingList[@]}; i++));
+        do
+          _temp=( ${_stagingList[i]/,/ } );
+          if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+            if [ -d "${_temp[1]}/common" ] && [[ "${_temp[1]}/common" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+              sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}/common" maketpf.cfg
+            fi
+          elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+            if [ -d "${_temp[1]}/common" ] && [[ "${_temp[1]}/common" =~ ztpfsys ]] && [ -n "${_temp[1]// /}" ]; then
+              sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${_temp[1]}/common" maketpf.cfg
+            fi
+          fi
+        done
+      fi
+      if [ -d "${PRD_ORIGIN_CSY}/derived" ] && [ -n "${PRD_ORIGIN_CSY// /}" ]; then
+        sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_ORIGIN_CSY}/derived" maketpf.cfg
+      fi
+      if [ -n "${PRD_ORIGIN_CSY// /}" ]; then
+        sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_ORIGIN_CSY}" maketpf.cfg
+      fi
+    fi
+    if [ -n "${PRD_ORIGIN_IBM// /}" ]; then
+      sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_ORIGIN_IBM}" maketpf.cfg
+    fi
+#APPL_ROOT Update-------------------------------------------------------------#
+    _applineNo=($(grep -n '^APPL_ROOT \|#APPL_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+    for((i=0; i<${#_applineNo[@]}; i++)); #Remove all exsiting TPF_ROOT lines
+    do
+      sed -i "${_applineNo[0]}d" maketpf.cfg
+    done
+    if [ -d "$USR_IMPL_CWRK/derived" ]; then
+      sed -i "${_applineNo[0]} i APPL_ROOT := $USR_IMPL_CWRK/derived" maketpf.cfg
+      sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += $USR_IMPL_CWRK" maketpf.cfg
+    elif [ -d "$USR_IMPL_CWRK" ]; then
+      sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT := $USR_IMPL_CWRK" maketpf.cfg
+    fi
+    if [ "$LibType" == D ] || [ "$LibType" == B ]; then    #DVL Workspace
+      if [ -d "${DVL_TPF_APP}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" ]; then
+        sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${DVL_TPF_APP}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" maketpf.cfg
+      fi
+      for((i=0; i<=${#_devlList[@]}; i++));
+      do
+        _temp=( ${_devlList[i]/,/ } );
+        if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${_temp[1]}" maketpf.cfg
+          elif [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_applineNo=_applineNo + 1)) i #APPL_ROOT += ${_temp[1]}" maketpf.cfg
+          fi
+        elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${_temp[1]}" maketpf.cfg
+          elif [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_applineNo=_applineNo + 1)) i #APPL_ROOT += ${_temp[1]}" maketpf.cfg
+          fi
+        fi
+      done
+    fi
+    if [ "$LibType" == S ] || [ "$LibType" == B ]; then    #STG Workspace
+      for((i=0; i<=${#_stagingList[@]}; i++));
+      do
+        _temp=( ${_stagingList[i]/,/ } );
+        if [ -n "${_temp[0]// /}" ] && [ "${_temp[0]:0:14}" -eq "${_implLoadDate:0:14}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${_temp[1]}" maketpf.cfg
+          elif [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_applineNo=_applineNo + 1)) i #APPL_ROOT += ${_temp[1]}" maketpf.cfg
+          fi
+        elif [ -n "${_temp[0]// /}" ] && [ "${_temp[0]}" -le "${_implLoadDate}" ]; then #Load date boudry
+          if [ -d "${_temp[1]}" ] && [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${_temp[1]}" maketpf.cfg
+          elif [[ "${_temp[1]}" =~ ztpfrepos ]] && [ -n "${_temp[1]// /}" ]; then
+            sed -i "$((_applineNo=_applineNo + 1)) i #APPL_ROOT += ${_temp[1]}" maketpf.cfg
+          fi
+        fi
+      done
+    fi
+    if [[ "${USR_IMPL_CORE,,}" =~ ^(apo|pgr|pre)$ ]]; then
+      if [ -d "${PRD_ORIGIN_CAP}/derived" ] && [ -n "${PRD_ORIGIN_CAP// /}" ]; then
+        sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${PRD_ORIGIN_CAP}/derived" maketpf.cfg
+      fi
+      if [ -d "${PRD_ORIGIN_CAP}" ] && [ -n "${PRD_ORIGIN_CAP// /}" ]; then
+        sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${PRD_ORIGIN_CAP}" maketpf.cfg
+      fi
+    fi
+    if [ -d "${PRD_ORIGIN_APP}/derived" ] && [ -n "${PRD_ORIGIN_APP// /}" ]; then
+      sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${PRD_ORIGIN_APP}/derived" maketpf.cfg
+    fi
+    if [ -d "${PRD_ORIGIN_APP}" ] && [ -n "${PRD_ORIGIN_APP// /}" ]; then
+      sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${PRD_ORIGIN_APP}" maketpf.cfg
+    elif [ -n "${PRD_ORIGIN_APP// /}" ]; then
+      sed -i "$((_applineNo=_applineNo + 1)) i #APPL_ROOT += ${PRD_ORIGIN_APP}" maketpf.cfg
+    fi
+#NON-IBM FLAGS Update---------------------------------------------------------#
+    #NO Update for LOCAL CONFIG
+#IBM FLAGS Update-------------------------------------------------------------#
+    #NO Update for LOCAL CONFIG
+#Set active workspace path----------------------------------------------------#
+    _syslineNo=($(grep -n '^TPF_ROOT \|#TPF_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+    _sysPtr="${_syslineNo[0]}"
+    sed -i "${_sysPtr}s/./:/10" maketpf.cfg      #Replace exiting + symbol
+    _applineNo=($(grep -n '^APPL_ROOT \|#APPL_ROOT ' maketpf.cfg | cut -d : -f 1 ))
+    _appPtr="${_applineNo[0]}"
+    sed -i "${_appPtr}s/./:/11" maketpf.cfg      #Replace exiting + symbol
+#Set user custom put level----------------------------------------------------#
+    _putlineNo=($(grep -n " /ztpf/\|/ztpfsys/${USR_IMPL_CORE,,}" maketpf.cfg | cut -d : -f 1 ));
+    _putPtr="${_putlineNo[0]}";
+    if [ "${_putStatus}" == 'prod' ]; then
+      _implPutstatus=${_implPutLevel};
+    elif [ "${_putStatus}" == 'devl' ]; then
+      _implPutstatus="devl";
+    fi
+    if [[ "${USR_IMPL_CORE,,}" =~ ^(apo|pgr|pre)$ ]]; then
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr} i TPF_ROOT += /ztpf/ibm/${_implPutLevel}" maketpf.cfg
+      sed -i "${_putPtr} i TPF_ROOT += /ztpfsys/common/${_implPutstatus}" maketpf.cfg
+      sed -i "${_putPtr} i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE,,}/${_implPutstatus}" maketpf.cfg
+      sed -i "${_putPtr} i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE,,}/${_implPutstatus}/derived" maketpf.cfg
+    else
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr}d" maketpf.cfg #Delete existing files
+      sed -i "${_putPtr} i TPF_ROOT += /ztpf/ibm/${_implPutLevel}" maketpf.cfg
+      sed -i "${_putPtr} i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE,,}/${_implPutstatus}" maketpf.cfg
+      sed -i "${_putPtr} i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE,,}/${_implPutstatus}/derived" maketpf.cfg
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found RC:$EC"
+    echo -e "\\nERROR: maketpf.cfg not found";
+    _RC="${EC}";
+  fi
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+function getConfig {
+  local _RC=0;
+  _dependancyIndex=( $(curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_API_PORT}/${PRD_API_WKF}/common/getLocalConfigDetails?planId=${USR_IMPL_PLAN^^}&systemName=${USR_IMPL_CORE^^}") )
+  #shellcheck disable=SC2128
+  if [[ "${_dependancyIndex}" =~ null ]] || [[ "${_dependancyIndex}" =~ false ]]; then
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:WorkflowAPI Failed in local workspace RC:$EC"
+    echo -e "\\nERROR: WorkflowAPI Failed in local workspace"; _RC="$EC";
+  elif [[ "${_dependancyIndex}" =~ ERROR ]]; then
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${_dependancyIndex[*]} RC:$EC"
+    echo -e "${_dependancyIndex[@]}"; _RC="$EC";
+  else
+    wget --no-check-certificate -N "${CFG_URL}" &> /dev/null; _RC=$?;
+    if [ "$_RC" -lt 1 ]; then
+      #index[0]-impl.plan index[1]-putlevel index[2]-dvl.dependancy index[3]-stg.dependancy
+      updateConfig "${_dependancyIndex[0],,}" "${_dependancyIndex[1],,}" "${_dependancyIndex[2],,}" "${_dependancyIndex[3],,}" "${_dependancyIndex[4],,}"; _RC=$?;
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to get maketpf.cfg RC:$EC"
+      echo -e "\\nERROR: Failed to get maketpf.cfg"; _RC="$EC";
+    fi
+  fi
+  return "$_RC";
+}
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  implementation="${ProjectDir##*projects}"      #Cut after project
+  [[ "${implementation: -1}" != '/' ]] && implementation="${implementation}/"
+  implementation="${implementation////_}"        #Replace / in to _ char
+  implementation="${implementation:1: -1}"       #Trim before and after / char
+  getParmFromBranch "${implementation}" "USR";
+  #RC=$?;
+  if [ -d "${USR_IMPL_CWRK}" ]; then
+    pushd "${USR_IMPL_CWRK}" &> /dev/null;       #Switch to project workspace
+    mkdir -p derived       #Create TPFAR Support dir
+    chmod 777 derived      #Set gobal permission to create a file
+    rm ./*.cfg &> /dev/null
+    if [ "${implementation:0:1}" == "t" ]; then  #Get config for Travelport account
+      CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/tp/nonibm/nonibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+      getConfig; RC=$?
+    elif [ "${implementation:0:1}" == "d" ]; then #Get config for Delta account
+      CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/dl/nonibm/nonibm_conf.git/master_${USR_IMPL_CORE}/maketpf.cfg"
+      getConfig; RC=$?
+    fi
+    if [ "$RC" -eq 0 ] && [ -f "maketpf.cfg" ]; then
+      mv maketpf.cfg proj.maketpf.cfg            #Rename file for zTPFGI Support
+    fi
+    popd &> /dev/null
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:User workspace not found - ${USR_IMPL_CWRK} RC:$EC"
+    echo -e "\\nERROR: User workspace not found - ${USR_IMPL_CWRK}"
+    RC="$EC"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-i---------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ProjectDir} ${LibType} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

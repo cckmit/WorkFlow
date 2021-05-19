@@ -1,0 +1,122 @@
+<md-dialog aria-label="zTPF Level" style="width: 50%;">
+        <form ng-cloak>
+            <md-toolbar>
+                <div class="md-toolbar-tools">
+                    <!-- <label style="color:white;">Insert zTPF Level Deployment Details</label> -->
+                    <label style="color:white;">Insert zTPF Level Deployment Details</label>
+                    <!--<span flex></span>-->
+                    <!--<md-button class="md-icon-button" ng-click="cancel()">-->
+                    <!--<i class="fa fa-close"></i>-->
+                    <!--</md-button>-->
+                </div>
+            </md-toolbar>
+    
+            <md-dialog-content>
+                <div class="md-dialog-content" style="height:15vh;">
+                    <form name="vmid.putData">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label>Target System <span class="requiredField">*</span></label>
+                                <md-input-container class="md-icon-float md-block clearMargin">
+                                    <select name="systems" ng-model="vmid.putData.systemId" class="form-control" style="margin-top: 8px;">
+                                        <option value="">Select</option>
+                                        <option ng-value="system.id"
+                                                ng-repeat="system in vmid.systemsList">
+                                            {{system.name}}
+                                        </option>
+                                    </select>
+                                </md-input-container>
+                            </div>
+                            <div class="col-md-4">
+                                <label>zTPF Level <span class="requiredField">*</span></label>
+                                <md-input-container class="md-icon-float md-block spacingTwo">
+                                    <input type="text" name="putLevel" aria-label="putLevel" ng-model="vmid.putData.putLevel"  ng-pattern-restrict="^[A-Za-z0-9]*$"  />
+                                </md-input-container>
+                            </div>
+                            <div class="col-md-4">
+                                    <!-- <label>zTPF Level Repository <span ng-if="vmid.putData.defaultPut == 'Y'" class="requiredField">*</span></label> -->
+                                    <label>zTPF Level Repository <span ng-if="vmid.putData.defaultPut == 'Y'" class="requiredField">*</span></label>
+                                    <input type="text" name="scmUrl" class="form-control" aria-label="scmUrl" placeholder="tpf/dl/ibm/ibm_putxx.git" ng-model="vmid.putData.scmUrl" />
+                                </div>
+                        </div>
+                        <div class="row spacingFour">
+                            <!-- <div class="col-md-6">
+                                <label>Current Production Indicator <span class="requiredField">*</span></label>
+                                <md-input-container class="md-icon-float md-block" style="margin-top:4px !important;">
+                                    <md-radio-group layout="row" ng-model="vmid.putData.defaultPut">
+                                        <md-radio-button value="Y">Yes
+                                        </md-radio-button>
+                                        <md-radio-button value="N">No
+                                        </md-radio-button>
+                                    </md-radio-group>
+                                </md-input-container>
+                            </div> -->
+                            <!-- <div class="col-md-6">
+                                <label>zTPF Level Repository <span ng-if="vmid.putData.defaultPut == 'Y'" class="requiredField">*</span></label>
+                                <input type="text" name="scmUrl" class="form-control" aria-label="scmUrl" placeholder="tpf/dl/ibm/ibm_putxx.git" ng-model="vmid.putData.scmUrl" />
+                            </div> -->
+                            <div class="col-md-6">
+                                    <label>Status
+                                            <span class="requiredField">*</span>
+                                        </label> 
+                                    <input disabled type="text" name="status" class="form-control" aria-label="status"  ng-model="vmid.putData.status" />
+                                      
+                            </div>
+                            <div class="col-md-6">
+                                    <label>Owner(s)<span class="requiredField">*</span></label>
+                                    <md-input-container style="margin-top: 0px;" class="md-icon-float md-block multipleSelect2">
+                                        <select tabindex="3" name="owners" id="owners"  ng-model="vmid.putData.ownerids" class="form-control" multiple="multiple" aria-label="selectOwners">
+                                            <option ng-value="rev.id" 
+                                                    ng-repeat="rev in vmid.loadOwnersList | orderBy :'displayName'">
+                                                {{ rev.displayName }}
+                                            </option>
+                                        </select>
+                                    </md-input-container>
+                            </div>
+                        </div>
+                        <div class="row spacingFour">
+                                <div class="col-md-6">
+                                        <label>Starting Sequence #</label>
+                                        <md-input-container class="md-icon-float md-block spacingTwo">
+                                            <input type="text" name="startSequence" aria-label="startSequence" ng-model="vmid.putData.startingSequence" />
+                                        </md-input-container>
+            
+                                    </div>
+                               
+                                <div class="col-md-6">
+                                        <label>Ending Sequence #</label>
+                                        <md-input-container class="md-icon-float md-block spacingTwo">
+                                            <input type="text" name="endingSequence" aria-label="endingSequence" ng-model="vmid.putData.endingSequence" />
+                                        </md-input-container>
+            
+                                    </div>
+                                   
+                            </div>
+                        <div class="row spacingFour">
+                            <div class="col-md-6">
+                                <label>Deployment Date<span class="requiredField">*</span></label>
+                                <input class="form-control" ng-model="vmid.putData.putDate" ng-model-options="{ updateOn: 'blur' }" placeholder="Choose date" moment-picker="vmid.putData.putDate" format="MM-DD-YYYY" min-view="month" min-date="vmid.startDate">
+                            </div>
+                            <div class="col-md-6">
+                                <label>Deployment Time<span class="requiredField">*</span></label>
+                                <input class="form-control" ng-model="vmid.putData.putTime" ng-model-options="{ updateOn: 'blur' }" placeholder="Choose Time" moment-picker="vmid.putData.putTime" format="HH:mm" locale="de">
+                            </div>
+                        </div>
+    
+                    </form>
+                </div>
+            </md-dialog-content>
+    
+            <md-dialog-actions layout="row">
+    
+                <span style="color:red;" ng-show="vmid.forceInsertMsg" flex>Click "Insert", if you would like to proceed anyway</span>
+                <md-button ng-click="cancel()" aria-label="inserPutLevelWindow">
+                    Cancel
+                </md-button>
+                <md-button class="md-primary" ng-click="vmid.submitPutLevelDD(vmid.putData)" aria-label="cancelPutLevelWindow">
+                    Insert
+                </md-button>
+    
+            </md-dialog-actions>
+        </form>
+    </md-dialog>

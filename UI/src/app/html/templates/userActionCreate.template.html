@@ -1,0 +1,138 @@
+<md-dialog aria-label="lc" style="width: 65%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools" ng-if="createFlag">
+                <label style="color:white;">Create User Action</label>
+            </div>
+			<div class="md-toolbar-tools" ng-if="updateFlag">
+                <label style="color:white;">Update User Action</label>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content" ng-if="createFlag">
+                <div class="row">
+                   <div class="col-md-4">
+						<label>Action URL
+							<!-- <span class="requiredField">*</span> -->
+						</label>
+						<div class="moment-picker">
+							<input class="form-control" ng-model="vm.data.actionUrl"
+								placeholder="Provide Action URL">
+						</div>
+					</div>
+					<div class="col-md-4">
+						<label>Action Method
+							<!-- <span class="requiredField">*</span> -->
+						</label>
+						<div class="moment-picker">
+							<input class="form-control" ng-model="vm.data.actionMethod"
+								placeholder="Provide Action Method">
+						</div>
+					</div>
+					<div class="col-md-4">
+						<label>Action Name
+							<!-- <span class="requiredField">*</span> -->
+						</label>
+						<div class="moment-picker">
+							<input class="form-control" ng-model="vm.data.actionName"
+								placeholder="Provide Action Name">
+						</div>
+					</div>
+					
+                 </div>
+                <div class="row">
+                    <div class="col-md-4">
+						<label>Schedular
+							<!-- <span class="requiredField">*</span> -->
+						</label>
+						<div class="moment-picker">
+							<md-radio-group ng-model="vm.data.isSchedular" class="md-primary" layout="row">
+							  <md-radio-button value="true" flex>True</md-radio-button>
+							  <md-radio-button value="false" flex> False </md-radio-button>
+							</md-radio-group>
+						</div>
+					</div>
+					<div class="col-md-4">
+						<label>Information Level
+							<!-- <span class="requiredField">*</span> -->
+						</label>
+						<div class="moment-picker">
+							<input class="form-control" ng-model="vm.data.infoLevel"
+								placeholder="Provide Information Level">
+						</div>
+					</div>
+                </div>
+            </div>
+			<div class="md-dialog-content" ng-if="updateFlag">
+                <div class="row">
+                   <div class="col-md-4">
+						<label>Action URL
+							<!-- <span class="requiredField">*</span> -->
+						</label>
+						<div class="moment-picker">
+							<input class="form-control" ng-disabled="true" ng-model="vm.formData.actionUrl"
+								placeholder="Provide Action URL">
+						</div>
+					</div>
+					<div class="col-md-4">
+						<label>Action Method
+							<!-- <span class="requiredField">*</span> -->
+						</label>
+						<div class="moment-picker">
+							<input class="form-control" ng-model="vm.formData.actionMethod"
+								placeholder="Provide Action Method">
+						</div>
+					</div>
+					<div class="col-md-4">
+						<label>Action Name
+							<!-- <span class="requiredField">*</span> -->
+						</label>
+						<div class="moment-picker">
+							<input class="form-control" ng-model="vm.formData.actionName"
+								placeholder="Provide Action Name">
+						</div>
+					</div>
+					
+                 </div>
+                <div class="row">
+                    <div class="col-md-4">
+						<label>Schedular
+							<!-- <span class="requiredField">*</span> -->
+						</label>
+						<div class="moment-picker">
+							<md-radio-group ng-model="vm.formData.isSchedular" class="md-primary" layout="row">
+							  <md-radio-button ng-value="true" flex>True</md-radio-button>
+							  <md-radio-button ng-value="false" flex> False </md-radio-button>
+							</md-radio-group>
+						</div>
+					</div>
+					<div class="col-md-4">
+						<label>Information Level
+							<!-- <span class="requiredField">*</span> -->
+						</label>
+						<div class="moment-picker">
+							<input class="form-control" ng-model="vm.formData.infoLevel"
+								placeholder="Provide Information Level">
+						</div>
+					</div>
+                </div>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <span flex></span>
+            <md-button ng-click="cancelCreateUpdate()" aria-label="cancelFreezeDate_UpdateWindow">
+                Cancel
+            </md-button>
+            <md-button class="md-primary" ng-click="createUserActionList(vm.data)" ng-if="createFlag" aria-label="createUserAction">
+                Create
+            </md-button>
+			<md-button class="md-primary" ng-click="updateUserActionList(vm.formData)" ng-if="updateFlag" aria-label="updateUserAction">
+                Update
+            </md-button>
+
+        </md-dialog-actions>
+    </form>
+</md-dialog>

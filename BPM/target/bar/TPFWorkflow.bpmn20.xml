@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:activiti="http://activiti.org/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" typeLanguage="http://www.w3.org/2001/XMLSchema" expressionLanguage="http://www.w3.org/1999/XPath" targetNamespace="http://www.activiti.org/test">
+  <process id="zTPFWorkflow_Plan_Process" name="zTPFWorkflow Implementation Plan Process Flow" isExecutable="true">
+    <startEvent id="PlanStart" name="Start"></startEvent>
+    <userTask id="ADLCreatePlan" name="ADL - Create Plan"></userTask>
+    <sequenceFlow id="toSubmitFlow" sourceRef="PlanStart" targetRef="ADLCreatePlan"></sequenceFlow>
+    <userTask id="DevMgrApproval" name="Staging Build"></userTask>
+    <sequenceFlow id="toApprovalFlow" sourceRef="ADLCreatePlan" targetRef="DevMgrApproval"></sequenceFlow>
+    <exclusiveGateway id="exclusivegateway1" name="Exclusive Gateway"></exclusiveGateway>
+    <sequenceFlow id="approveDecisionFlow" sourceRef="DevMgrApproval" targetRef="exclusivegateway1"></sequenceFlow>
+    <userTask id="QAApproval" name="QA - Approval"></userTask>
+    <sequenceFlow id="submitApprovedFlow" sourceRef="exclusivegateway1" targetRef="QAApproval">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == true && ByPassRegression == false && MacroHeader == false}]]></conditionExpression>
+    </sequenceFlow>
+    <exclusiveGateway id="exclusivegateway2" name="Exclusive Gateway"></exclusiveGateway>
+    <sequenceFlow id="QADevcisionFlow" sourceRef="QAApproval" targetRef="exclusivegateway2"></sequenceFlow>
+    <userTask id="ADLAcceptanceApproval" name="TSS/ADL - Acceptance Approval"></userTask>
+    <sequenceFlow id="qaApprovedFlow" sourceRef="exclusivegateway2" targetRef="ADLAcceptanceApproval">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == true}]]></conditionExpression>
+    </sequenceFlow>
+    <exclusiveGateway id="exclusivegateway3" name="Exclusive Gateway"></exclusiveGateway>
+    <sequenceFlow id="TSDDecisionFlow" sourceRef="ADLAcceptanceApproval" targetRef="exclusivegateway3"></sequenceFlow>
+    <userTask id="LoadsApproval" name="Loads - Approval"></userTask>
+    <sequenceFlow id="DevManagerApprovedFlow" sourceRef="exclusivegateway5" targetRef="LoadsApproval">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == true && MacroHeader == false}]]></conditionExpression>
+    </sequenceFlow>
+    <endEvent id="PlanStop" name="End"></endEvent>
+    <sequenceFlow id="loadsApprovalFlow" sourceRef="TSDAcceptFallback" targetRef="PlanStop">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="StagingFailFlow" name="On Staging Fail" sourceRef="exclusivegateway1" targetRef="ADLCreatePlan">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == false}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="qaRejectFlow" name="On QA Fail" sourceRef="exclusivegateway2" targetRef="ADLCreatePlan">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == false}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="tssRejectFlow" name="On TSS Reject" sourceRef="exclusivegateway3" targetRef="ADLCreatePlan">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == false}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="devManagerAuxApprovalFlow" name="On Macro Header" sourceRef="exclusivegateway1" targetRef="usertask1">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == true && MacroHeader == true && ByPassRegression  == false}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="devManagerByPassApprovalFlow" name="On By Pass Regression" sourceRef="exclusivegateway1" targetRef="ADLAcceptanceApproval">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == true && ByPassRegression == true && MacroHeader == false}]]></conditionExpression>
+    </sequenceFlow>
+    <userTask id="TSDAcceptFallback" name="TSD - Loads"></userTask>
+    <userTask id="usertask1" name="DEV Manager Approval"></userTask>
+    <sequenceFlow id="TSSApprovedFlow" sourceRef="exclusivegateway3" targetRef="usertask1">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == true}]]></conditionExpression>
+    </sequenceFlow>
+    <exclusiveGateway id="exclusivegateway5" name="Exclusive Gateway"></exclusiveGateway>
+    <sequenceFlow id="DevManagerDecisionFlow" sourceRef="usertask1" targetRef="exclusivegateway5"></sequenceFlow>
+    <sequenceFlow id="devManagerReject" name="On Dev Manager Reject" sourceRef="exclusivegateway5" targetRef="ADLCreatePlan">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == false}]]></conditionExpression>
+    </sequenceFlow>
+    <exclusiveGateway id="exclusivegateway6" name="Exclusive Gateway"></exclusiveGateway>
+    <sequenceFlow id="LoadsDecisionFlow" sourceRef="LoadsApproval" targetRef="exclusivegateway6"></sequenceFlow>
+    <sequenceFlow id="LoadsApprovedFlow" sourceRef="exclusivegateway6" targetRef="TSDAcceptFallback">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="loadRejectFlow" name="On Loads Reject" sourceRef="exclusivegateway6" targetRef="ADLCreatePlan">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == false}]]></conditionExpression>
+    </sequenceFlow>
+    <endEvent id="MacroHeaderPlanStop" name="End"></endEvent>
+    <sequenceFlow id="flow1" name="On Macro Header" sourceRef="exclusivegateway5" targetRef="MacroHeaderPlanStop">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${Approved == true && MacroHeader == true}]]></conditionExpression>
+    </sequenceFlow>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_zTPFWorkflow_Plan_Process">
+    <bpmndi:BPMNPlane bpmnElement="zTPFWorkflow_Plan_Process" id="BPMNPlane_zTPFWorkflow_Plan_Process">
+      <bpmndi:BPMNShape bpmnElement="PlanStart" id="BPMNShape_PlanStart">
+        <omgdc:Bounds height="35.0" width="35.0" x="175.0" y="40.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="ADLCreatePlan" id="BPMNShape_ADLCreatePlan">
+        <omgdc:Bounds height="55.0" width="105.0" x="140.0" y="150.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="DevMgrApproval" id="BPMNShape_DevMgrApproval">
+        <omgdc:Bounds height="55.0" width="141.0" x="300.0" y="150.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="exclusivegateway1" id="BPMNShape_exclusivegateway1">
+        <omgdc:Bounds height="40.0" width="40.0" x="506.0" y="157.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="QAApproval" id="BPMNShape_QAApproval">
+        <omgdc:Bounds height="55.0" width="105.0" x="603.0" y="150.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="exclusivegateway2" id="BPMNShape_exclusivegateway2">
+        <omgdc:Bounds height="40.0" width="40.0" x="741.0" y="157.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="ADLAcceptanceApproval" id="BPMNShape_ADLAcceptanceApproval">
+        <omgdc:Bounds height="55.0" width="145.0" x="828.0" y="150.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="exclusivegateway3" id="BPMNShape_exclusivegateway3">
+        <omgdc:Bounds height="40.0" width="40.0" x="1006.0" y="157.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="LoadsApproval" id="BPMNShape_LoadsApproval">
+        <omgdc:Bounds height="55.0" width="105.0" x="1370.0" y="150.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="PlanStop" id="BPMNShape_PlanStop">
+        <omgdc:Bounds height="35.0" width="35.0" x="1635.0" y="290.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="TSDAcceptFallback" id="BPMNShape_TSDAcceptFallback">
+        <omgdc:Bounds height="55.0" width="105.0" x="1600.0" y="150.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="usertask1" id="BPMNShape_usertask1">
+        <omgdc:Bounds height="55.0" width="151.0" x="1083.0" y="150.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="exclusivegateway5" id="BPMNShape_exclusivegateway5">
+        <omgdc:Bounds height="40.0" width="40.0" x="1270.0" y="157.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="exclusivegateway6" id="BPMNShape_exclusivegateway6">
+        <omgdc:Bounds height="40.0" width="40.0" x="1503.0" y="157.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="MacroHeaderPlanStop" id="BPMNShape_MacroHeaderPlanStop">
+        <omgdc:Bounds height="35.0" width="35.0" x="1389.0" y="10.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge bpmnElement="toSubmitFlow" id="BPMNEdge_toSubmitFlow">
+        <omgdi:waypoint x="192.0" y="75.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="150.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="toApprovalFlow" id="BPMNEdge_toApprovalFlow">
+        <omgdi:waypoint x="245.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="300.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="approveDecisionFlow" id="BPMNEdge_approveDecisionFlow">
+        <omgdi:waypoint x="441.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="506.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="submitApprovedFlow" id="BPMNEdge_submitApprovedFlow">
+        <omgdi:waypoint x="546.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="603.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="QADevcisionFlow" id="BPMNEdge_QADevcisionFlow">
+        <omgdi:waypoint x="708.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="741.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="qaApprovedFlow" id="BPMNEdge_qaApprovedFlow">
+        <omgdi:waypoint x="781.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="828.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="TSDDecisionFlow" id="BPMNEdge_TSDDecisionFlow">
+        <omgdi:waypoint x="973.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1006.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="DevManagerApprovedFlow" id="BPMNEdge_DevManagerApprovedFlow">
+        <omgdi:waypoint x="1310.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1370.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="loadsApprovalFlow" id="BPMNEdge_loadsApprovalFlow">
+        <omgdi:waypoint x="1652.0" y="205.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1652.0" y="290.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="StagingFailFlow" id="BPMNEdge_StagingFailFlow">
+        <omgdi:waypoint x="526.0" y="197.0"></omgdi:waypoint>
+        <omgdi:waypoint x="524.0" y="424.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="424.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="205.0"></omgdi:waypoint>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds height="14.0" width="72.0" x="411.0" y="400.0"></omgdc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="qaRejectFlow" id="BPMNEdge_qaRejectFlow">
+        <omgdi:waypoint x="761.0" y="197.0"></omgdi:waypoint>
+        <omgdi:waypoint x="760.0" y="436.0"></omgdi:waypoint>
+        <omgdi:waypoint x="489.0" y="436.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="436.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="205.0"></omgdi:waypoint>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds height="14.0" width="52.0" x="691.0" y="419.0"></omgdc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="tssRejectFlow" id="BPMNEdge_tssRejectFlow">
+        <omgdi:waypoint x="1026.0" y="197.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1024.0" y="452.0"></omgdi:waypoint>
+        <omgdi:waypoint x="642.0" y="453.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="453.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="205.0"></omgdi:waypoint>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds height="14.0" width="70.0" x="941.0" y="433.0"></omgdc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="devManagerAuxApprovalFlow" id="BPMNEdge_devManagerAuxApprovalFlow">
+        <omgdi:waypoint x="526.0" y="157.0"></omgdi:waypoint>
+        <omgdi:waypoint x="525.0" y="9.0"></omgdi:waypoint>
+        <omgdi:waypoint x="898.0" y="9.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1158.0" y="9.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1158.0" y="150.0"></omgdi:waypoint>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds height="14.0" width="85.0" x="547.0" y="11.0"></omgdc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="devManagerByPassApprovalFlow" id="BPMNEdge_devManagerByPassApprovalFlow">
+        <omgdi:waypoint x="526.0" y="157.0"></omgdi:waypoint>
+        <omgdi:waypoint x="526.0" y="57.0"></omgdi:waypoint>
+        <omgdi:waypoint x="707.0" y="57.0"></omgdi:waypoint>
+        <omgdi:waypoint x="900.0" y="57.0"></omgdi:waypoint>
+        <omgdi:waypoint x="900.0" y="150.0"></omgdi:waypoint>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds height="42.0" width="100.0" x="539.0" y="57.0"></omgdc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="TSSApprovedFlow" id="BPMNEdge_TSSApprovedFlow">
+        <omgdi:waypoint x="1046.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1083.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="DevManagerDecisionFlow" id="BPMNEdge_DevManagerDecisionFlow">
+        <omgdi:waypoint x="1234.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1270.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="devManagerReject" id="BPMNEdge_devManagerReject">
+        <omgdi:waypoint x="1290.0" y="197.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1290.0" y="483.0"></omgdi:waypoint>
+        <omgdi:waypoint x="744.0" y="483.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="483.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="205.0"></omgdi:waypoint>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds height="42.0" width="100.0" x="1180.0" y="432.0"></omgdc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="LoadsDecisionFlow" id="BPMNEdge_LoadsDecisionFlow">
+        <omgdi:waypoint x="1475.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1503.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="LoadsApprovedFlow" id="BPMNEdge_LoadsApprovedFlow">
+        <omgdi:waypoint x="1543.0" y="177.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1600.0" y="177.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="loadRejectFlow" id="BPMNEdge_loadRejectFlow">
+        <omgdi:waypoint x="1523.0" y="197.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1520.0" y="509.0"></omgdi:waypoint>
+        <omgdi:waypoint x="868.0" y="510.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="509.0"></omgdi:waypoint>
+        <omgdi:waypoint x="192.0" y="205.0"></omgdi:waypoint>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds height="14.0" width="80.0" x="1405.0" y="480.0"></omgdc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="BPMNEdge_flow1">
+        <omgdi:waypoint x="1290.0" y="157.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1290.0" y="27.0"></omgdi:waypoint>
+        <omgdi:waypoint x="1389.0" y="27.0"></omgdi:waypoint>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds height="14.0" width="100.0" x="1270.0" y="41.0"></omgdc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

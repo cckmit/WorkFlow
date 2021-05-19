@@ -1,0 +1,216 @@
+<section class="content-header">
+
+</section>
+<!-- Main content -->
+<section class="content  animated slideInLeft scrollingFunction" id="scroll_function">
+    <div class="col-md-12">
+        <div class="row">
+            <div ng-if="Object.keys(vm.rfcInboxList).length == 0"
+                style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                <b>No tasks found</b>
+            </div>
+            <div ng-if="Object.keys(vm.rfcInboxList).length != 0" class="well well-sm"
+                style="background-color:#fff;min-height:400px">
+
+                <div class="row" style="margin-bottom: 5px;">
+                    <div class="col-md-2">
+                        <input type="text" class="form-control" press-enter-key="searchPlanData(vm.searchPlanData)"
+                            ng-model="vm.searchPlanData" placeholder="Search By Plan ID" />
+                    </div>
+                    <div class="col-md-4 padding-none">
+                        <button type="button" class="btn btn-primary themeButton refreshButton"
+                            ng-click="searchPlanData(vm.searchPlanData)" aria-label="searchDeploymentChanges">
+                            <i class="fa fa-search"></i>
+                            Search
+                        </button>
+                    </div>
+                    <div class="col-md-6 text-right">
+                        <span style="margin:0 10px;"> Total number of items: <span class="templateCountSize">
+                                {{vm.totalNumberOfItem}}</span> </span>
+                        <button class="btn btn-primary themeButton" ng-click="refreshData()"
+                            aria-label="refreshMyTasksLoadsControl">
+                            <i class="fa fa-refresh"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="row" style="margin: 10px 0px;">
+                    <div class="col-md-12">
+                        <div ng-if="'Object.keys(vm.rfcInboxList).length !== 0'" class="row">
+                            <div class="col-md-3" style="display: inline-flex;"
+                                ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                            <div class="col-md-3" style="display: inline-flex;"
+                                ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                <span style="padding: 10px;">Show</span>
+                                <select class="form-control" style="padding:10px;width: 40%;"
+                                    ng-model="tableConfig.pageSize" ng-change="switchPageSize()">
+                                    <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                        ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                </select>
+                                <span style="padding:10px">entries</span>
+                            </div>
+                            <div class="col-md-3"></div>
+                            <div class="col-md-6">
+                                <dir-pagination-controls boundary-links="true"
+                                    on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination">
+                                </dir-pagination-controls>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row divTableHeader ">
+                    <div class="col-md-1 col-lg-1 rfcAlignment"></div>
+                    <div class="col-md-1 col-lg-1 rfcAlignment">
+                        <span class="noClickProp" ng-click="sort('planid')">
+                            Plan ID
+                            <span style="font-size: 12px;padding-top: 2px">
+                                <i class="fa fa-long-arrow-down {{sortColumn['planid'].asc ? '' : 'sortDisabled'}}"></i>
+                                <i class="fa fa-long-arrow-up {{sortColumn['planid'].desc ? '' : 'sortDisabled'}}"></i>
+                            </span>
+                        </span>
+                    </div>
+
+                    <div class="col-md-1 col-lg-1 rfcAlignment textCenter">
+                        <span class="noClickProp" ng-click="sort('rfcstatus')">
+                            RFC
+                            <span style="font-size: 12px;padding-top: 2px">
+                                <i class="fa fa-long-arrow-down {{sortColumn['rfcstatus'].asc ? '' : 'sortDisabled'}}"></i>
+                                <i class="fa fa-long-arrow-up {{sortColumn['rfcstatus'].desc ? '' : 'sortDisabled'}}"></i>
+                            </span>
+                        </span>
+                    </div>
+                    <div class="col-md-2 col-lg-2 rfcAlignment">
+                        <span class="noClickProp" ng-click="sort('targetsystem')">
+                            Target System
+                            <span style="font-size: 12px;padding-top: 2px">
+                                <i
+                                    class="fa fa-long-arrow-down {{sortColumn['targetsystem'].asc ? '' : 'sortDisabled'}}"></i>
+                                <i
+                                    class="fa fa-long-arrow-up {{sortColumn['targetsystem'].desc ? '' : 'sortDisabled'}}"></i>
+                            </span>
+                        </span>
+                    </div>
+                    <div class="col-md-2 col-lg-2 rfcAlignment">
+                        <span class="noClickProp" ng-click="sort('loaddatetime')">
+                            Load Date/Time
+                            <span style="font-size: 12px;padding-top: 2px">
+                                <i
+                                    class="fa fa-long-arrow-down {{sortColumn['loaddatetime'].asc ? '' : 'sortDisabled'}}"></i>
+                                <i
+                                    class="fa fa-long-arrow-up {{sortColumn['loaddatetime'].desc ? '' : 'sortDisabled'}}"></i>
+                            </span>
+                        </span>
+                    </div>
+                    <div class="col-md-1 col-lg-1 rfcAlignment">
+                        Category
+                    </div>
+                    <div class="col-md-1 col-lg-1 rfcAlignment">
+                        DBCR
+                    </div>
+                    <div class="col-md-1 col-lg-1 rfcAlignment">
+                        Load Type
+                    </div>
+                    <div class="col-md-2 col-lg-2 rfcAlignment">
+                        Status
+                    </div>
+                </div>
+                <div dir-paginate="(rfc_key, rfc_pObj) in vm.rfcInboxList | filter: q | itemsPerPage: tableConfig.pageSize"
+                    total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"
+                    pagination-id="tablePagination">
+                    <div class="row margin-none centerItems rowBorderBottom hoverCurrentRow" style="padding:5px;">
+                        <div ng-if="vm.rfcInboxList.length == 0"
+                            style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                            <b>No tasks found</b>
+                        </div>
+                        <div class="col-md-1 centerItems flex-justify">
+                            <a ng-if="rfc_pObj[0].expanded" ng-click="rfc_pObj[0].expanded = false;"
+                                aria-label="{{rfc_pObj[0].id}}">
+                                <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+                            </a>
+                            <a ng-if="!rfc_pObj[0].expanded"
+                                ng-click="rfc_pObj[0].expanded = true;rfcExpand(rfc_pObj[0].id, rfc_pObj[0].id.id, rfc_pObj[0].rfcDetails);"
+                                aria-label="{{rfc_pObj.id}}">
+                                <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+                            </a>
+
+                        </div>
+                        <div class="col-md-1 leftBorderSplit textCenter">
+                            {{rfc_pObj[0].id.id}}
+                        </div>
+                        <div class="col-md-1 leftBorderSplit textCenter">
+                            <div ng-if=" rfc_pObj[0].rfcSchedularFlag !=null && rfc_pObj[0].rfcSchedularFlag">
+                                <b>Y </b>
+                            </div>
+                            <span ng-if="rfc_pObj[0].rfcSchedularFlag !=null && !rfc_pObj[0].rfcSchedularFlag">
+                                <b>N </b>
+                            </span>
+                            <span ng-if="rfc_pObj[0].rfcSchedularFlag == null ">
+                                -
+                            </span>
+                        </div>
+                        <div class="col-md-6 textCenter">
+                            <div class="row" ng-repeat="taskSystemObj in rfc_pObj[0].rfcDetails">
+                                <div class="col-md-4 leftBorderSplit">
+                                    {{taskSystemObj.targetSystem}}
+                                </div>
+                                <div class="col-md-4 leftBorderSplit">
+                                    {{taskSystemObj.loadDateTime | formattedDateTimeWithoutSeconds}}
+                                </div>
+                                <div class="col-md-2 leftBorderSplit">
+                                    <span
+                                        title="{{taskSystemObj.loadCategoryId.description}}">{{taskSystemObj.category}}</span>
+                                </div>
+                                <div class="col-md-2 leftBorderSplit">
+                                    <span ng-repeat="dbcrObj in taskSystemObj.dbcr">
+                                        <b>{{dbcrObj}} </b>
+                                    </span>
+                                    <span ng-if="taskSystemObj.dbcr[0] == null ">
+                                        -
+                                    </span>
+
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-1 textCenter leftBorderSplit" style="width: 10%;">
+                            {{rfc_pObj[0].loadType}}
+                        </div>
+                        <div class="col-md-2 textCenter leftBorderSplit">
+                            <span plan-status-to-display-label="{{rfc_pObj[0].planStatus}}"></span>
+                        </div>
+                    </div>
+                    <div class="row animated fadeIn labelFix"
+                        ng-init="$watch('pObj=vm.rfcInboxList[rfc_key][0].id.planObj')" style="margin:0px;"
+                        ng-if="rfc_pObj[0].expanded">
+                        <div ng-include='templatePath+"/impPlan.template.html"'></div>
+                    </div>
+                </div>
+                <div class="row" style="margin: 10px 0px;">
+                    <div class="col-md-12">
+                        <div ng-if="'Object.keys(vm.rfcInboxList).length !== 0'" class="row">
+                            <div class="col-md-3" style="display: inline-flex;"
+                                ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                            <div class="col-md-3" style="display: inline-flex;"
+                                ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                <span style="padding: 10px;">Show</span>
+                                <select class="form-control" style="padding:10px;width: 40%;"
+                                    ng-model="tableConfig.pageSize" ng-change="switchPageSize()">
+                                    <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                        ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                </select>
+                                <span style="padding:10px">entries</span>
+                            </div>
+                            <div class="col-md-3"></div>
+                            <div class="col-md-6">
+                                <dir-pagination-controls boundary-links="true"
+                                    on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination">
+                                </dir-pagination-controls>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- <div ng-if="vm.rfcInboxList.length !== 0" class="text-danger">*All plans are in <b>APPROVED</b> status</div> -->
+            </div>
+
+        </div>
+    </div>
+</section>
+<!-- /.content -->

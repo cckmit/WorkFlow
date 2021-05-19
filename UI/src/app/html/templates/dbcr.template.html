@@ -1,0 +1,105 @@
+<style>
+    .DBCRCheckbox {
+        border-collapse: inherit !important;
+    }
+</style>
+<md-dialog aria-label="dbcr" style="width:50%">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2 style="color:#fff;">
+                    DBCR for {{dbcr.systemName}}
+                </h2>
+                <span flex></span>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content padding-bottom-none">
+                <div class="row well margin-bottom-none" style="border: 1px solid #eee;padding: 10px 0px 10px 0px;">
+                    <div class="col-md-4">
+                        <label> DBCR # </label>
+                        <form ng-submit="validateDbcr()">
+                            <div class="input-group">
+                                <input type="text" maxlength="5" class="form-control" aria-label="dbcrNumber"
+                                    ng-model="dbcr.fieldData.dbcrName" />
+                                <span class="input-group-btn">
+                                    <button type="submit" ng-click="validateDbcr()"
+                                        class="btn btn-primary themeButton">Validate</button>
+                                </span>
+                            </div>
+                        </form>
+                        <span ng-show="dbcr.validation.showText" class="requiredField">Invalid DBCR</span>
+                        <span class="text-success" ng-if="dbcr.env.length > 0 && !dbcr.validation.showText">
+                            <i class="fa fa-check"></i>
+                            Validation Success</span>
+                    </div>
+                    <div class="col-md-4">
+                        <label> Environment </label>
+                        <input type="text" class="form-control" ng-value="concatSystemName()" readonly />
+                        <input type="text" class="hide" ng-model="dbcr.env" readonly />
+                    </div>
+                    <div class="col-md-4">
+                        <button ng-click="dbcrLoadAdd()" style="width: 100%;margin-top: 25px;"
+                            ng-disabled="dbcr.validation.disableButton" class="btn btn-primary themeButton">
+                            Add
+                        </button>
+                    </div>
+                </div>
+                <div class="row" style="padding: 10px 0px 10px 0px;">
+                    <div class="col-md-12 padding-none">
+                        <table class="table DBCRCheckbox" border="1" style="border-color:rgba(187, 187, 187, 0.17);">
+                            <thead>
+                                <tr class="tableHeader alignText">
+                                    <th class="col-md-5">Prevent activation of loadset until DBCR is executed and closed</th>
+                                    <th class="col-md-2" style="vertical-align: middle;" >DBCR #</th>
+                                    <th class="col-md-3" style="vertical-align: middle;">Target Environment</th>
+                                    <th class="col-md-2" style="vertical-align: middle;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="myTasks">
+                                <tr ng-if="dbcrList.length == 0">
+                                    <td colspan="4" class="textCenter">No DBCR found!</td>
+                                </tr>
+                                <tr ng-if="dbcrList.length != 0" ng-repeat="dbcrObj in dbcrList track by $index"
+                                    style="text-align:center;">
+                                    <td class="">
+                                        <md-checkbox ng-model="dbcrObj.mandatory" aria-label="madatory">
+
+                                        </md-checkbox>
+                                    </td>
+                                    <td>
+                                        {{dbcrObj.dbcrName}}
+                                    </td>
+                                    <td>
+                                        {{dbcrObj.environment}}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-danger themeButton btn-xs"
+                                            ng-click="deleteDBCRItem(dbcrObj, $index)">
+                                            <i class="fa fa-trash"></i>
+                                            <md-tooltip md-direction='top'>Delete</md-tooltip>
+                                        </button>
+                                    </td>
+                                </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+            <!-- <div class="flex-2" style="justify-content: flex-start">
+                <p style="color:#aaa;">*Apply before loadset Activation</p>
+            </div> -->
+            <md-button ng-click="cancel('useful')">
+                Close
+            </md-button>
+            <md-button class="md-primary" ng-disabled="disableSaveDbcr" ng-click="saveDBCRList()">
+                Save Changes
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

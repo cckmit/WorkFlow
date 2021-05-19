@@ -1,0 +1,124 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164,SC2236
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitdelprodfile                                            #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to perform the file delete at prod repo and make it empty       #
+#       when its new file                                                     #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - SYS                                                              #
+#      $2  - Impl plan                                                        #
+#      $3  - Server URL                                                       #
+#      $4  -  filename                                                        #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   10032019    VINOTH  Created the script                                    #
+#   03102020    ARUL    2761 - Updated to support multiple files              #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+sysCore="$1";                          #Read Implementation name
+implPlan="$2";                         #Read Implementation core
+fileRefr="$3";                         #Read repo name with file names
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${sysCore} ${implPlan} ${fileRefr} RC:${RC}"
+#-----------------------------------------------------------------------------#
+if [ "${RC}" -eq 0 ]; then
+  tempFolder="/tmp/deleteFile_${sysCore}"
+  IFS='|' read -r -a deleteReference <<< "${fileRefr[@]}"; #Read source as array
+  for delReference in "${deleteReference[@]}"
+  do
+    prodRepoUrl="${delReference%%,*}";           #Extract repo URL from input reference
+    delFileNames="${delReference#*,}";           #Extract delete file name from input reference
+    if [ -d "${tempFolder}" ]; then
+      rm -Rf "${tempFolder:?}";
+    fi
+    mkdir -p "${tempFolder}";
+    if [[ "${implPlan}" =~ t ]]; then
+      REF_COMPANY=tp;
+    elif [[ "${implPlan}" =~ d ]]; then
+      REF_COMPANY=dl;
+    fi
+    subMod="${prodRepoUrl##*/}"                  #ibm_put14a.git
+    subModule="${subMod%%.*}"                    #ibm_put14a
+    pushd "${tempFolder}"
+      GIT_SSL_NO_VERIFY=true git clone -b "master_${sysCore}" "${DEV_SRC_RURL_SMOD}/${prodRepoUrl}" "${tempFolder}" &> /dev/null; RC=$?;
+      if [ ${RC} -ne 0 ]; then
+        rm -Rf "${tempFolder:?}";
+        echo -e "WARN: git clone failed, hitting curl call for git doGC Company=${REF_COMPANY} RepoName=${subModule} and try clone"
+        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:git clone failed, hitting curl call for git doGC Company=${REF_COMPANY} RepoName=${subModule} and try clone RC:${RC}"
+        curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=${subModule}&pisSource=true" | grep 'true' &>/dev/null;
+        sleep 5
+        GIT_SSL_NO_VERIFY=true git clone -b "master_${sysCore}" "${DEV_SRC_RURL_SMOD}/${prodRepoUrl}" "${tempFolder}" &> /dev/null ; RC=$?;
+      fi
+      if [ ${RC} -eq 0 ]; then
+        pushd "${tempFolder}" &> /dev/null
+          IFS=',' read -r -a delFileLists <<< "${delFileNames[@]}"; #Read source as array
+          for deleteName in "${delFileLists[@]}"
+          do
+            if [ -f "${deleteName}" ]; then
+              currentDate="$(date +%Y%m%d%H%M%S)";
+              commitDel=$(git log --oneline "${deleteName}"|head -n 1|awk '{print $1}')
+              tagStatus=$(git tag | grep "${commitDel}")
+              if [[ "${tagStatus}" == "newfile-${implPlan}-${commitDel}" ]]; then
+                if [ "${RC}" -eq 0 ]; then
+                  git rm "${deleteName}";
+                  rm -f "${deleteName:?}";
+                  git commit -m "Date:${currentDate}, Type:New, PlanID:${implPlan}, PlanOwner:${USER}, SourceRef:xxxxxxx, Status:deleted" -- "${deleteName}" &> /dev/null;
+                  git tag -a "deleted-${implPlan}-$(git log -1 --pretty=%h)" -m "deleted-${implPlan}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)";
+                  getGitData "SRC" "${tempFolder}" "${implPlan}" "${currentDate}" "false" ; RC=$?;
+                  if [ "${RC}" -eq 0 ]; then
+                    sendGitData "${sysCore}" "false";
+                  fi
+                  retryCMD "git push origin master_${sysCore} --tags &> /dev/null" "N" "N" "Company=${REF_COMPANY}&pRepoName=${subModule}&pisSource=true"; RC=$?
+                fi
+              else
+                echo -e "ERROR: File:${deleteName} most recent commit file is not a newfile tag:${tagStatus}. please contact zTPF DevOps Support."
+                sendLog "INFO" "pid[${SPID}]" "${SPNM##*/}:ERROR: File:${deleteName} most recent commit file is not a newfile tag:${tagStatus}. please contact zTPF DevOps Support.RC:${EC}"
+                RC=${EC}
+              fi
+            else
+              echo -e "INFO: File ${deleteName} which is not exist in ${prodRepoUrl} so sending success message."
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${deleteName} which is not exist in ${prodRepoUrl} so sending success message. RC:${RC}"
+              RC=${RC}
+            fi
+          done
+        popd &> /dev/null
+      else
+        echo -e "ERROR:Unable to clone - branch:master_${sysCore} prodrepoURL:${prodRepoUrl} submoduleDir:${subModule}"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to clone - branch:master_${sysCore} prodrepoURL:${prodRepoUrl} submoduleDir:${subModule} RC:$EC"
+        RC=${EC}
+      fi
+    popd &> /dev/null
+    rm -Rf "${tempFolder:?}"
+  done
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${sysCore} ${implPlan} ${fileRefr} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

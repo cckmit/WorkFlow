@@ -1,0 +1,460 @@
+<style>
+    .md-dialog.md-default-theme,
+    md-dialog {
+        max-width: 50%;
+    }
+</style>
+<div class="row" style="margin-bottom: 5px;">
+    <div class="col-md-2">
+        <input type="text" class="form-control" press-enter-key="searchPlanData(vm.searchPlanData)"
+            ng-model="vm.searchPlanData" placeholder="Search By Plan ID" />
+    </div>
+    <div class="col-md-4 padding-none">
+        <button type="button" class="btn btn-primary themeButton refreshButton"
+            ng-click="searchPlanData(vm.searchPlanData)" aria-label="searchDeploymentChanges">
+            <i class="fa fa-search"></i>
+            Search
+        </button>
+    </div>
+    <div class="col-md-6 text-right">
+        <span ng-if="vm.deploymentList.length !== 0" style="margin:0 10px;"> Total number of items: <span
+                class="templateCountSize"> {{vm.totalNumberOfItem}}</span> </span>
+        <button type="button" class="btn btn-primary themeButton refreshButton" ng-click="refreshDatas()"
+            aria-label="refreshDeploymentChanges">
+            <i class="fa fa-refresh"></i>
+            Refresh
+        </button>
+        <button type="button" class="btn btn-success themeButton " ng-click="submitChanges()"
+            aria-label="submitDeploymentChanges">
+            <i class="fa fa-save"></i> Submit
+        </button>
+    </div>
+</div>
+
+<div class="row" style="margin: 10px 0px;">
+    <div class="col-md-12">
+        <div ng-if="vm.deploymentList.length !== 0" class="row">
+            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                <span style="padding: 10px;">Show</span>
+                <select class="form-control" ng-if="role=='SystemSupport'" style="padding:10px;width: 40%;"
+                    ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                    <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                        ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                </select>
+                <select class="form-control" ng-if="role!='SystemSupport'" style="padding:10px;width: 40%;"
+                    ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                    <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                        ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                </select>
+                <span style="padding:10px">entries</span>
+            </div>
+            <div class="col-md-3"></div>
+            <div class="col-md-6">
+                <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)"
+                    pagination-id="tablePagination"></dir-pagination-controls>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="divTableHeader flex textCenter">
+    <div class="flex-1 unselectable">
+        <span class="noClickProp" ng-click="sort('id')">Plan ID
+            <span ng-if="role != 'SystemSupport'" class="pull-right">
+                <i class="fa fa-long-arrow-down {{sortColumn.id.asc ? '' : 'sortDisabled'}}"></i>
+                <i class="fa fa-long-arrow-up {{sortColumn.id.desc ? '' : 'sortDisabled'}}"></i>
+            </span>
+        </span>
+    </div>
+    <div ng-if="userRole == 'Lead'" class="flex-1 unselectable">
+        <span class="noClickProp" ng-click="sort('planStatus')">Status
+            <span class="pull-right">
+                <i class="fa fa-long-arrow-down {{sortColumn.planStatus.asc ? '' : 'sortDisabled'}}"></i>
+                <i class="fa fa-long-arrow-up {{sortColumn.planStatus.desc ? '' : 'sortDisabled'}}"></i>
+            </span>
+        </span>
+    </div>
+    <div ng-if="userRole != 'Lead'" class="flex-1">Status</div>
+    <div class="flex-1">ADL</div>
+    <div class="flex-1">
+        <div class="flex flex-justify">Target System</div>
+        <div ng-if="userRole == 'QA'" class="flex flex-justify" style="border-top:1px solid #aaa;">Test Status</div>
+    </div>
+    <div class="flex-1_5">
+        <div class="flex-1 flex flex-justify" style="border-bottom: 1px solid #ccc;">
+            Load Date/Time
+        </div>
+        <div class="flex-1">
+            Loadset Name
+        </div>
+        <!-- <div class="flex flex-justify">Load Date/Time</div> -->
+    </div>
+    <div class="flex-1">Test Systems</div>
+    <div class="flex-3">
+        <div class="flex-1 flex">
+            <div style="flex:1;"> Load & Activate</div>
+            <div style="flex:1;"> Activate </div>
+            <div style="flex:1;"> Deactivate </div>
+            <div style="flex:1;"> Deactivate & Delete </div>
+        </div>
+    </div>
+    <div style="flex:1;">
+        <div class="flex flex-justify">Deployed</div>
+        <div ng-if="userRole == 'Lead'" class="flex flex-justify" style="border-top:1px solid #aaa;">Update DSL</div>
+    </div>
+    <div style="flex:1;">Last Action</div>
+</div>
+<div class="deploymentHeight" style="height: auto!important" ng-if="vm.deploymentList.length !== 0">
+    <div dir-paginate="pObj in vm.deploymentList | filter: q | itemsPerPage: tableConfig.pageSize"
+        total-items="tableConfig.totalItems" current-page="tableConfig.currentPage" pagination-id="tablePagination">
+        <div class="flex divFlexBody textCenter hoverCurrentRow">
+            <div class="flex-1 fContent">
+                <div class="flex-1">
+                    <a ng-if="pObj.expanded" ng-click="pObj.expanded = false;" aria-label="{{pObj.id}}">
+                        <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+                    </a>
+                    <a ng-if="!pObj.expanded" ng-click="pObj.expanded = true;loadSystemImplApproverList(pObj);"
+                        aria-label="{{pObj.id}}">
+                        <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+                    </a>
+                    <br />
+                    <b>{{pObj.id}}</b>
+                </div>
+                <button ng-if="qaScreenType == 'QATASKS' && userRole == 'QA'" type="button"
+                    class="btn btn-warning btn-xs themeButton " ui-sref="app.updateImpPlan({planId:pObj.id})"
+                    aria-label="reassign">
+                    <i class="fa fa-share" style="font-size: 1.2em;"></i>
+                    Reassign
+                </button>
+                <div class="flex-1">
+                    <button class="btn btn-danger themeButton btn-xs" ng-if="userRole == 'SystemSupport'" title="Reject"
+                        ng-click="rejectPlan($event, pObj.id)" aria-label="reject_{{pObj.id}}">
+                        <i class="fa fa-close"></i> Reject
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 fContent">
+                <span plan-status-to-display-label="{{pObj.planStatus}}" style="white-space: inherit;">
+                </span>
+            </div>
+            <div class="flex-1 fContent word-wrap-w">{{pObj.leadName}}</div>
+            <!--User Input Area (Starts)-->
+            <div style="flex:8.5;">
+
+                <div class="flex-self-center" ng-repeat="iLObj in pObj.extraParams.qaTemplate"
+                    ng-if="userRole == 'QA' ? ((qaScreenType == 'FUNCTIONAL' && iLObj.qaBypassStatus != 'BYPASSED_FUNCTIONAL_TESTING' && aLObj.qaBypassStatus != 'BYPASSED_BOTH') || (qaScreenType == 'QATASKS' && iLObj.qaBypassStatus != 'BYPASSED_FUNCTIONAL_TESTING' && aLObj.qaBypassStatus != 'BYPASSED_BOTH') || (qaScreenType == 'REGRESSION' && aLObj.qaBypassStatus != 'BYPASSED_REGRESSION_TESTING' && aLObj.qaBypassStatus != 'BYPASSED_BOTH')) : true">
+                    <div class="flex qa_all_header system-band" style="margin-top: 1px;"
+                        ng-if="iLObj.prevDeploymentActions.length > 0">
+                        <div class="flex-1 fContent textCenter">
+                            <div class="flex flex-justify" ng-click="iLObj.expanded = !iLObj.expanded">
+                                <b>
+                                    <span class="text-white" ng-if="iLObj.expanded"> -
+                                    </span>
+                                    <span class="text-white" ng-if="!iLObj.expanded">
+                                        +
+                                    </span>
+                                </b> &nbsp; {{iLObj.systemName}}
+                            </div>
+                        </div>
+                        <div class="flex-1_5 fContent">
+                            <div class="flex-1" style="border-bottom: 1px solid #eee;">
+                                {{iLObj.systemLoad[iLObj.systemName].loadDateTime | formattedDateTime}}
+                            </div>
+                            <div class="flex-1">
+                                {{iLObj.systemLoad[iLObj.systemName].loadSetName | emptyCheck}}
+                            </div>
+                        </div>
+                        <div ng-show="!checkTssDeploy(pObj.actionList)" class="flex-1 fContent">
+                            <div ng-if="pObj.planStatus == 'DEPLOYED_IN_QA_FUNCTIONAL' || (pObj.planStatus == 'DEPLOYED_IN_QA_REGRESSION' && checkVparsActivated(pObj.actionList,iLObj.systemLoad[iLObj.systemName]) )"
+                                class="flex flex-justify"
+                                title="{{getSelectedVPARS(pObj.vparList,iLObj.prevDeploymentActions)}}">ALL</div>
+                            <div ng-if="userRole == 'QA' && isPassedRegressionScreen != true || userRole == 'QADeployLead'"
+                                class="flex flex-justify">
+                                <div ng-if="pObj.planStatus == 'DEPLOYED_IN_QA_FUNCTIONAL' || (pObj.planStatus == 'DEPLOYED_IN_QA_REGRESSION' && checkVparsActivated(pObj.actionList,iLObj.systemLoad[iLObj.systemName]) )"
+                                    class="btn-toolbar">
+                                    <button class="btn btn-success themeButton btn-xs"
+                                        ng-show="!enablePassBtn(iLObj.prevDeploymentActions)"
+                                        ng-click="applyPass_Fail(pObj,iLObj.systemId,null,'PASS', true, ev)"
+                                        title="Pass" aria-label="passButton_{{pObj.id}}_{{$index}}">
+                                        <i class="fa fa-check"></i>
+                                    </button>
+                                    <button class="btn btn-danger themeButton btn-xs"
+                                        ng-click="applyPass_Fail(pObj,iLObj.systemId,null,'FAIL',true, ev)" title="Fail"
+                                        aria-label="failButton_{{pObj.id}}_{{$index}}" style="margin-left: 30px">
+                                        <i class="fa fa-close"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex-3 fContent">
+                            <div class="flex-1 flex">
+                                <div class="flex-1">
+                                    <md-checkbox class="margin-none action_load" aria-label="loadandActivate_"
+                                        ng-if="vm.showCheckbox(iLObj, 'loadandactivate')"
+                                        ng-change="vm.selectAll(iLObj, 'loadandactivate')"
+                                        ng-model="iLObj.loadandactivate"></md-checkbox>
+                                </div>
+                                <div class="flex-1">
+                                    <md-checkbox class="margin-none action_activate" aria-label="activate_"
+                                        ng-if="vm.showCheckbox(iLObj, 'activate')" ng-model="iLObj.activate"
+                                        ng-change="vm.selectAll(iLObj, 'activate')"></md-checkbox>
+                                </div>
+                                <div class="flex-1">
+                                    <md-checkbox class="margin-none action_deactivate" aria-label="deactivate_"
+                                        ng-if="vm.showCheckbox(iLObj, 'deactivate')" ng-model="iLObj.deactivate"
+                                        ng-change="vm.selectAll(iLObj, 'deactivate')"></md-checkbox>
+                                </div>
+                                <div class="flex-1">
+                                    <md-checkbox class="margin-none action_delete" aria-label="deactivateandDelete_"
+                                        ng-if="vm.showCheckbox(iLObj, 'deactivateanddelete')"
+                                        ng-model="iLObj.deactivateanddelete"
+                                        ng-change="vm.selectAll(iLObj, 'deactivateanddelete')"></md-checkbox>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex-1 fContent"></div>
+                        <div class="flex-1 fContent"></div>
+                    </div>
+                    <div class="flex vpar-band {{($index%2)==0 ? 'vpar-band-odd' : 'vpar-band-even' }}"
+                        ng-if="iLObj.prevDeploymentActions.length > 0 && iLObj.expanded"
+                        ng-repeat="aLObj in iLObj.prevDeploymentActions">
+                        <div class="flex-1 fContent textCenter">
+                            <div ng-if="userRole == 'QA'" aria-label="QA_status__{{pObj.id}}_{{$index}}">
+                                <span ng-if="!aLObj.testStatus">-</span>
+                                <span ng-if="aLObj.testStatus == 'PASS'">
+                                    <label class="label label-success" title="Passed Regression Testing">
+                                        PASSED
+                                    </label>
+                                </span>
+                                <span ng-if="aLObj.testStatus == 'FAIL'">
+                                    <label class="label label-danger" title="Failed Regression Testing">
+                                        FAILED
+                                    </label>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex-1_5 fContent">
+
+                        </div>
+                        <div class="flex-1 fContent">
+                            <div class="flex flex-justify">
+                                <span ng-repeat="vpObj in pObj.vparList">
+                                    <span ng-if="aLObj.vparId.id == vpObj.id">
+                                        {{vpObj.name}}
+                                        <i class="fa fa-close text-danger"
+                                            ng-if="(!aLObj.status || aLObj.status == 'LOADED' || aLObj.status == 'DELETED') && !aLObj.isAutoDeploy && !vpObj.tssDeploy"
+                                            ng-click="deleteTestSystemLoad($index, pObj, aLObj.id)"
+                                            aria-label="deleteRow" role="button" tabindex="0"></i>
+                                    </span>
+                                </span>
+
+                            </div>
+                            <div class="flex flex-justify">
+
+                            </div>
+
+                        </div>
+                        <div class="flex-3 fContent">
+                            <div class="flex-1 flex">
+                                <div class="flex-1">
+                                    <md-checkbox class="margin-none action_load"
+                                        ng-disabled="aLObj.disableLoadActionDueToTSSDeploy==true && aLObj.id"
+                                        ng-if="aLObj.status == null || aLObj.status == 'DELETED'"
+                                        aria-label="loadandActivate_{{pObj.id}}_{{$index}}"
+                                        ng-model="aLObj.loadandactivate"></md-checkbox>
+                                </div>
+                                <div class="flex-1">
+                                    <md-checkbox class="margin-none action_activate"
+                                        ng-disabled="(userRole=='QA' || userRole == 'QADeployLead')  && (qaScreenType == 'FUNCTIONAL' || qaScreenType == 'REGRESSION' || qaScreenType == 'QATASKS') && aLObj.disableLoadActionDueToTSSDeploy==true"
+                                        ng-if="aLObj.status == 'LOADED' || aLObj.status == 'DEACTIVATED'"
+                                        aria-label="activate_{{pObj.id}}_{{$index}}" ng-model="aLObj.activate">
+                                    </md-checkbox>
+                                </div>
+                                <div class="flex-1">
+                                    <md-checkbox class="margin-none action_deactivate"
+                                        ng-disabled="(userRole=='QA' || userRole == 'QADeployLead') && (qaScreenType == 'FUNCTIONAL' || qaScreenType == 'REGRESSION' || qaScreenType == 'QATASKS') && aLObj.disableLoadActionDueToTSSDeploy==true"
+                                        ng-if="aLObj.status == 'ACTIVATED'"
+                                        aria-label="deactivate_{{pObj.id}}_{{$index}}" ng-model="aLObj.deactivate">
+                                    </md-checkbox>
+                                </div>
+                                <div class="flex-1">
+                                    <md-checkbox class="margin-none action_delete"
+                                        ng-disabled="(userRole=='QA' || userRole == 'QADeployLead') && (qaScreenType == 'FUNCTIONAL' || qaScreenType == 'REGRESSION' || qaScreenType == 'QATASKS') && aLObj.disableLoadActionDueToTSSDeploy==true"
+                                        ng-if="aLObj.status == 'ACTIVATED' || aLObj.status == 'DEACTIVATED'"
+                                        aria-label="deactivateandDelete_{{pObj.id}}_{{$index}}"
+                                        ng-model="aLObj.deactivateanddelete"></md-checkbox>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex-1 fContent">
+                            <div class="flex flex-justify">
+                                <span style="border-bottom: 1px solid #ccc;margin-left: -15px;"
+                                    ng-bind="getVparType(pObj.vparList, aLObj.vparId.id)">-</span>
+                            </div>
+                            <!-- ng-init="vm.validate_data[pObj.id][vpObj.name] = aLObj.dslUpdate" => Disabled dsl fix -->
+                            <div class="flex flex-justify" ng-if="userRole == 'Lead'">
+                                <md-checkbox ng-disabled="aLObj.disabled && vm.validate_data[pObj.id][vpObj.name]"
+                                    class="margin-none md-checkout-w-10 md-checkout-scale"
+                                    aria-label="updateDSL_{{pObj.id}}_{{$index}}" ng-model="aLObj.dslUpdate">
+                                </md-checkbox>
+                            </div>
+                        </div>
+                        <div class="flex-1 fContent">
+                            <label class="label label-success" aria-label="{{pObj.id}}_SUCCESS_{{$index}}"
+                                ng-if="aLObj.lastActionStatus == 'SUCCESS'">{{aLObj.lastActionStatus}}</label>
+                            <label class="label label-danger" aria-label="{{pObj.id}}_FAILED_{{$index}}"
+                                ng-if="aLObj.lastActionStatus == 'FAILED'">{{aLObj.lastActionStatus}}</label>
+                            <label aria-label="{{pObj.id}}_NULL_{{$index}}"
+                                ng-if="aLObj.lastActionStatus != 'FAILED' && aLObj.lastActionStatus != 'SUCCESS'">-</label>
+                        </div>
+                    </div>
+
+                    <!-- && iLObj.expanded -->
+
+                </div>
+                <div class="flex fContent qa-add-new" ng-if="!pObj.add_btn_expanded">
+                    <div class="flex-1 fContent textCenter">
+                        <a ng-click="pObj.add_btn_expanded=!pObj.add_btn_expanded">+ Add</a>
+                    </div>
+                    <div class="flex-1_5 fContent">
+                    </div>
+                    <div class="flex-1 fContent">
+
+                    </div>
+                    <div class="flex-3 fContent">
+
+                    </div>
+                    <div class="flex-1 fContent">
+
+                    </div>
+                    <div class="flex-1 fContent">
+                    </div>
+                </div>
+
+                <div class="flex qa_all_header add-new-band" style="margin-top: 1px;" ng-if="pObj.add_btn_expanded">
+                    <div class="flex-1 fContent textCenter">
+                        <!-- <div class="flex flex-justify">{{iLObj.systemName}}</div>
+                                <div class="flex flex-justify" ng-if="iLObj.prevDeploymentActions.length > 0">
+                                    <span class="text-danger" ng-if="iLObj.expanded" ng-click="iLObj.expanded = false">Less
+                                    </span>
+                                    <span class="text-primary" ng-if="!iLObj.expanded" ng-click="iLObj.expanded = true">
+                                        More
+                                    </span>
+                                </div> -->
+                        <!-- {{pObj.systemLoadList}} -->
+                        <select class="form-control" ng-model="pObj.system_id"
+                            ng-change="vm.updateFilteredVparList(pObj, pObj.system_id)" aria-label="">
+                            <option value="">Select</option>
+                            <option ng-repeat="sObj in pObj.systemLoadList"
+                                ng-if="userRole == 'QA' || userRole == 'QADeployLead' ? ((qaScreenType == 'FUNCTIONAL' && pObj.systemLoadList[$index].qaBypassStatus != 'BYPASSED_FUNCTIONAL_TESTING' && pObj.systemLoadList[$index].qaBypassStatus != 'BYPASSED_BOTH') || (qaScreenType == 'QATASKS' && pObj.systemLoadList[$index].qaBypassStatus != 'BYPASSED_FUNCTIONAL_TESTING' && pObj.systemLoadList[$index].qaBypassStatus != 'BYPASSED_BOTH')|| (qaScreenType == 'REGRESSION' && pObj.systemLoadList[$index].qaBypassStatus != 'BYPASSED_REGRESSION_TESTING' && pObj.systemLoadList[$index].qaBypassStatus != 'BYPASSED_BOTH')) : true"
+                                value="{{sObj.systemId.id}}">{{sObj.systemId.name}}</option>
+                        </select>
+                    </div>
+                    <div class="flex-1_5 fContent">
+                        {{getSelectedLoadDT(pObj.system_id, pObj.systemLoadList) | formattedDateTime}}
+                    </div>
+                    <div class="flex-1 fContent">
+                        <md-input-container ng-show="!checkDeploy(pObj.selectVparList)"
+                            class="md-icon-float md-block multipleSelect2 margin-none">
+                            <select select2 id="Leadvpar_{{pObj.id}}"
+                                istagallowed="{{userRole == 'Lead' ? true : false}}" class="form-control"
+                                planId="{{pObj.id}}" systemId="{{pObj.system_id}}" vparList="{{pObj.selectVparList}}"
+                                ng-model="pObj.vpar_id" multiple="multiple" aria-label="">
+                                <option ng-value="vpar.id" ng-if="pObj.system_id == vpar.systemId.id"
+                                    ng-repeat="vpar in pObj.selectVparList">
+                                    {{ vpar.name }}
+                                </option>
+                            </select>
+                        </md-input-container>
+                        <md-input-container ng-show="checkDeploy(pObj.selectVparList)"
+                            class="md-icon-float md-block mdIChange multipleSelect2">
+                            <select select2 istagallowed="{{userRole == 'Lead' ? true : false}}" class="form-control"
+                                aria-label="ltcustVpar" id="ltcustVpar_{{pObj.id}}_{{pObj.system_id}}"
+                                ng-model="pObj.vpar_id" multiple="multiple">
+                                <!-- <option value="" ng-if=""></option> -->
+                                <option ng-value="vpar.id" ng-if="pObj.system_id == vpar.systemId.id"
+                                    ng-repeat="vpar in pObj.selectVparList">
+                                    {{ vpar.name }}
+                                </option>
+                            </select>
+                        </md-input-container>
+                    </div>
+                    <div class="flex-3 fContent">
+                        <div class="flex-1 flex">
+                            <div class="flex-1">
+                                <md-checkbox class="margin-none action_load" aria-label="loadandActivate_"
+                                    ng-model="pObj.loadandactivate"></md-checkbox>
+                            </div>
+                            <div class="flex-1">
+                            </div>
+                            <div class="flex-1">
+                            </div>
+                            <div class="flex-1">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex-1 fContent">
+                        <div class="flex flex-justify" ng-if="userRole == 'Lead'">
+                            <md-checkbox class="margin-none md-checkout-w-10 md-checkout-scale"
+                                aria-label="updateDSL_{{pObj.id}}_{{$index}}" ng-model="pObj.dsl_update"></md-checkbox>
+                        </div>
+                    </div>
+                    <div class="flex-1 fContent">
+                        <!-- ng-if="pObj.vpar_id.indexOf('162')>=0" -->
+                        <!-- ng-show="checkTssDeploy(pObj.vpar_id ,pObj.selectVparList)" -->
+                        <button ng-show="showAcceptForQA(pObj.vpar_id ,pObj.selectVparList)" type="button"
+                            class="btn btn-success btn-xs themeButton " ng-click="acceptForQA(pObj)"
+                            aria-label="acceptforQa" ng-if="qaScreenType == 'REGRESSION'">
+                            Accept for Regression
+                        </button>
+                        <button ng-show="showAcceptForQA(pObj.vpar_id ,pObj.selectVparList)" type="button"
+                            style="white-space: inherit;font-size: 12.5px;font-style: inherit"
+                            class="btn btn-success btn-xs themeButton " ng-click="acceptForQA(pObj)"
+                            aria-label="acceptforQa"
+                            ng-if="qaScreenType == 'FUNCTIONAL' || (qaScreenType == 'QATASKS' && userRole == 'QA') || (qaScreenType == 'QATASKS' && userRole == 'QADeployLead')">
+                            Accept for Functional
+                        </button>
+                        <a class="text-danger" ng-click="pObj.add_btn_expanded=!pObj.add_btn_expanded">Cancel</a>
+                    </div>
+                </div>
+            </div>
+            <!--User Input Area (Ends)-->
+
+        </div>
+        <div class="row labelFix" style="margin:0px;" ng-if="pObj.expanded">
+            <div ng-include='templatePath+"/impPlan.template.html"'></div>
+        </div>
+    </div>
+</div>
+
+<div style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;"
+    ng-if="vm.deploymentList.length == 0">
+    <b>No data found</b>
+</div>
+
+<div class="row" style="margin: 10px 0px;">
+    <div class="col-md-12">
+        <div ng-if="vm.deploymentList.length !== 0" class="row">
+            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                <span style="padding: 10px;">Show</span>
+                <select class="form-control" ng-if="role=='SystemSupport'" style="padding:10px;width: 40%;"
+                    ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                    <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                        ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                </select>
+                <select class="form-control" ng-if="role!='SystemSupport'" style="padding:10px;width: 40%;"
+                    ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                    <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                        ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                </select>
+                <span style="padding:10px">entries</span>
+            </div>
+            <div class="col-md-3"></div>
+            <div class="col-md-6">
+                <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)"
+                    pagination-id="tablePagination"></dir-pagination-controls>
+            </div>
+        </div>
+    </div>
+</div>

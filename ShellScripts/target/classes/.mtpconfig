@@ -1,0 +1,144 @@
+#!/bin/bash
+#shellcheck disable=SC2034
+#*****************************************************************************#
+MTP_SUSR="mtpservice"                  #MTP Project super user account
+MTP_SSAL="bXRwc2VydmljZTpNMHNlc2lzYWcwMGRiMHkk" #MTP Project super user salt
+MTP_CSSH="22"                          #Custom SSH protocol channel
+MTP_FEED="DevOpsToolChainSupportTeam@travelport.com"
+DCT_FEED="Arul.Dhandapani@travelport.com"
+#
+#-----------------------------------------------------------------------------#
+# PRODUCTION REMOTE GITBLIT URL CONFIGURATION                                 #
+#-----------------------------------------------------------------------------#
+PRD_RHOST="vhldvztdt001.tvlport.net"   #Git remote host name DNS FQDN
+PRD_LBH_NODE="vhldvztdt001,"           #Git load balancer node
+PRD_LBH_SUFX="tvlport.net"             #Git load balancer node url suffix
+PRD_LBH_PORT="8446"                    #Git load balance node port
+PRD_SRC_CHNL="ssh"                     #Git source repository protocol channel
+PRD_SRC_PORT="8445"                    #Git source repository protocol port
+PRD_BIN_CHNL="https"                   #Git binary repository protocol channel
+PRD_BIN_PORT="8443"                    #Git binary repository protocol port
+PRD_GIT_PATH="/opt/gitblit/data"       #Git repository data path
+PRD_GIT_DATA="${PRD_GIT_PATH}/git"     #Production git repo data dir path
+PRD_GIT_SSHK="${PRD_GIT_PATH}/ssh"     #Production git ssh keystore path
+#
+#-----------------------------------------------------------------------------#
+# PRODUCTION WORKFLOW API URL CONFIGURATION                                   #
+#-----------------------------------------------------------------------------#
+PRD_API_HOST="${PRD_RHOST}"            #Workflow API Host
+PRD_API_CHNL="${PRD_BIN_CHNL}"         #Workflow API protocol channel
+PRD_API_PORT="${PRD_BIN_PORT}"         #Workflow API protocol port
+PRD_API_WKF="WorkFlowAPI"              #Workflow API for PP TP/DL
+PRD_API_GIT="JGitAPI/jgit"             #JGit API for PP TP/DL
+PRD_API_RPC="gitblit/rpc/?req"         #Gitblit RPC API Call
+PRD_API_COM="${PRD_API_WKF}/common"    #Workflow API for common request
+PRD_API_GDB="${PRD_API_COM}/gitDbUpdate" #Git database data sync API
+PRD_API_DSL="${PRD_API_COM}/getSystemDSL" #DSL data sync API
+PRD_API_EML="${PRD_API_COM}/sendGenericMail" #FEED to e-mail
+PRD_API_BDB="${PRD_API_COM}/updateBuildQueueInfo" #Build status flag update
+#
+#-----------------------------------------------------------------------------#
+# DEVELOPMENT REMOTE GIRBLIT URL CONFIGURATION                                #
+#-----------------------------------------------------------------------------#
+DEV_RHOST="${PRD_RHOST}"               #Git remote host name FQDN
+DEV_SRC_CHNL="${PRD_SRC_CHNL}"         #Git source repository protocol channel
+DEV_SRC_PORT="${PRD_SRC_PORT}"         #Git source repository protocol port
+DEV_BIN_CHNL="${PRD_BIN_CHNL}"         #Git binary repository protocol channel
+DEV_BIN_PORT="${PRD_BIN_PORT}"         #Git binary repository protocol port
+DEV_GIT_DATA="${PRD_GIT_DATA}"         #Production git repo data dir path
+#
+#-----------------------------------------------------------------------------#
+# DEVELOPER TPF & GIT PROJECT CONFIGURATION                                   #
+#-----------------------------------------------------------------------------#
+LNX_USER="${USER}"                     #Get Linux User Name
+GIT_USER="${LNX_USER}"                 #Get Git User Name
+TPF_USER="tpfuser"                     #TPF Systems User Name
+TPF_GROUP="tpfuser1"                   #TPF Systems User Name
+TPF_CHMOD="755"                        #TPF Systems change mode
+#
+#-----------------------------------------------------------------------------#
+# TPF PROJECT DEVELOPMENT PATH CONFIGURATION                                  #
+#-----------------------------------------------------------------------------#
+USR_TPF_PROJ="${HOME}/projects"        #TPF Project path for user workspace
+ARC_TPF="/ztpfarch"                    #Define Archive path
+TPF_IBM="/ztpf/ibm"                    #Define IBM vennila path
+TPF_SYS="/ztpfsys"                     #Define SYS (IBM-Modified) path
+TPF_APP="/ztpfrepos"                   #Define APP path
+TPF_LOD="${TPF_APP}/loadsets"          #Define loadset path
+TPF_TPS="${TPF_APP}/tpfps/data"        #Define pend file path for wsp
+TPF_TDL="${TPF_APP}/tpfdl/data"        #Define pend file path for delta
+TPF_T4S="/home/loader/ztpf"            #Define pend file path for T4
+USR_TPS="/usr/local/tpf/tpfps"         #Define pend file path for travelport
+DVL_TPF_LOD="${TPF_LOD}/dvl"           #Define path for devel loadset
+STG_TPF_LOD="${TPF_LOD}/stg"           #Define path for staging loadset
+NFM_TPF_LOD="${TPF_LOD}/dsl"           #Define path for NFM
+NFM_TPF_ERR="${NFM_TPF_LOD}/error_reports" #Degine path for NFM Errors report
+DVL_TPF_APP="${TPF_APP}/dvl"           #Define path for devel NON-IBM source
+STG_TPF_APP="${TPF_APP}/stg"           #Define path for staging NON-IBM source
+TOL_TPF_APP="${TPF_APP}/tools"         #Define path for APP tools and utility
+DVL_TPF_SYS="${TPF_SYS}/dvl"           #Define path for devl IBM modify code
+STG_TPF_SYS="${TPF_SYS}/stg"           #Define path for staging IBM modify code
+TOL_TPF_SYS="${TPF_SYS}/tools"         #Define path for Sys tools and utility
+PRD_TPF_IBM="${TPF_IBM}/prod"          #Define path for prod PUT level
+ARC_STG_LOD="${ARC_TPF}${STG_TPF_LOD}" #Define path for archive staging loadset
+ARC_STG_APP="${ARC_TPF}${STG_TPF_APP}" #Define path for archive staging NON-IBM source
+ARC_STG_SYS="${ARC_TPF}${STG_TPF_SYS}" #Define path for archive staging IBM modify code
+#
+#-----------------------------------------------------------------------------#
+# TPF PROJECT OTHER PATH CONFIGURATION                                        #
+#-----------------------------------------------------------------------------#
+PRD_APO_PND="${TPF_T4S}/loadname.pend" #Define APO path for pend as-in-process
+PRD_APO_XRF="${TPF_T4S}/loadname.xref" #Define APO path for pend as-in-process
+PRD_PGR_PND="${TPF_T4S}/loadname.pend" #Define PGR path for pend as-in-process
+PRD_PGR_XRF="${TPF_T4S}/loadname.xref" #Define PGR path for pend as-in-process
+PRD_PRE_PND="${TPF_T4S}/loadname.pend" #Define PRE path for pend as-in-process
+PRD_PRE_XRF="${TPF_T4S}/loadname.xref" #Define PRE path for pend as-in-process
+PRD_WSP_PND="${TPF_TPS}/wspspf.pend"   #Define WSP path for pend as-in-process
+PRD_AIR_PND="${TPF_TDL}/airspf.pend"   #Define AIR path for pend as-in-process
+PRD_OSS_PND="${TPF_TDL}/ossspf.pend"   #Define RES path for pend as-in-process
+PRD_RES_PND="${TPF_TDL}/resspf.pend"   #Define OSS path for pend as-in-process
+#
+#-----------------------------------------------------------------------------#
+# TPF PROJECT OTHER UTILITY CONFIGURATION                                     #
+#-----------------------------------------------------------------------------#
+SUP_DSL_NFM="RELOADM"                  #NFM DSL RELOADZ Utility
+SUP_DSL_AUD="UTILSEGM"                 #Dependency Analysis Utility
+SUP_DSL_DBC="UTILDBCG"                 #DBCR Check Utility
+SUP_TPF_CNT="${TOL_TPF_SYS}/cntlinq"   #Define path for TPF Control tool
+SUP_TPF_TPFAR="${USR_TPS}/bin/startbind.rexx"    #Prod ver
+SUP_DSL_DJC="${TOL_TPF_APP}/test/updtsbtcomp.sh" #Delta JCL for new macro
+SUP_PRD_AUD="${TOL_TPF_APP}/test/dateaudit.sh"   #Dependency Analysis Utility
+SUP_TST_AUD="${TOL_TPF_APP}/test/dateaudit_test.sh" #Dependency Analysis Utility
+SAB_DEV_COM="${TOL_TPF_APP}/test/call_devops_sbt_compile.sh" #Sabre Talk Compile
+SAB_DEV_PROD="${TOL_TPF_APP}/test/call_devops_update_prodinc.sh" #Prod SYNC
+SAB_DEV_INC="${TOL_TPF_APP}/test/call_devops_sbt_update.sh" #inc Update to REX
+SAB_LCK_PATH="/tmp/sabre.lock"         #Sabre Talk lock path
+BLD_MUL_STT="false"                    #build multiple  jobs at time true or false
+#
+#-----------------------------------------------------------------------------#
+# TPF PROJECT TPFAR WSP TD2 PATH CONFIGURATION                                #
+#-----------------------------------------------------------------------------#
+TPFAR_WSP_USER="loader"                #LOAD User name for pre-compile
+TPFAR_WSP_GRUP="devctr"                #LOAD User group name for pre-compile
+TPFAR_WSP_SSAL="DOIM89"                #LOAD User salt for pre-compile
+TPFAR_WSP_HOST="wspvs1.worldspan.com"  #Pre-compile destination host name
+#
+#-----------------------------------------------------------------------------#
+# TPF PROJECT NFM/DSL CONFIGURATION                                           #
+#-----------------------------------------------------------------------------#
+NFM_DSL_USER="guest"                   #DSL User name for NFM Check
+NFM_DSL_SSAL="guest"                   #DSL User salt for NFM Check
+NFM_DSL_HOST="wspvm4.worldspan.com"    #DSL Check destination host name
+#-----------------------------------------------------------------------------#
+# TPF PROJECT BUILD CPU PRIORITY CONFIGURATION                                #
+#-----------------------------------------------------------------------------#
+TPF_CPU_LIMIT="N"                      #ENABLE or DISABLE CPU Limit for maketpf
+TPF_CPU_NICE="15"                      #Config CPU NICE Parm for maketpf
+#
+#-----------------------------------------------------------------------------#
+# GIT REPOSITORY LOCAL CLONE                                                  #
+#-----------------------------------------------------------------------------#
+GIT_CLONE="/home/mtpservice/GITREPO/"
+#
+#-----------------------------------------------------------------------------#
+# vim: filetype=config

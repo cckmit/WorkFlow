@@ -1,0 +1,4 @@
+com\tsi\workflow\configgenerator\EncryptUtil.class
+com\tsi\workflow\configgenerator\EncryptionImpl.class
+com\tsi\workflow\configgenerator\SortedProperties.class
+com\tsi\workflow\configgenerator\Main.class

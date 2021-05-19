@@ -1,0 +1,167 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2164,SC1090,SC2115,SC2207
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitprojrestore                                            #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to restore accidentially deleted file from developer workspace  #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - implementation number                                            #
+#      $2  - source segment name                                              #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   14112018    VINOTH   created the script                                   #
+#   04252019    GOWTHAM  Updated with logger support                          #
+#   09062019    VINOTH   Restore functionality for .git directory also        #
+#   11062019    ARUL    Clean-up unused submodules from the plan              #
+#-----------------------------------------------------------------------------#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ImplNumber="$1";                       #d1800001_001_air
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplNumber} RC:$RC"
+#
+#----------------------------RESTORE PROJECT----------------------------------#
+# Restore users workspace
+function gitProject {
+  local _implNumber=$1;
+  local _comPany=$2;
+  local _RC=0;
+  curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${_comPany}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"|grep -q "true" &> /dev/null; _RC=$?;
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${_comPany}&pRepoName=${USR_IMPL_PLAN}&pisSource=true RC:$?"
+  if [ "${_RC}" -eq 0 ]; then
+    pushd "${USR_TPF_PROJ}" &> /dev/null; #Change to developer project dir
+      _impl="${_implNumber%_*}";       #Get implementation name
+      _implPlan="${_impl%_*}";         #Get implementation plan
+      _core="${_implNumber##*_}";      #Get core name of the implementation
+      if [ -d "${USR_TPF_PROJ}/${_impl}/${_core}" ]; then
+        echo -e "STATUS: Workspace ${_implNumber} exist."; _RC=$?;     #CONSOLE
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Workspace ${_implNumber} exist RC:$_RC"
+        rm -rf "${USR_TPF_PROJ}/${_impl}/${_core}";
+      fi
+      mkdir -p "${USR_TPF_PROJ}/${_impl}" #Create impl.directory if not exist
+      pushd "${USR_TPF_PROJ}/${_impl}" &> /dev/null; #Switch working dir to impl for clone
+        git clone -b "${_implNumber}" "${DEV_SRC_RURL}/tpf/${_comPany}/source/${_implPlan}.git" "${_core}" &>/dev/null; _RC=$?;
+        pushd  "${_core}" &> /dev/null
+          git submodule update --init
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git submodule update for system - ${_core} and impl - ${_implNumber} RC:$_RC"
+        popd &> /dev/null
+        if [ "${_RC}" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Project directory ${USR_TPF_PROJ}/${_impl} successfully restored for ${_core^^} RC:$_RC"
+          echo -e "INFO: Project directory ${USR_TPF_PROJ}/${_impl} successfully restored for ${_core^^}."; #CONSOLE
+        else
+          _RC="${EC}";
+        fi
+      popd &> /dev/null;
+    popd &> /dev/null;
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Repository - ${USR_IMPL_PLAN} is not available in git. Contact zTPF devops toolchain support RC:$EC"
+    echo -e "ERROR: Repository - ${USR_IMPL_PLAN} is not available in git. Contact zTPF devops toolchain support."; #CONSOLE
+    _RC="${EC}";
+  fi
+  return "${_RC}"
+}
+#----------------------------RESTORE FILES------------------------------------#
+# Restore files in workspace
+function gitRestore {
+  local _RC=0;
+  local _gitList;
+  local _prevCommit;
+  _gitList=( $(git status -s | grep -w D | grep -v ".git" | awk '{print $2}') )
+  if [ -n "${_gitList[*]// /}" ]; then
+    for((i=0; i<"${#_gitList[@]}"; ++i));
+    do
+      _prevCommit=$(git log --pretty=format:"%h %s" -- "${_gitList[i]}"|head -1|awk '{print $1}');
+      if [ -n "${_prevCommit[*]// /}" ]; then
+        git checkout "${_prevCommit}" "${_gitList[i]}" &> /dev/null; _RC=$?;
+        if [ ${_RC} -eq 0 ]; then
+          _gitListall+="${_gitList[i]} "
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${_gitList[i]} Unable to restore previous version RC:$EC"
+          echo -e "ERROR: ${_gitList[i]} Unable to restore previous version"; #CONSOLE
+          _RC=${EC};
+        fi
+      fi
+    done
+    if [ -n "${_gitListall[*]// /}" ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_gitListall}- Git restoration successfully completed for ${USR_IMPL_CORE^^} RC:$RC"
+      echo -e "INFO: ${_gitListall}- Git restoration successfully completed for ${USR_IMPL_CORE^^}."; #CONSOLE
+    fi
+  else
+    getActiveBranch; RC=$?;    #Get active branch from project dir
+    if [[ "${USR_ACT_BRANCH}" == "${ImplNumber}" ]]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Nothing to restore git files RC:$RC"
+      echo -e "INFO: Nothing to restore git files."; #CONSOLE
+      _RC=${EC};
+    else
+      git checkout -q -f "${ImplNumber}"
+      _RC=$?
+      if [ "${_RC}" -ne 0 ]; then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_IMPL_CWRK} workspace internal error. Contact zTPF devops toolchain support RC:$EC"
+        echo -e "ERROR: ${USR_IMPL_CWRK} workspace internal error. Contact zTPF devops toolchain support."; #CONSOLE
+        _RC=${EC};
+      fi
+    fi
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  getParmFromBranch "${ImplNumber}" "USR"; RC=$?;
+  if [ -d "${USR_IMPL_CWRK}" ]; then
+    pushd "${USR_IMPL_CWRK}" &> /dev/null; #Change from origin to project dir
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Switch to project dir - ${USR_IMPL_CWRK} RC:$RC"
+      echo -e "INFO: Switch to project dir - ${USR_IMPL_CWRK}" &> /dev/null; #DEBUG
+      getGitStatus; RC=$?;             #Validate git project status
+      if [ "${RC}" -eq 0 ]; then
+        gitRestore; RC=$?;
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}: Restore Script unable to validate local git status in /.git corruption so removing ${USR_IMPL_CWRK} and cloning impl branch for newly RC:$EC"
+        if [ -d "${USR_IMPL_CWRK}" ]; then
+          rm -rf "${USR_IMPL_CWRK}"
+          if [[ "${ImplNumber}" =~ t ]]; then
+            gitProject "${ImplNumber}" "tp"; RC=$?;
+          elif [[ "${ImplNumber}" =~ d ]]; then
+            gitProject "${ImplNumber}" "dl"; RC=$?;
+          fi
+        fi
+      fi
+    popd  &> /dev/null;
+  else
+    if [[ "${ImplNumber}" =~ t ]]; then
+      gitProject "${ImplNumber}" "tp"; RC=$?;
+    elif [[ "${ImplNumber}" =~ d ]]; then
+      gitProject "${ImplNumber}" "dl"; RC=$?;
+    fi
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplNumber} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

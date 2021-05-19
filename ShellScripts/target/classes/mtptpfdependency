@@ -1,0 +1,89 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpfdependency                                             #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to get macro and header used plans                              #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation plan with load date info                          #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   09222018    ARUL    Created the script                                    #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+implementation="$1";                   #Implementation plan with load date info
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${implementation} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  USR_IMPL_DATE="${implementation##*_}"
+  EXP_DATA=""
+  getParmFromBranch "${implementation%_*}" "STG";
+  checkPlan=( $(find "${APP_STG_IMPL_CWRK}" "${SYS_STG_IMPL_CWRK}" -type f -name "*.mac" -o -name "*.h" 2> /dev/null) )
+  if [[ -n "${checkPlan[*]// /}" ]]; then
+    usedPlan=( $(find "${STG_TPF_APP}" "${STG_TPF_SYS}" -type f -name "*.cfg" -exec grep -l "${USR_IMPL_PLAN}" {} + 2> /dev/null) )
+    for uPlan in "${usedPlan[@]}"
+    do
+      usedRef=( $(find "${uPlan%/*}" -type f -name "*.lst" -exec grep -l "/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" {} + 2> /dev/null) )
+      for uRef in "${usedRef[@]}"
+      do
+        if [[ ! "${uRef}" =~ ${USR_IMPL_PLAN} ]]; then
+          ref=( $(grep "/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" "${uRef}" 2> /dev/null) )
+          for r in "${ref[@]}"
+          do
+            # shellcheck disable=SC2049
+            if [[ ! "${r}" =~ * ]] && [[ "${r}" =~ stg ]]; then
+              temp1="${uPlan##*stg/}"
+              temp2="${temp1%%/*}"
+              if [[ ! "${EXP_DATA}" =~ ${temp2} ]]; then
+                EXP_DATA="${temp2},${EXP_DATA}"
+              fi
+            fi
+          done
+        fi
+      done
+    done
+  fi
+  if [[ -n "${EXP_DATA[*]// /}" ]]; then
+    echo -e "${EXP_DATA%,*}";                                          #CONSOLE
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${EXP_DATA%,*} RC:$RC"
+  else
+    echo -e "EMPTY";                                                   #CONSOLE
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:EMPTY RC:$RC"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${implementation} RC:$RC"
+exit "${RC}";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,164 @@
+#!/bin/bash
+# shellcheck disable=SC2164,SC2128,SC2207
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgittagchange                                              #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to change the pending tags to online or fallback                #
+#                                                                             #
+#   COMMANDS  :                                                               #
+#     ./mtpgittagchange "functionalpack" "planid"  "company" "online/fallback"#
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - functional package                                               #
+#      $2  - planid                                                           #
+#      $3  - company name                                                     #
+#      $4  - status to change (online/fallback)                               #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   11042018    VINOTH    Created the script                                  #
+#   04252019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=4;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+functionpack="$1";                     #Read function package sys/fls
+planid="$2";                           #Read plan id ex _cl1090_jlm
+company="$3";                          #Read company tp /dl
+newtag="$4";                           #Tag to replace with existing plan
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${functionpack} ${planid} ${company} ${newtag} RC:$RC"
+#
+#---------------------------Tag del Source------------------------------------#
+function tagDelsrc {
+  local tags;
+  local i;
+  tags=( $(git tag -l | grep "pending-${planid}") )
+  if [ -n "${tags}" ]; then
+    for((i=0; i<${#tags[*]}; i++));
+    do
+      commitid="${tags##*-}";
+      GIT_SSL_NO_VERIFY=true git tag -d "${tags[i]}" &> /dev/null; _RC="$?";
+      if [ "${_RC}" -eq 0 ]; then
+        GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${tags[i]}" &> /dev/null;
+        GIT_SSL_NO_VERIFY=true git tag -a "${newtag}-${planid}-${commitid}" -m "${newtag}-${planid}-${commitid}" "${commitid}" &> /dev/null;
+        GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to delete Pending Tag with ${planid} in Source GIT RC:$EC";
+        echo -e "\\nERROR: Unable to delete Pending Tag with ${planid} in Source GIT."; #CONSOLE
+      fi
+    done
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Pending Tag with ${planid} is not available in Source GIT. RC:$EC";
+    echo -e "\\nERROR: Pending Tag with ${planid} is not available in Source GIT."; #CONSOLE
+  fi
+return "${_RC}"
+}
+#---------------------------Tag del derived ----------------------------------#
+function tagDeldev {
+  local tags;
+  local i;
+  tags=( $(git tag -l | grep "pending-${planid}") )
+  if [ -n "${tags}" ]; then
+    for((i=0; i<${#tags[*]}; i++));
+    do
+      commitid="${tags##*-}";
+      GIT_SSL_NO_VERIFY=true git tag -d "${tags[i]}" &> /dev/null; _RC="$?";
+      if [ "${_RC}" -eq 0 ]; then
+        GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${tags[i]}" &> /dev/null;
+        GIT_SSL_NO_VERIFY=true git tag -a "${newtag}-${planid}-${commitid}" -m "${newtag}-${planid}-${commitid}" "${commitid}" &> /dev/null;
+        GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to delete Pending Tag with ${planid} in Derived GIT RC:$EC";
+        echo -e "\\nERROR: Unable to delete Pending Tag with ${planid} in Derived GIT."; #CONSOLE
+      fi
+    done
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Pending Tag with ${planid} is not available in Derived GIT RC:$EC";
+    echo -e "\\nERROR: Pending Tag with ${planid} is not available in Derived GIT."; #CONSOLE
+  fi
+return "${_RC}"
+}
+#------------------------------------------------------------------------------#
+#Start main execution if validation success
+#
+if [ "$RC" -eq 0 ]; then
+  folder="/home/mtpservice/TAGCLONE/${company}/${functionpack}";
+  mkdir -p "${folder}";
+  if [ -d "${folder}" ]; then
+      if [[ "$functionpack" =~ put|rel ]]; then
+        pushd "${folder}" &> /dev/null
+          GIT_SSL_NO_VERIFY=true git clone "${DEV_SRC_RURL_SMOD}/tpf/${company}/ibm/ibm_${functionpack}.git" &> /dev/null; RC="$?";
+          if [ "${RC}" -eq 0 ]; then
+            pushd "ibm_${functionpack}" &> /dev/null;
+             tagDelsrc; RC=$?;
+            popd &> /dev/null
+            rm -rf "ibm_${functionpack}";
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Prod source repo is not available in GIT for given ${functionpack} RC:$EC";
+            echo -e "\\nERROR: Prod source repo is not available in GIT for given ${functionpack}."; #CONSOLE
+          fi
+          GIT_SSL_NO_VERIFY=true git clone "${DEV_BIN_RURL_SMOD}/gitblit/r/tpf/${company}/ibm/derived_${functionpack}.git" &> /dev/null; RC="$?";
+          if [ "${RC}" -eq 0 ]; then
+            pushd "derived_${functionpack}" &> /dev/null
+             tagDeldev; RC=$?;
+            popd &> /dev/null
+            rm -rf "derived_${functionpack}";
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Prod derived repo is not available in GIT for given ${functionpack} RC:$EC";
+            echo -e "\\nERROR: Prod derived repo is not available in GIT for given ${functionpack}."; #CONSOLE
+          fi
+        popd &> /dev/null
+      else
+        pushd "${folder}" &> /dev/null
+          GIT_SSL_NO_VERIFY=true git clone "${DEV_SRC_RURL_SMOD}/tpf/${company}/nonibm/nonibm_${functionpack}.git" &> /dev/null; RC="$?";
+          if [ "${RC}" -eq 0 ]; then
+            pushd "nonibm_${functionpack}" &> /dev/null
+             tagDelsrc; RC=$?;
+            popd &> /dev/null
+            rm -rf "nonibm_${functionpack}";
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Prod derived repo is not available in GIT for given ${functionpack} RC:$EC";
+            echo -e "\\nERROR: Prod derived repo is not available in GIT for given ${functionpack}."; #CONSOLE
+          fi
+          GIT_SSL_NO_VERIFY=true git clone "${DEV_BIN_RURL_SMOD}/gitblit/r/tpf/${company}/nonibm/derived_${functionpack}.git" &> /dev/null; RC="$?";
+          if [ "${RC}" -eq 0 ]; then
+            pushd "derived_${functionpack}" &> /dev/null
+             tagDeldev; RC=$?;
+            rm -rf "derived_${functionpack}";
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Prod derived repo is not available in GIT for given ${functionpack} RC:$EC";
+            echo -e "\\nERROR: Prod derived repo is not available in GIT for given ${functionpack}."; #CONSOLE
+          fi
+        popd &> /dev/null
+      fi
+  fi
+  rm -rf "${folder}";
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${functionpack} ${planid} ${company} ${newtag} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

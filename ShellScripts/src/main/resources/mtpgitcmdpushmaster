@@ -1,0 +1,152 @@
+#!/bin/bash
+# shellcheck disable=SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdpushmaster                                          #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to push the source from developer worksapce to master           #
+#             remote branch                                                   #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Project directory path                                           #
+#      $2  - Branch name                                                      #
+#      $3  - User id (Linux)                                                  #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   15072016    UVAIS   Created the script                                    #
+#   12082016    ARUL    Updated the script                                    #
+#   20022017    ARUL    Updated to get to know if there is conflict           #
+#   20022017    ARUL    Updates the script for new SCM struct for common src  #
+#   04252019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+shopt -s extglob                       #Enable for additional shell options
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ProjectDir="$1";                       #Read actual path of prject dir
+LocalBranchName="$2";                  #Read local branch name
+LocalUserID="$3";                      #Read Linux User ID for workspace
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ProjectDir} ${LocalBranchName} ${LocalUserID} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function pushMasterBranch {
+  local _RC;
+  local _activeRepo;
+  local _repoDir;
+  local _core;
+  _core="${LocalBranchName##*_}";
+  _activeRepo="$( git config --get remote.origin.url )";
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Origin remote repo url $_activeRepo RC:$RC"
+  echo -e "INFO: Origin remote repo url $_activeRepo .\n";             #CONSOLE
+  _repoDir="$( basename "$_activeRepo" ".${_activeRepo##*.}" )";
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Directory $_repoDir RC:$RC";
+  echo -e "INFO: Directory $_repoDir .\n";                             #CONSOLE
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Branch $LocalBranchName RC:$RC";
+  echo -e "INFO: Branch $LocalBranchName .\n";                         #CONSOLE
+  pushd "${HOME}" &> /dev/null
+    rm -rf "mtpGit_$LocalUserID"
+    mkdir "mtpGit_$LocalUserID" && cd "mtpGit_$LocalUserID"
+    git clone -b "$LocalBranchName" "$_activeRepo" &> /dev/null; _RC=$?;
+    if [ "$_RC" -eq 0 ]; then
+      pushd "$_repoDir" &> /dev/null
+        git ls-remote --exit-code -h &> /dev/null; _RC=$?;
+        if [ "$_RC" -eq 0 ]; then
+          git checkout "$LocalBranchName" &> /dev/null; _RC=$?;
+          if [ "$_RC" -eq 0 ]; then
+            git pull origin "$LocalBranchName" &> /dev/null;
+            git checkout "master_$_core" &> /dev/null;
+            git pull origin "master_$_core" &> /dev/null;
+            git push origin "master_$_core" --dry-run &> /dev/null; _RC=$?;
+            if [ "$_RC" -eq 0 ]; then
+              git merge "$LocalBranchName" -m "Merge with branch-$LocalBranchName" &> /dev/null; _RC=$?;
+              if [ "$_RC" -eq 0 ]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Branch master_$_core merged with $LocalBranchName RC:$_RC"
+                echo -e "INFO: Branch master_$_core merged with $LocalBranchName ."; #CONSOLE
+                git push -u origin "master_$_core" &> /dev/null; _RC=$?;
+                if [ "$_RC" -eq 0 ]; then
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Publish to master success RC:$_RC"
+                  echo -e "INFO: Publish to master success.\n";          #CONSOLE
+                else
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Publish to master failed RC:$EC"
+                  echo -e "ERROR: Publish to master failed.\n"; _RC="$EC"; #CONSOLE
+                fi
+              else
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Remote master_$_core having complex changes - try with manual pull RC:$EC"
+                echo -e "ERROR: Remote master_$_core having complex changes - try with manual pull.\n"; #CONSOLE
+                _RC="$EC"
+              fi
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to access remote url $_activeRepo RC:$EC"
+              echo -e "ERROR: Unable to access remote url $_activeRepo .\n"; _RC="$EC"; #CONSOLE
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to swtich branch $LocalBranchName RC:$EC"
+            echo -e "ERROR: Failed to swtich branch $LocalBranchName .\n"; _RC="$EC"; #CONSOLE
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Remote repository not accessible RC:$EC"
+          echo -e "ERROR: Remote repository not accessible.\n"; _RC="$EC"; #CONSOLE
+        fi
+      popd &> /dev/null
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid remote url - $_activeRepo RC:$EC"
+      echo -e "ERROR: Invalid remote url - $_activeRepo .\n"; _RC="$EC"; #CONSOLE
+    fi
+  popd &> /dev/null
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ -d "$ProjectDir" ] && [ "$ProjectDir" != "/" ]; then
+    pushd "$ProjectDir" &> /dev/null
+      getGitStatus; RC=$?;
+      if [ "$RC" -eq 0 ]; then
+        getParmFromBranch "$LocalBranchName" "DVL"; RC=$?;
+        if [ "$RC" -eq 0 ]; then
+          pushMasterBranch; RC=$?;
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Workspace not found RC:$EC"
+          echo -e "ERROR: Workspace not found.\n"; RC="$EC";           #CONSOLE
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$ProjectDir is not a valid git repository RC:$RC"
+        echo -e "ERROR: $ProjectDir is not a valid git repository.\n"; #CONSOLE
+        RC="$EC";
+      fi
+    popd &> /dev/null
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$ProjectDir is not a valid directory RC:$EC"
+    echo -e "ERROR: $ProjectDir is not a valid directory.\n";          #CONSOLE
+    RC="$EC";                          #Return error if input validation fail
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ProjectDir} ${LocalBranchName} ${LocalUserID} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

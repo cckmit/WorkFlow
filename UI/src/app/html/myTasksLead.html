@@ -1,0 +1,41 @@
+<section class="content-header">
+
+</section>
+<!-- Main content -->
+<section class="content animated slideInLeft scrollingFunction" id="scroll_function">
+    <div class="col-md-12">
+        <div class="row">
+            <div class="well well-sm" style="background-color:#fff;min-height:400px">
+
+
+                <div class="row">
+                    <div class="col-md-12">
+                        <table id="myTasks" class="table" border="1" style="border-color:rgba(187, 187, 187, 0.17);">
+                            <thead>
+                                <tr class="tableHeader alignText">
+                                    <th>Serial No.</th>
+                                    <th>Task ID</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody class="myTasks">
+                                <tr ng-repeat="mytask in vm.myTasksList" class="hoverCurrentRow" style="text-align:center;">
+                                    <td>{{mytask.impId}}</td>
+                                    <td>{{mytask.loadCategory}}</td>
+                                    <td>{{mytask.loadDateTime}}</td>
+                                </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+
+
+
+            </div>
+
+        </div>
+    </div>
+</section>
+<!-- /.content -->

@@ -1,0 +1,75 @@
+#!/bin/bash
+# shellcheck disable=SC2206
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitsoname                                                 #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to define .so file name for the  segments                       #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  -  segment name with path                                          #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   07222019    GOWTHAM   Created the script                                  #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+lstOfSeg="$1";
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${lstOfSeg} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+    IFS=',' read -r -a _LstSeg <<< "${lstOfSeg[@]}";
+    for Seg in "${_LstSeg[@]}"
+    do
+      _Seg="${Seg##*/}";
+      _extn="${Seg##*.}";
+      _SegName="${_Seg%%.*}";
+       if [[ "${_extn}" == asm ]] || [[ "${_extn}" == c ]] || [[ "${_extn}" == cpp ]] || [[ "${_extn}" == sbt ]]; then
+           _SegChar="${#_SegName}";
+           if [ "${_SegChar}" -eq 4 ]; then
+              _OutPutSo+=${Seg}:${_SegName^^}.so,
+           fi
+           if [ "${_SegChar}" -gt 4 ]; then
+              _SegSlice=$(echo "${_SegName}" | cut -c1-4)
+              _OutPutSo+=${Seg}:${_SegSlice^^}.so,
+           fi
+       else
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:No .so file for the segment ${_Seg} RC:$RC"
+        echo -e "No .so file for the segment ${_Seg}"
+       fi
+    done
+     sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_OutPutSo[*]%,*} RC:$RC"
+     echo -e "${_OutPutSo[@]%,*}"
+    unset IFS
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${lstOfSeg} RC:$RC"
+exit "$RC";
+#-----------------------------------------------------------------------------#

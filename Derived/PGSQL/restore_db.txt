@@ -1,0 +1,37 @@
+-- VAIJU 05/08/2018
+stop replication between databases
+connect to primary postgresql instance as postgres user 
+  psql -U postgres -h localhost 
+    DROP DATABASE ACTIVITI;
+    DROP DATABASE WORKFLOW;
+    DROP DATABASE RAW;
+    \l
+  - list databases to verify that it has been dropped
+
+  CREATE DATABASE activiti WITH TEMPLATE = template0 OWNER = postgres;
+  CREATE DATABASE raw WITH TEMPLATE = template0 OWNER = postgres;
+  CREATE DATABASE workflow WITH TEMPLATE = template0 OWNER = postgres;
+
+restore activiti database from backup 
+  pg_restore -1 -v -p 5432 -U postgres -d activiti 05092018_TPFDVOPS_QA_activiti_database_backup.sql
+
+restore workflow db from backup 
+  pg_restore -1 -v -p 5432 -U postgres -d workflow <backup file name>
+
+restore raw database from backup
+verify and connect to each database and verify count of tables, indexes etc
+connect to secondary postgresql instance as postgres user 
+  psql -U postgres -h localhost
+    DROP DATABASE ACTIVITI;
+    DROP DATABASE WORKFLOW;
+    \l
+  - list databases to verify 
+
+restore activiti database from backup
+restore workflow db from backup
+verify and connect to each database and list tables
+ENABLE replication between databases
+
+
+PLEASE note that due to the small size of the database, replication need not have to be stopped and restore can be done to the primary postgresql instance only. This needs to be tested , please ensure replciation continues to work after the DROP and restore of databases 
+

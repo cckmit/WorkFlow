@@ -1,0 +1,30 @@
+dcph.mak CXXFLAGS_DCPH := -Wno-format
+edml.mak LDFLAGS_EDML := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+edmv.mak LDFLAGS_EDMV := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+kwd1.mak LDFLAGS_KWD1 := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+najt.mak CFLAGS_NAJT_najt := -Wno-missing-braces
+najt.mak CFLAGS_NAJT_najt += -Wno-implicit-function-declaration
+najv.mak CFLAGS_NAJV_najv := -Wno-missing-braces
+najv.mak CFLAGS_NAJV_najv += -Wno-implicit-function-declaration
+nak0.mak CFLAGS_NAK0_nak0 := -Wno-missing-braces
+nak0.mak CFLAGS_NAK0_nak0 += -Wno-implicit-function-declaration
+navd.mak CXXFLAGS_NAVD := -Wno-format
+qxp1.mak CFLAGS_QXP1_qxp1 := -Wno-missing-braces
+qxp1.mak CFLAGS_QXP1_qxp1 += -Wno-implicit-function-declaration
+qxp1.mak LDFLAGS_QXP1 := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+qxp2.mak CFLAGS_QXP2_qxp2 := -Wno-missing-braces
+qxp2.mak CFLAGS_QXP2_qxp2 += -Wno-implicit-function-declaration
+qxp2.mak LDFLAGS_QXP2 := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+qxp3.mak CFLAGS_QXP3_qxp3 := -Wno-missing-braces
+qxp3.mak CFLAGS_QXP3_qxp3 += -Wno-implicit-function-declaration
+qxp3.mak LDFLAGS_QXP3 := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+qxp4.mak CFLAGS_QXP4_qxp4 := -Wno-missing-braces
+qxp4.mak CFLAGS_QXP4_qxp4 += -Wno-implicit-function-declaration
+qxp4.mak LDFLAGS_QXP4 := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+sbdg.mak CXXFLAGS_SBDG := -Wno-format
+sbdh.mak CFLAGS_SBDH := -Wno-format
+ustl.mak CFLAGS_USTL_ustl := -Wno-missing-braces
+ustl.mak CFLAGS_USTL_ustl += -Wno-implicit-function-declaration
+usto.mak CFLAGS_USTO_usto := -Wno-missing-braces
+usto.mak CFLAGS_USTO_usto += -Wno-implicit-function-declaration
+vctr.mak LDFLAGS_VCTR := -Xlinker --defsym -Xlinker CGCC_31BIT=0

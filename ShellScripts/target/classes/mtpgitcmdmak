@@ -1,0 +1,137 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdmak                                                 #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to perform the control file operation using cntliq tool         #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - 4-digit SO name                                                  #
+#      $2  - System/Core name                                                 #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   28062017    ARUL    Created the script                                    #
+#   06072017 NARASHIMAN	check generic .mak                                    #
+#   11282018   VINOTH   Dynamic mak file validation                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+SoName="$1";                           #Read Implementation name
+CoreName="$2";                         #Read Core name
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${SoName} ${CoreName} RC:$RC"
+#-----------------------------------------------------------------------------#
+# Get MAK file reference for the requested files in the system
+function getMak {
+  local _RC;
+  local _CntlOut;
+  local _CntlSplit;
+  local _CntlFetch;
+  local _CntlSrc;
+  local _CntlMak;
+  local _CntlStub;
+  local _NoCntl;
+  local _NoMak;
+  _CntlOut="$($SUP_TPF_CNT -f "${SoName^^}" -s "${CoreName}")"
+  _CntlSplit="${_CntlOut//\;/ }"
+  _CntlFetch="$( echo "${_CntlSplit}" | cut -d " " -f 5 )"
+  _CntlStub="$( echo "${_CntlSplit}" | cut -d " " -f 4 )"
+  _CntlSrc="$( echo "${_CntlSplit}" | cut -d " " -f 3 )"
+  _CntlIBM="$( echo "${_CntlSplit}" | cut -d " " -f 1 )"
+  _CntlMak="${_CntlFetch##*/}"
+  #Identify IBM generic mak file
+  if [ -f "/ztpfsys/${CoreName,,}/prod/${_CntlFetch}" ] && [[ ${_CntlIBM} == 'IBM-Yes' ]]; then
+    _CntlMakPath="/ztpfsys/${CoreName,,}/prod/${_CntlFetch}"
+  elif [ -f "/ztpf/ibm/prod/${_CntlFetch}" ] && [[ ${_CntlIBM} == 'IBM-Yes' ]]; then
+    _CntlMakPath="/ztpf/ibm/prod/${_CntlFetch}"
+  fi
+  #
+  if [ "${_CntlMak}" == "${SoName,,}.mak" ]; then
+    echo -e "${_CntlMak}";                                             #CONSOLE
+    _RC="$RC";
+  elif [ "${_CntlStub}" == "STUB" ]; then
+  	_CntlFetch="$( echo "${_CntlSplit}" | cut -d " " -f 5 )";
+  	echo -e "${_CntlFetch}";
+  	_RC="$RC";                                                         #CONSOLE
+  else
+    _NoCntl="$( echo "${_CntlSplit}" | cut -d " " -f 2 )";
+    _NoMak="${_NoCntl##*/}";
+    if [ "${_NoMak}" == "no_load.cntl" ]; then
+      echo -e "no_load.cntl" &> /dev/null;                 #DEBUG
+      _RC="$RC";
+    else
+      if [[ ${_CntlIBM} == 'IBM-Yes' ]]; then
+        grep SRC "${_CntlMakPath}" |grep "TPF_PGM_NAME" &> /dev/null; RC=$?;
+        if [ ${RC} -eq 0 ]; then
+          echo -e "${_CntlSrc}";                                       #CONSOLE
+        else
+          grep SRC "${_CntlMakPath}"|grep -i "${SoName}" &> /dev/null; RC=$?;
+          if [ ${RC} -eq 0 ]; then
+            echo -e "${_CntlMak}";                                     #CONSOLE
+            _RC="$RC";
+          fi
+        fi
+        _RC="$RC";
+      else                                                 #NONIBM segs
+        if [ "${_CntlMak}" == "app_base_sys.mak" ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:app_base_sys.mak RC:$RC"
+          echo -e "app_base_sys.mak" &> /dev/null;         #DEBUG
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: ${_CntlSrc} RC:$RC"
+          echo -e "${_CntlSrc}";                                       #CONSOLE
+          _RC="$RC";
+        elif [ "${_CntlMak}" == "app_base.mak" ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:app_base.mak RC:$RC"
+          echo -e "app_base.mak" &> /dev/null;             #DEBUG
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: ${_CntlSrc} RC:$RC"
+          echo -e "${_CntlSrc}";                                       #CONSOLE
+          _RC="$RC";
+        elif [[ "${_CntlMak}" =~ generic_bso ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:generic_bso.mak RC:$RC"
+          echo -e "generic_bso.mak" &> /dev/null;          #DEBUG
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: ${_CntlSrc} RC:$RC"
+          echo -e "${_CntlSrc}";                                       #CONSOLE
+          _RC="$RC";
+        fi
+      fi
+      _RC="$RC";
+    fi
+  fi
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+if [ "$RC" -eq 0 ]; then
+  if [ -f "$SUP_TPF_CNT" ]; then
+    getMak; RC=$?;
+  else
+    RC="$EC";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${SoName} ${CoreName} RC:$RC"
+exit "$RC";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

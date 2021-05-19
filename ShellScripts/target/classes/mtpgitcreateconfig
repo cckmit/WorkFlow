@@ -1,0 +1,360 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcreateconfig                                           #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to generate the configuration file in devl workspace for        #
+#      integration testing                                                    #
+#   INPUT:                                                                    #
+#      $1  - Read Implementation plan with date and core info                 #
+#      $2  - Read PUT Level Data                                              #
+#      $3  - Read dependancy of the impl.plan                                 #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   23062017    NARASHIMAN   created the script                               #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+source "${MTP_ENV:=$PWD}/mtplibvalidation"
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=2;                    #Expected number of input parms
+declare -i _MxIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+Implementation="$1";
+Implputlevel="$2";
+Impldependancy="$3";
+#
+if [ "${_ReIP}" -eq "${_MxIP}" ]; then
+  _ExIP="${_MxIP}";
+elif [ "${_ReIP}" -eq "${_MiIP}" ]; then
+  _ExIP="${_MiIP}";
+fi
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+#
+#-----------------------------------------------------------------------------#
+function updateConfig {
+  declare -a _devlArray
+  local _dependancyDate;
+  local _type="$1"
+  local _pendPath
+  local _pendXref
+  local _ImplIdDate
+  local _CoreType
+  local _currentDate
+  _currentDate="$(date +%Y%m%d)"
+#  echo "$Implputlevel" &> /dev/null
+  _dependencyId="${Impldependancy//\,/ }";
+# _devlArray="${Implementation%%_*}/${USR_IMPL_CORE}";
+  _devlArray[0]="${Implementation%%_*}/${USR_IMPL_CORE}";
+  _ImplIdDate1=${Implementation##*_}
+  _ImplIdDate=${_ImplIdDate1::8}
+  if [ -n "${_dependencyId// /}" ]; then
+    _devlarray1=( "${_dependencyId}" );
+    for((i=0; i<${#_devlarray1[@]}; i++));
+    do
+      _devlArray[i + 1]=${_devlarray1[i]%%_*}/${USR_IMPL_CORE};
+    done
+  fi
+  case "${USR_IMPL_CORE,,}" in
+    res|air|oss)
+      if [[ "${USR_IMPL_CORE,,}" == "res" ]]; then
+        _pendPath="$PRD_RES_PND";
+      elif [[ "${USR_IMPL_CORE,,}" == "air" ]]; then
+        _pendPath="$PRD_AIR_PND";
+      elif [[ "${USR_IMPL_CORE,,}" == "oss" ]]; then
+        _pendPath="$PRD_OSS_PND";
+      fi
+    ;;
+    wsp)
+      _pendPath="$PRD_WSP_PND";
+      ;;
+    apo|pre|pgr)
+      if [[ "${USR_IMPL_CORE,,}" == "apo" ]]; then
+        _pendPath="$PRD_APO_PND"
+        _pendXref="$PRD_APO_XRF"
+        _XrefImplID=($(awk ' $3 >= '"${_currentDate}"' && $3 <= '"${_ImplIdDate}"' ' "${_pendXref}"| grep ' APZ ' | sort -rk 3.1 | cut -c 1-7 | uniq -u))
+        _CoreType="t4"
+      elif [[ "${USR_IMPL_CORE,,}" == "pre" ]]; then
+        _pendPath="$PRD_PRE_PND"
+        _pendXref="$PRD_PRE_XRF"
+        _XrefImplID=($(awk ' $3 >= '"${_currentDate}"' && $3 <= '"${_ImplIdDate}"' ' "${_pendXref}"| grep ' PRZ ' | sort -rk 3.1 | cut -c 1-7 | uniq -u))
+        _CoreType="t4"
+      elif [[ "${USR_IMPL_CORE,,}" == "pgr" ]]; then
+        _pendPath="$PRD_PGR_PND"
+        _pendXref="$PRD_PGR_XRF"
+        _XrefImplID=($(awk ' $3 >= '"${_currentDate}"' && $3 <= '"${_ImplIdDate}"' ' "${_pendXref}"| grep ' PGZ ' | sort -rk 3.1 | cut -c 1-7 | uniq -u))
+        _CoreType="t4"
+      fi
+    ;;
+    *)
+      RC="$EC"
+    ;;
+  esac
+#
+  if [[ "${_type}" == "IBM-YES" ]]; then
+    _lineNo=($(grep -n "^TPF_ROOT " maketpf.cfg | cut -d : -f 1))
+#   echo "$_lineNo";
+    for((i=0; i<${#_lineNo[@]}; i++));
+    do
+      sed -i "${_lineNo[0]}d" maketpf.cfg
+    done
+    sed -i "${_lineNo[0]} i TPF_ROOT := $DVL_TPF_SYS/${_devlArray[0]}" maketpf.cfg
+    for((i=1; i<${#_devlArray[@]}; i++));
+    do
+      sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += $DVL_TPF_SYS/${_devlArray[i]}" maketpf.cfg
+    done
+    for((i=1; i<"${#_devlArray[@]}"; i++));
+    do
+      if [ -d "$STG_TPF_SYS/${_devlArray[i]%_*}" ]; then
+#       sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += $STG_TPF_SYS/${_devlArray[i]%/*}/${USR_IMPL_CORE}/derived" maketpf.cfg
+        sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += $STG_TPF_SYS/${_devlArray[i]%/*}/${USR_IMPL_CORE}" maketpf.cfg
+      fi
+    done
+    if [ "$_CoreType" != "t4" ];then
+      _dependancyDate=($(grep "${USR_IMPL_CORE}" "${_pendPath}" | grep ztpfsys | sort -k 5.1 | cut -c 35-48))
+      _dependancyID=($(grep "${USR_IMPL_CORE}" "${_pendPath}" | grep ztpfsys | sort -k 5.1 | cut -c 50-84))
+      _currentDate="$(date +%Y%m%d%H%M%S)"
+#   echo $_lineNo;
+      for((i=1; i<${#_dependancyDate[@]}; i++));
+      do
+        if [ "$_currentDate" -lt "${_dependancyDate[i]}" ] || [ "${Implementation##*_}" -gt "${_dependancyDate[i]}" ]; then
+          sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += ${_dependancyID[i]}" maketpf.cfg
+        fi
+      done
+    elif [ "$_CoreType" == "t4" ];then
+      for((i=0; i<${#_XrefImplID[@]}; i++));
+      do
+        _T4Path=($(grep "${_XrefImplID[i]}" "${_pendPath}" | grep "${USR_IMPL_CORE}" | cut -c 61-))
+        if [ "${_T4Path[0]}" != "" ]; then
+          sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/${_T4Path[0]}" maketpf.cfg
+        fi
+      done
+    fi
+    sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE}/${Implputlevel,,}/derived" maketpf.cfg
+    sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE}/${Implputlevel,,}" maketpf.cfg
+    if [ "$_CoreType" == "t4" ]; then
+      for((i=0; i<${#_XrefImplID[@]}; i++));
+      do
+        _CommonPath=($(grep "${_XrefImplID[i]}" "${_pendPath}" | grep "${USR_IMPL_CORE}" | cut -c 61-))
+        if [ "${_CommonPath[0]}" != "" ]; then
+#    for((i=0; i<${#_CommonPath[@]}; i++));
+#do
+          sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/${_CommonPath[0]}/common" maketpf.cfg
+#done
+        fi
+      done
+    fi
+    sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/common/${Implputlevel,,}" maketpf.cfg
+    sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpf/ibm/${Implputlevel,,}" maketpf.cfg
+    _lineNo1=($(grep -n "^APPL_ROOT " maketpf.cfg | cut -d : -f 1))
+#   echo "$_lineNo1";
+    for((i=0; i<${#_lineNo1[@]}; i++));
+    do
+      sed -i "${_lineNo1[0]}d" maketpf.cfg
+    done
+    if [ -d "$APP_DVL_IMPL_CWRK" ]; then
+      sed -i "${_lineNo1[0]} i APPL_ROOT := $DVL_TPF_APP/${_devlArray[0]}" maketpf.cfg
+      for((i=1; i<"${#_devlArray[@]}"; i++));
+      do
+        sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += $DVL_TPF_APP/${_devlArray[i]}" maketpf.cfg
+      done
+      for((i=1; i<"${#_devlArray[@]}"; i++));
+      do
+        if [ -d "$STG_TPF_APP/${_devlArray[i]%_*}" ]; then
+#         sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += $STG_TPF_APP/${_devlArray[i]%/*}/${USR_IMPL_CORE}/derived" maketpf.cfg
+          sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += $STG_TPF_APP/${_devlArray[i]%/*}/${USR_IMPL_CORE}" maketpf.cfg
+        fi
+      done
+      if [ "$_CoreType" != "t4" ];then
+        _dependancyDate=($(grep "${USR_IMPL_CORE}" "${_pendPath}" | grep ztpfrepos | sort -k 5.1 | cut -c 35-48))
+        _dependancyID=($(grep "${USR_IMPL_CORE}" "${_pendPath}" | grep ztpfrepos | sort -k 5.1 | cut -c 50-84))
+        _currentDate="$(date +%Y%m%d%H%M%S)"
+#   echo $_lineNo1;
+        for((i=1; i<${#_dependancyDate[@]}; i++));
+        do
+        if [ "$_currentDate" -lt "${_dependancyDate[i]}" ] || [ "${Implementation##*_}" -gt "${_dependancyDate[i]}" ]; then
+          sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += ${_dependancyID[i]}" maketpf.cfg
+        fi
+      done
+    elif [ "$_CoreType" == "t4" ];then
+      for((i=0; i<${#_XrefImplID[@]}; i++));
+      do
+        _T4Path=($(grep "${_XrefImplID[i]}" "${_pendPath}" | grep "${USR_IMPL_CORE}" | cut -c 50-))
+        if [ "${_T4Path[0]}" != "" ]; then
+          sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += ${_T4Path[0]}" maketpf.cfg
+        fi
+      done
+    fi
+    sed -i "$((_lineNo1=_lineNo1+ 1)) i APPL_ROOT += /ztpfrepos/${USR_IMPL_CORE}/derived" maketpf.cfg
+    sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += /ztpfrepos/${USR_IMPL_CORE}" maketpf.cfg
+  else
+    sed -i "$((_lineNo1=_lineNo1)) i APPL_ROOT := /ztpfrepos/${USR_IMPL_CORE}/derived" maketpf.cfg
+    sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += /ztpfrepos/${USR_IMPL_CORE}" maketpf.cfg
+  fi
+fi
+#
+#
+#
+if [[ "${_type}" == "IBM-NO" ]]; then
+  _lineNo1=($(grep -n "^APPL_ROOT " maketpf.cfg | cut -d : -f 1))
+#   echo "$_lineNo1";
+  for((i=0; i<${#_lineNo1[@]}; i++));
+  do
+    sed -i "${_lineNo1[0]}d" maketpf.cfg
+  done
+    sed -i "${_lineNo1[0]} i APPL_ROOT := $DVL_TPF_APP/${_devlArray[0]}" maketpf.cfg
+    for((i=1; i<"${#_devlArray[@]}"; i++));
+    do
+      sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += $DVL_TPF_APP/${_devlArray[i]}" maketpf.cfg
+    done
+    for((i=1; i<"${#_devlArray[@]}"; i++));
+    do
+      if [ -d "$STG_TPF_APP/${_devlArray[i]%_*}" ]; then
+#       sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += $STG_TPF_APP/${_devlArray[i]%/*}/${USR_IMPL_CORE}/derived" maketpf.cfg
+        sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += $STG_TPF_APP/${_devlArray[i]%/*}/${USR_IMPL_CORE}" maketpf.cfg
+      fi
+    done
+    if [ "$_CoreType" != "t4" ];then
+      _dependancyDate=($(grep "${USR_IMPL_CORE}" "${_pendPath}" | grep ztpfrepos | sort -k 5.1 | cut -c 35-48))
+      _dependancyID=($(grep "${USR_IMPL_CORE}" "${_pendPath}" | grep ztpfrepos | sort -k 5.1 | cut -c 50-84))
+      _currentDate="$(date +%Y%m%d%H%M%S)"
+#   echo $_lineNo1;
+      for((i=1; i<${#_dependancyDate[@]}; i++));
+      do
+        if [ "$_currentDate" -lt "${_dependancyDate[i]}" ] || [ "${Implementation##*_}" -gt "${_dependancyDate[i]}" ]; then
+        sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += ${_dependancyID[i]}" maketpf.cfg
+        fi
+      done
+    elif [ "$_CoreType" == "t4" ];then
+      for((i=0; i<${#_XrefImplID[@]}; i++));
+      do
+        _T4Path=($(grep "${_XrefImplID[i]}" "${_pendPath}" | grep "${USR_IMPL_CORE}" | cut -c 50-))
+        if [ "${_T4Path[0]}" != "" ]; then
+          sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += ${_T4Path[0]}" maketpf.cfg
+        fi
+      done
+    fi
+    sed -i "$((_lineNo1=_lineNo1+ 1)) i APPL_ROOT += /ztpfrepos/${USR_IMPL_CORE}/derived" maketpf.cfg
+    sed -i "$((_lineNo1=_lineNo1 + 1)) i APPL_ROOT += /ztpfrepos/${USR_IMPL_CORE}" maketpf.cfg
+    _lineNo=($(grep -n "^TPF_ROOT " maketpf.cfg | cut -d : -f 1))
+#   echo "$_lineNo";
+    for((i=0; i<${#_lineNo[@]}; i++));
+    do
+      sed -i "${_lineNo[0]}d" maketpf.cfg
+    done
+#
+    if [ -d "$SYS_DVL_IMPL_CWRK" ]; then
+      sed -i "${_lineNo[0]} i TPF_ROOT := $DVL_TPF_SYS/${_devlArray[0]}" maketpf.cfg
+      for((i=1; i<${#_devlArray[@]}; i++));
+      do
+        sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += $DVL_TPF_SYS/${_devlArray[i]}" maketpf.cfg
+      done
+      for((i=1; i<"${#_devlArray[@]}"; i++));
+      do
+        if [ -d "$STG_TPF_SYS/${_devlArray[i]%_*}" ]; then
+#         sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += $STG_TPF_SYS/${_devlArray[i]%/*}/${USR_IMPL_CORE}/derived" maketpf.cfg
+          sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += $STG_TPF_SYS/${_devlArray[i]%/*}/${USR_IMPL_CORE}" maketpf.cfg
+        fi
+      done
+      if [ "$_CoreType" != "t4" ];then
+        _dependancyDate=($(grep "${USR_IMPL_CORE}" "${_pendPath}" | grep ztpfsys | sort -k 5.1 | cut -c 35-48))
+        _dependancyID=($(grep "${USR_IMPL_CORE}" "${_pendPath}" | grep ztpfsys | sort -k 5.1 | cut -c 50-84))
+        _currentDate="$(date +%Y%m%d%H%M%S)"
+#   echo $_lineNo;
+        for((i=1; i<${#_dependancyDate[@]}; i++));
+        do
+          if [ "$_currentDate" -lt "${_dependancyDate[i]}" ] || [ "${Implementation##*_}" -gt "${_dependancyDate[i]}" ]; then
+            sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += ${_dependancyID[i]}" maketpf.cfg
+          fi
+        done
+      elif [ "$_CoreType" == "t4" ];then
+        for((i=0; i<${#_XrefImplID[@]}; i++));
+        do
+          _T4Path=($(grep "${_XrefImplID[i]}" "${_pendPath}" | grep "${USR_IMPL_CORE}" | cut -c 61-))
+          if [ "${_T4Path[0]}" != "" ]; then
+            sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/${_T4Path[0]}" maketpf.cfg
+          fi
+        done
+      fi
+      sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE}/${Implputlevel,,}/derived" maketpf.cfg
+      sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE}/${Implputlevel,,}" maketpf.cfg
+      if [ "$_CoreType" == "t4" ]; then
+        for((i=0; i<${#_XrefImplID[@]}; i++));
+        do
+          _CommonPath=($(grep "${_XrefImplID[i]}" "${_pendPath}" | grep "${USR_IMPL_CORE}" | cut -c 61-))
+          if [ "${_CommonPath[0]}" != "" ]; then
+#  for((i=0; i<${#_CommonPath[@]}; i++));
+#do
+            sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/${_CommonPath[0]}/common" maketpf.cfg
+# done
+          fi
+        done
+      fi
+      sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/common/${Implputlevel,,}" maketpf.cfg
+      sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpf/ibm/${Implputlevel,,}" maketpf.cfg
+    else
+      sed -i "$((_lineNo=_lineNo)) i TPF_ROOT := /ztpfsys/${USR_IMPL_CORE}/${Implputlevel,,}/derived" maketpf.cfg
+      sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/${USR_IMPL_CORE}/${Implputlevel,,}" maketpf.cfg
+      sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpfsys/common/${Implputlevel,,}" maketpf.cfg
+      sed -i "$((_lineNo=_lineNo + 1)) i TPF_ROOT += /ztpf/ibm/${Implputlevel,,}" maketpf.cfg
+    fi
+  fi
+}
+#
+#------------------------------------------------------------------------------#
+function generateConfig(){
+  local _RC=0;
+  local _ARC=0;
+  local _SRC=0;
+  local _AppPath="tpf/tp/nonibm/nonibm_conf.git"
+  local _SysPath="tpf/tp/ibm/ibm_conf.git"
+  if [ -d "$APP_DVL_IMPL_CWRK" ]; then
+    cd "$APP_DVL_IMPL_CWRK"
+    wget --no-check-certificate -N "$DEV_BIN_RURL/gitblit/raw/${_AppPath}/master_${USR_IMPL_CORE}/maketpf.cfg" &> /dev/null; _ARC=$?
+    if [ "$_ARC" -lt 1 ]; then
+      updateConfig "IBM-NO"; _ARC=$?;
+#     echo SRC-$_ARC
+    else
+      _RC="$EC";
+    fi
+#  else
+#  _ARC="$EC";
+  fi
+  if [ -d "$SYS_DVL_IMPL_CWRK" ]; then
+    cd "$SYS_DVL_IMPL_CWRK"
+    wget --no-check-certificate -N "$DEV_BIN_RURL/gitblit/raw/${_SysPath}/master_${USR_IMPL_CORE}/maketpf.cfg" &> /dev/null; _SRC=$?
+    if [ "$_SRC" -lt 1 ]; then
+      updateConfig "IBM-YES"; _SRC=$?;
+#      echo SRC-$_SRC
+    else
+      _RC="$EC";
+    fi
+  fi
+  return "$_RC";
+}
+
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  getParmFromBranch "${Implementation%_*}" "DVL"; RC=$?;
+  #if [ "$RC" -eq 0 ]; then
+  generateConfig; RC=$?;
+  #fi
+fi
+#-----------------------------------------------------------------------------#
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

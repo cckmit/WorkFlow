@@ -1,0 +1,198 @@
+<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"
+    xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:m="http://schemas.microsoft.com/office/2004/12/omml"
+    xmlns="http://www.w3.org/TR/REC-html40">
+
+<head>
+    <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=us-ascii">
+    <meta name=Generator content="Microsoft Word 15 (filtered medium)">
+</head>
+
+<body lang=EN-IN link="#0563C1" vlink="#954F72">
+    <div class=WordSection1>
+        <div align=center>
+        
+        #if ($message != "NONE")
+            <table class="MsoTableGrid" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:none">
+                <tr style='height:1.0pt'>
+                    <td colspan=4
+                        style='background:${formBck};padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span lang=EN-US
+                                style='font-size:12.0pt;font-family:"Courier New";color: white'>${message}</span><span lang=EN-US
+                                style='font-family:"Courier New"'>
+                                <o:p></o:p>
+                            </span></p>
+                    </td>
+                </tr>
+                </table>
+                 <br>
+                 #end
+            <table class="MsoTableGrid" border="1" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width: 70%">
+                <tr style='height:1.0pt'>
+                    <td
+                        style='border-left:solid windowtext 1.0pt;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><span lang=EN-US
+                                style='font-family:"Courier New"'>Plan Number<o:p></o:p></span></p>
+                    </td>
+                    <td
+                        style='border-left:none;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><b><span
+                                    style='font-family:"Courier New"'>${planId}</span></b><b><span lang=EN-US
+                                    style='font-family:"Courier New"'>
+                                    <o:p></o:p>
+                                </span></b></p>
+                    </td>
+                    <td
+                        style='border-left:none;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><span style='font-family:"Courier New"'>Plan
+                                Status</span><span lang=EN-US style='font-family:"Courier New"'>
+                                <o:p></o:p>
+                            </span></p>
+                    </td>
+                    <td
+                        style='border-left:none;border-bottom:solid gray 1.0pt;border-right:solid windowtext 1.0pt;background:${background};padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><b><span style='font-family:"Courier New"'>${plan.planstatus}
+                                    <o:p></o:p></span></b></p>
+                    </td>
+                </tr>
+                <tr style='height:1.0pt'>
+                    <td
+                        style='border-top:none;border-left:solid windowtext 1.0pt;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><span
+                                style='font-family:"Courier New"'>Description</span><span lang=EN-US
+                                style='font-family:"Courier New"'>
+                                <o:p></o:p>
+                            </span></p>
+                    </td>
+                    <td colspan=3
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid windowtext 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><b><span lang=EN-US
+                                    style='font-family:"Courier New"'>${plan.plandescription}<o:p></o:p>
+                                </span></b></p>
+                    </td>
+                </tr>
+                <tr style='height:1.0pt'>
+                    <td style='border:none;border-left:solid windowtext 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><span lang=EN-US style='font-family:"Courier New"'>
+                                <o:p>&nbsp;</o:p>
+                            </span></p>
+                    </td>
+                    <td style='border:none;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><span lang=EN-US style='font-family:"Courier New"'>
+                                <o:p>&nbsp;</o:p>
+                            </span></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><span
+                                style='font-family:"Courier New"'>Developer</span><span lang=EN-US
+                                style='font-family:"Courier New"'>
+                                <o:p></o:p>
+                            </span></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid windowtext 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><b><span style='font-family:"Courier New"'>${plan.developername}</span></b><b><span lang=EN-US style='font-family:"Courier New"'>
+                                    <o:p></o:p>
+                                </span></b></p>
+                    </td>
+                </tr>
+                <tr style='height:1.0pt'>
+                    <td
+                        style='border-top:none;border-left:solid windowtext 1.0pt;border-bottom:solid gray 1.0pt;border-right:none;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><span style='font-family:"Courier New"'>Load
+                                Type<o:p></o:p></span></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><b><span style='font-family:"Courier New"'>${plan.loadtype}
+                                    <o:p></o:p></span></b></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><span
+                                style='font-family:"Courier New"'>Manager</span><span lang=EN-US
+                                style='font-family:"Courier New"'>
+                                <o:p></o:p>
+                            </span></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid windowtext 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal style='line-height:150%'><b><span
+                                    style='font-family:"Courier New"'>${plan.devmamangername}
+                                    </span></b><b><span lang=EN-US style='font-family:"Courier New"'>
+                                    <o:p></o:p>
+                                </span></b></p>
+                    </td>
+                </tr>
+                <tr style='height:1.0pt'>
+                    <td
+                        style='border-top:none;border-left:solid windowtext 1.0pt;border-bottom:solid gray 1.0pt;border-right:none;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>
+                                <o:p>&nbsp;</o:p>
+                            </span></p>
+                    </td>
+                    <td style='border:none;border-bottom:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>
+                                <o:p>&nbsp;</o:p>
+                            </span></p>
+                    </td>
+                    <td style='border:none;border-bottom:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>
+                                <o:p>&nbsp;</o:p>
+                            </span></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid windowtext 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>
+                                <o:p>&nbsp;</o:p>
+                            </span></p>
+                    </td>
+                </tr>
+                <tr style='height:1.0pt'>
+                    <td
+                        style='border-top:none;border-left:solid windowtext 1.0pt;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;background:#D9D9D9;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>System<o:p></o:p></span></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;background:#D9D9D9;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>LOADSET STATUS<o:p></o:p></span>
+                        </p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;background:#D9D9D9;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>LOAD DATE<o:p></o:p></span></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid windowtext 1.0pt;background:#D9D9D9;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>SEGMENTS<o:p></o:p></span></p>
+                    </td>
+                </tr>
+                 #foreach( $system in $plan.prodSystemDetails )
+                <tr style='height:1.0pt'>
+                    <td
+                        style='border-top:none;border-left:solid windowtext 1.0pt;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>${system.targetsystem}<o:p></o:p></span></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>${system.prodstatus}<o:p></o:p></span></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid gray 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>${system.loaddatetime}<o:p></o:p>
+                            </span></p>
+                    </td>
+                    <td
+                        style='border-top:none;border-left:none;border-bottom:solid gray 1.0pt;border-right:solid windowtext 1.0pt;padding:0in 5.4pt 0in 5.4pt;height:1.0pt'>
+                        <p class=MsoNormal><span style='font-family:"Courier New"'>${system.programname}<o:p></o:p></span></p>
+                    </td>
+                </tr>
+               #end
+            </table>
+            <br>
+        </div>
+
+    </div>
+</body>
+
+</html>

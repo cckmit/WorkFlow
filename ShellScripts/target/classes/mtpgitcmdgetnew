@@ -1,0 +1,118 @@
+#!/bin/bash
+#shellcheck disable=SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdgetnew                                              #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to Pull from origin repository                                  #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation id with core reference                            #
+#      $2  - Get latest reference "origin,prod,dependancy"                    #
+#      $3  - Dependant implementation plan id with comma seprator             #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   06092017    ARUL    Created the script                                    #
+#   04252019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ImplementationID="$1";                 #Read impl id with core from input
+RemoteRef="$2"                         #Remote reference to get update
+DependencyList="$3"                    #Read dependency list from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplementationID} ${RemoteRef} ${DependencyList} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+# Get latest from the remote branch
+function getLatest {
+  local _RC;
+  getRepoList; _RC=$?;                 #Get active repository from project dir
+  if [ "${RemoteRef}" == "origin" ]; then
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Pull chances from origin repository initiated RC:$RC"
+    echo -e "\\nINFO: Pull chances from origin repository initiated..."; #CONSOLE
+    git submodule update &> /dev/null
+    git pull origin "${USR_MASTER_CORE}" &> /dev/null; _RC=$?;
+    if [ "$_RC" -ne 0 ]; then
+      grep ">>>" .gitmodules &> /dev/null; _RC=$?
+      if [ "$_RC" -eq 0 ]; then
+        sed -i '/<<<\|===\|>>>/d' .gitmodules
+      fi
+      git commit -am "Submodules updated" &> /dev/null
+    fi
+    git pull origin "${USR_MASTER_CORE}" &> /dev/null; _RC=$?;
+    if [ "$_RC" -eq 0 ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Pull changes from origin repository - completed RC:$_RC"
+      echo -e "\\nINFO: Pull changes from origin repository - completed."; #CONSOLE
+    elif [ "$_RC" -eq 128 ]; then
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to pull changes from origin repository RC:$_RC"
+      echo -e "\\nERROR: Unable to pull changes from origin repository."; #CONSOLE
+      _RC="$EC";
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Automatic merge failed; fix conflicts and then commit the result RC:$EC"
+      echo -e "\\nERROR: Automatic merge failed; fix conflicts and then commit the result."; #CONSOLE
+      _RC="$EC";
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:This feature not yet implemented RC:$EC"
+    echo -e "\\nERROR: This feature not yet implemented."; #CONSOLE
+    _RC="$EC";
+  fi
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  getParmFromBranch "${ImplementationID}" "USR"; RC=$?; #Extract parm from input
+  if [ "$RC" -eq 0 ]; then
+    pushd "${USR_IMPL_CWRK}" &> /dev/null; #Change from origin to project dir
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Switch to project dir - ${USR_IMPL_CWRK} RC:$RC"
+      echo -e "\\nINFO: Switch to project dir - ${USR_IMPL_CWRK}";     #CONSOLE
+      getGitStatus; RC=$?;             #Validate git project status
+      if [ "$RC" -eq 0 ]; then
+        getActiveBranch; RC=$?;        #Get active branch from project dir
+        if [ "${USR_ACT_BRANCH}" == "${ImplementationID}" ]; then
+          #getLatest; RC=$?;           #Dedect remote repo and do git pull
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:getLatest skipped RC:$RC"
+          echo -e "getLatest skipped" &> /dev/null #Due to checkin implemented
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_ACT_BRANCH} - branch detached | Git local repository actions interrupted possibly due to unintended user action on source artifacts. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:$RC"
+          echo -e "\\nERROR: Git local repository actions interrupted possibly due to unintended user action on source artifacts. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}).";    #CONSOLE
+          RC="$EC";
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_IMPL_CWRK} - Not a valid git project | Git local repository deleted possibly due to unintended user action on the .git folder. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:$RC"
+        echo -e "\\nERROR: Git local repository deleted possibly due to unintended user action on the .git folder. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^})."; #CONSOLE
+      fi
+    popd &> /dev/null;                 #Return to origin
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplementationID} ${RemoteRef} ${DependencyList} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

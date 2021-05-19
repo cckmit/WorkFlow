@@ -1,0 +1,44 @@
+<md-dialog aria-label="dbcr" style="width:30%">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2 style="color:#fff;">
+                    <i class="fa fa-clock-o"></i> Switch timezone
+                </h2>
+                <span flex></span>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content padding-bottom-none">
+                <div class="row">
+                    <div class="col-md-4">
+                        <label style="padding: 10px 0px;"> Timezone </label>
+                    </div>
+                    <div class="col-md-8">
+                        <select ng-model="setting.selectedTimezone" id="settingTimeZone" class="form-control" aria-label="settingtimezone">
+                                        <option value="{{tz.value}}"
+                                                ng-repeat="tz in setting.timezoneList"
+                                                ng-selected="tz.value === setting.selectedTimezone">
+                                            {{ tz.timezone }}
+                                        </option>
+                                    </select>
+                    </div>
+                </div>
+                <br/>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+            <!-- <div class="flex-2" style="justify-content: flex-start">
+                <p style="color:#aaa;">*Logout and Login to take effect</p>
+            </div> -->
+            <md-button ng-click="setDefault()">
+                Set Default
+            </md-button>
+            <md-button class="md-primary" ng-click="setTimezone()">
+                Set Timezone
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

@@ -1,0 +1,26 @@
+<md-dialog aria-label="loadsetDeactivateChangeComment" style="width:40%;">
+        <form ng-cloak>
+            <md-toolbar>
+                <div class="md-toolbar-tools">
+                    <h2 style="color:#fff;">
+                       Reason for Loadset Deactivation
+                    </h2>
+                    <span flex></span>
+                </div>
+            </md-toolbar>
+            <md-dialog-content>
+                <div class="md-dialog-content">
+                    <textarea ng-model="ld.loadsetDeactivateChangeComment" class="form-control" placeholder="Provide Comments Here" required></textarea>
+                    <span ng-show="ld.showMessageError" class="requiredField">*Required</span>
+                </div>
+            </md-dialog-content>
+            <md-dialog-actions layout="row">
+                <md-button ng-click="cancel()">
+                    Cancel
+                </md-button>
+                <md-button class="md-primary" ng-click="proceedSaveComment()">
+                    OK
+                </md-button>
+            </md-dialog-actions>
+        </form>
+    </md-dialog>

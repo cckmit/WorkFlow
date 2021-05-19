@@ -1,0 +1,351 @@
+<div class="systemTasks">
+    <!-- ng-init="vm.rfcProcessList(pObj, pObj.systemLoadList[0].systemId.name)" -->
+    <ul class="nav nav-tabs" style="padding-top: 5px; background: linear-gradient(45deg, #067cab, #26A69A);">
+        <li style="margin-left:10px;" ng-repeat="sObj in pObj.systemLoadList"
+            ng-init="vm.rfcProcessList(pObj,  pObj.systemLoadList[0].systemId.name)"
+            ng-click="vm.rfcProcessList(pObj, sObj.systemId.name)" ng-class="$index == 0 ? 'active' : ''">
+            <a data-target="#associatedRfc_{{sObj.systemId.name}}" data-toggle="tab"
+                aria-expanded="true">{{sObj.systemId.name}}</a>
+            <!--  -->
+        </li>
+    </ul>
+    <div class="row" ng-if="pObj.rfcDetails.length == 0">
+        <div class="col-md-6" style="text-align:left;padding-top:20px">
+            <div class="row" id="associatedRfc_{{sObj.systemId.name}}" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Associated RFC #<span ng-if="currentRole == 'DLCoreChangeTeam'" class="requiredField">* </span></span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                        <!-- <input type="text" class="form-control input-sm rfcNumber_input" ng-model="pObj.rfcDetails.rfcNumber" -->
+                            <!-- ng-disabled="disableOnlyRFC()"> -->
+                    <form name="form" >
+                        <div>
+                            <input name="rfcNumber" type="text" placeholder="Enter rfcNumber" pattern="^CHG[0-9]{7}" 
+                                class="form-control input-sm rfcNumber_input"  maxlength="10" ng-model="pObj.rfcDetails.rfcNumber[$index+1]" 
+                                ng-disabled="disableOnlyRFC()" required>
+                        </div>
+                    </form>
+                    <div class="rfcValidation" ng-if="pObj.rfcDetails.rfcNumber[$index+1] == undefined && !disableOnlyRFC()">
+                    <span class="requiredField">* </span>
+                        RFC Number should start with CHG followed by 7 Digit number
+                    </div>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Break-Fix/Expedited justification<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <input type="text" class="form-control input-sm" ng-model="pObj.rfcDetails.rfcDesc" ng-disabled="disableFields">
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">TPF Resources Impact<span class="requiredField">*</span></span>
+                    <span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <select ng-model="pObj.rfcDetails.impactLevel" class="form-control input-sm" placeholder="TPF Resources Impact"
+                        ng-disabled="disableFields">
+                        <option ng-repeat="impact in impactLevel">{{impact}}</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Configuration Item<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <select ng-model="pObj.rfcDetails.configItem" class="form-control input-sm" placeholder="Configuration Item(s)"
+                        ng-disabled="disableFields">
+                        <option ng-repeat="data in vm.configList">{{data}}</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Does VS use this process?<span class="requiredField">* </span>
+                    </span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <md-checkbox ng-model="pObj.rfcDetails.vsFlag" aria-label="vsFlag" ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <md-radio-group ng-model="pObj.rfcDetails.vsFlag" class="md-primary"  ng-disabled="disableFields" layout="row">
+                      <md-radio-button value="true" ng-disabled="disableFields" flex>Yes</md-radio-button>
+                      <md-radio-button value="false" ng-disabled="disableFields" flex>No</md-radio-button>
+                    </md-radio-group>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Test script attached on approvals tab?<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon marginMin12">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <md-checkbox ng-model="pObj.rfcDetails.vsFlag" aria-label="vsFlag" ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <md-radio-group ng-model="pObj.rfcDetails.isTestScriptAttached" class="md-primary marginTopPlus10"  ng-disabled="disableFields" layout="row"
+                    >
+                      <md-radio-button value="true" ng-disabled="disableFields" flex>Yes</md-radio-button>
+                      <md-radio-button value="false" ng-disabled="disableFields" flex>No</md-radio-button>
+                    </md-radio-group>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Business approval attached on approvals tab?<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon marginMin12">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <md-checkbox ng-model="pObj.rfcDetails.vsFlag" aria-label="vsFlag" ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <md-radio-group ng-model="pObj.rfcDetails.isBusinessApprovalAttached" class="md-primary marginTopPlus10"  ng-disabled="disableFields" 
+                        layout="row">
+                      <md-radio-button value="true" ng-disabled="disableFields" flex>Yes</md-radio-button>
+                      <md-radio-button value="false" ng-disabled="disableFields" flex> No </md-radio-button>
+                    </md-radio-group>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Ready to schedule an RFC?<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <md-checkbox ng-model="pObj.rfcDetails.vsFlag" aria-label="vsFlag" ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <md-radio-group ng-model="pObj.rfcDetails.readyToSchedule" class="md-primary"  ng-disabled="disableFields" 
+                        layout="row" >
+                      <md-radio-button value="true" ng-disabled="disableFields" flex>Yes</md-radio-button>
+                      <md-radio-button value="false" ng-disabled="disableFields" flex> No </md-radio-button>
+                    </md-radio-group>
+                </div>
+            </div>
+            <div ng-if="(currentRole === 'DLCoreChangeTeam')">
+                <md-button style="background: #009688;color: white;" class="rfcSave" ng-click="saveRFC(pObj, $index)" ng-disabled="form.$invalid || saveRFCLoader">
+                    <span ng-if="saveRFCLoader">
+                        <i class="fa fa-spinner fa-pulse" style="color:white"></i></span> Save
+                </md-button>
+            </div>
+            <div ng-if="(currentRole === 'Lead')">
+                <md-button style="background: #009688;color: white;" ng-disabled="saveRFCLoader" ng-click="saveRFC(pObj, $index)">
+                    <span ng-if="saveRFCLoader">
+                        <i class="fa fa-spinner fa-pulse" style="color:white"></i></span>  Save
+                </md-button>
+            </div>
+        </div>
+        <div class="col-md-6" style="text-align:left;padding-top:20px" ng-if="pObj.rfcDetails.vsFlag == 'true'">
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;padding-left: 5px">
+                    <span class="dataTitle">What area of VS does this affect?</span><span class="requiredField">* </span><span
+                        class="pull-right semiColon" >:</span>
+                </div>
+                <div class="col-md-6">
+                    <input type="text" class="form-control input-sm" ng-model="pObj.rfcDetails.vsArea" ng-disabled="disableFields">
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;" ng-show="pObj.rfcDetails.vsFlag">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;padding-left: 5px">
+                    <span class="dataTitle">Can VS test this?<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <md-checkbox ng-model="pObj.rfcDetails.vsTestFlag" aria-label="vsTestFlag" ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <md-radio-group ng-model="pObj.rfcDetails.vsTestFlag" class="md-primary"  ng-disabled="disableFields" layout="row">
+                      <md-radio-button value="true" ng-disabled="disableFields" flex>Yes</md-radio-button>
+                      <md-radio-button value="false" ng-disabled="disableFields" flex> No </md-radio-button>
+                    </md-radio-group>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;" ng-show="pObj.rfcDetails.vsFlag">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;padding-left: 5px">
+                    <span class="dataTitle">What will VS see with this change?<span class="requiredField">* </span>
+                    <span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6" >
+                    <!-- <md-checkbox ng-model="pObj.rfcDetails.vsChangeFlag" aria-label="vsChangeFlag" ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <input type="text" ng-model="pObj.rfcDetails.vsDesc" aria-label="vsChangeFlag" ng-disabled="disableFields"
+                        class="form-control input-sm">
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Update Function -->
+    <div class="row" ng-if="pObj.rfcDetails.length > 0">
+
+        <div class="col-md-6" style="text-align:left;padding-top:20px">
+            <div class="row" id="associatedRfc_{{sObj.systemId.name}}" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Associated RFC #</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <input type="text" class="form-control input-sm" ng-model="pObj.rfcDetails[0].rfcDetails.rfcNumber" -->
+                        <!-- ng-disabled="disableOnlyRFC()"> -->
+                    <form name="form">
+                        <div>
+                            <input name="rfcNumber" type="text" placeholder="Enter rfcNumber" pattern="^CHG[0-9]{7}" 
+                                class="form-control input-sm rfcNumber_input"  maxlength="10" 
+                                ng-model="pObj.rfcDetails[0].rfcDetails.rfcNumber" 
+                                ng-disabled="disableOnlyRFC()" required>
+                        </div>
+                    </form>
+                    <div class="rfcValidation" ng-if="!pObj.rfcDetails[0].rfcDetails.rfcNumber && !disableOnlyRFC()">
+                        <span class="requiredField">* </span>
+                        RFC Number should start with CHG followed by 7 Digit number
+                    </div>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Break-Fix/Expedited justification<span class="requiredField">* </span><span class="pull-right semiColon">:</span></span>
+                    
+                </div>
+                <div class="col-md-6">
+                    <input type=text ng-model="pObj.rfcDetails[0].rfcDetails.rfcDesc" ng-disabled="disableFields"
+                        class="form-control input-sm">
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">TPF Resources Impact<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <select ng-model="pObj.rfcDetails[0].rfcDetails.impactLevel" placeholder="TPF Resources Impact"
+                        ng-disabled="disableFields" class="form-control input-sm">
+                        <option ng-repeat="impact in impactLevel">{{impact}}</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Configuration Item<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <select ng-model="pObj.rfcDetails[0].rfcDetails.configItem" placeholder="Configuration Item(s)"
+                        ng-disabled="disableFields" class="form-control input-sm">
+                        <option ng-repeat="data in vm.configList">{{data}}</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Does VS use this process ?<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <md-checkbox ng-model="pObj.rfcDetails[0].rfcDetails.vsFlag" aria-label="vsFlag" -->
+                        <!-- ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <md-radio-group ng-model="pObj.rfcDetails[0].rfcDetails.vsFlag" class="md-primary"  
+                        ng-disabled="disableFields" layout="row">
+                      <md-radio-button ng-value="true" ng-disabled="disableFields" flex>Yes</md-radio-button>
+                      <md-radio-button ng-value="false" ng-disabled="disableFields" flex>No</md-radio-button>
+                    </md-radio-group>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Test script attached on approvals tab?<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon marginMin12">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <md-checkbox ng-model="vm.vsFlag" aria-label="vsFlag" ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <md-radio-group ng-model="pObj.rfcDetails[0].rfcDetails.isTestScriptAttached" class="md-primary marginTopPlus10"  ng-disabled="disableFields" layout="row"
+                    >
+                      <md-radio-button ng-value="true" ng-disabled="disableFields" flex>Yes</md-radio-button>
+                      <md-radio-button ng-value="false" ng-disabled="disableFields" flex>No</md-radio-button>
+                    </md-radio-group>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Business approval attached on approvals tab?<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon marginMin12">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <md-checkbox ng-model="vm.vsFlag" aria-label="vsFlag" ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <md-radio-group ng-model="pObj.rfcDetails[0].rfcDetails.isBusinessApprovalAttached" class="md-primary marginTopPlus10"  
+                        ng-disabled="disableFields" layout="row" >
+                      <md-radio-button ng-value="true" ng-disabled="disableFields" flex>Yes</md-radio-button>
+                      <md-radio-button ng-value="false" ng-disabled="disableFields" flex> No </md-radio-button>
+                    </md-radio-group>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;">
+                    <span class="dataTitle">Ready to schedule an RFC?<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <md-checkbox ng-model="vm.vsFlag" aria-label="vsFlag" ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <md-radio-group ng-model="pObj.rfcDetails[0].rfcDetails.readyToSchedule" class="md-primary"   
+                        layout="row" >
+                      <md-radio-button ng-value="true" ng-disabled="disableFields" flex>Yes</md-radio-button>
+                      <md-radio-button ng-value="false" ng-disabled="disableFields" flex> No </md-radio-button>
+                    </md-radio-group>
+                </div>
+            </div>
+            <div ng-if="(currentRole === 'DLCoreChangeTeam')">
+                <md-button style="background: #009688;color: white;" class="rfcUpdate" ng-click="updateRFC(pObj, $index)" ng-disabled="form.$invalid || saveRFCLoader">
+                    <span ng-if="saveRFCLoader">
+                        <i class="fa fa-spinner fa-pulse" style="color:white"></i></span> Update
+                </md-button>
+            </div>
+            <div ng-if="(currentRole === 'Lead')">
+                <md-button style="background: #009688;color: white;" ng-disabled= "saveRFCLoader"ng-click="updateRFC(pObj, $index)">
+                    <span ng-if="saveRFCLoader">
+                        <i class="fa fa-spinner fa-pulse" style="color:white"></i></span> Update
+                </md-button>
+            </div>
+        </div>
+        <div class="col-md-6" style="text-align:left;padding-top:20px" ng-if="pObj.rfcDetails[0].rfcDetails.vsFlag == true">
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;padding-left: 5px">
+                    <span class="dataTitle">What area of VS does this affect?<span class="requiredField">* </span></span>
+                    <span class="pull-right semiColon" >:</span>
+                </div>
+                <div class="col-md-6">
+                    <input type=text ng-model="pObj.rfcDetails[0].rfcDetails.vsArea" class="form-control input-sm"
+                        ng-disabled="disableFields">
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;padding-left: 5px">
+                    <span class="dataTitle">Can VS test this?<span class="requiredField">* </span></span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <!-- <md-checkbox ng-model="pObj.rfcDetails[0].rfcDetails.vsTestFlag" aria-label="vsTestFlag" -->
+                        <!-- ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <md-radio-group ng-model="pObj.rfcDetails[0].rfcDetails.vsTestFlag" class="md-primary"  layout="row">
+                      <md-radio-button ng-value="true" ng-disabled="disableFields" flex>Yes</md-radio-button>
+                      <md-radio-button ng-value="false"  ng-disabled="disableFields" flex> No </md-radio-button>
+                    </md-radio-group>
+                </div>
+            </div>
+            <div class="row" style="margin:10px 0;">
+                <div class="col-md-6" style="font-size: 14px;font-weight: 600;padding-left: 5px">
+                    <span class="dataTitle">What will VS see with this change?<span class="requiredField">* </span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6" >
+                    <!-- <md-checkbox ng-model="pObj.rfcDetails[0].rfcDetails.vsChangeFlag" aria-label="vsChangeFlag" -->
+                        <!-- ng-disabled="disableFields"> -->
+                    <!-- </md-checkbox> -->
+                    <input type="text" ng-model="pObj.rfcDetails[0].rfcDetails.vsDesc" aria-label="vsChangeFlag" 
+                    ng-disabled="disableFields"class="form-control input-sm">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

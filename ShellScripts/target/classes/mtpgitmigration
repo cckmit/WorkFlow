@@ -1,0 +1,197 @@
+#!/bin/bash
+# shellcheck disable=SC2207,SC1117,SC2034,SC2179,SC2002,SC2128,SC2178,SC2086
+#*****************************************************************************#
+#   SCRIPT NAME: mtpmigration                                                 #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to Automate migration related jobs in single shot, Mcf analysis #
+#      creation prod repo migration non-ibm to prod SCM GIT repository        #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Source Core                                                      #
+#      $2  - RepoOwner                                                        #
+#      $3  - Verification proceed with analysis Yes only verification No      #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull code migration.                               #
+#      exit with 8, error message                                             #
+#                                                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   04262018    VINOTH       Created the script                               #
+#   10042018    ARUL         Updated with progress bar support                #
+#   04292019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+SourceCore="$1";                       #Read core data as input
+RepoOwner="$2";                        #Repo Owner
+Migrationtype="$3";                    #For analysis No aswell migration Yes
+#
+SECONDS=0;
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+#
+#-------------------DELTA MIGRATION SECTION-----------------------------------#
+function deltaMigration {
+  local PackResult;
+  echo -e "Delta - Migration Analysis started for ${SourceCore}"
+  #if [ -f "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate.txt" ]; then
+    # shellcheck disable=2086
+    #bash ${MTP_ENV}/mtpgitmigaratenonibm "${SourceCore}" &> /dev/null ; _RC=$?;
+    #if [[ "${_RC}" -eq 0 ]]; then
+      if [ -f "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt" ]; then
+        grep -v 'OK ' "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt"
+        PackResult=($(cat /migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt | awk '{print $3}' | sort |uniq|tr '\n' ' '))
+        echo -e ""
+        echo -e "INFO: Functional Packages are ${PackResult[*]}"
+        if [[ "${Migrationtype}" == "prodmigration" ]]; then
+          if [[ ! -z "${PackResult[0]}" ]]; then
+            if [ -f "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_error.log" ]; then
+              rm -f "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_error.log"; # Error log
+            fi
+            mkdir -p "/migrate/ztpfsys/${SourceCore}/tools/scmrepos"
+            mv "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt" "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.master.txt"
+            for((i=0; i<${#PackResult[*]}; i++));
+            do
+              bash ${MTP_ENV}/mtpgitcreateprodrepo "tpf" "dl" "nonibm" "${PackResult[i],,}" "${PackResult[i]^^}" "${RepoOwner}"; _RC=$?;
+              if [ "${_RC}" -eq 0 ]; then
+                sleep 5
+                grep "${PackResult[i]^^}" "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.master.txt" > "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt"
+                bash ${MTP_ENV}/mtpgitmigrateprodrepo "MCF" "${SourceCore}" "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt" "ssh://${PRD_RHOST}:${PRD_SRC_PORT}/tpf/dl/nonibm/nonibm_${PackResult[i],,}.git"; _RC=$?;
+                if [ "${_RC}" -eq 0 ]; then
+                  echo -e "INFO: Production Migration completed, Please verify gitblit Delta prod repository for nonibm_${PackResult[i]} and branch ${SourceCore} functional package"
+                else
+                  echo -e "INFO: Production Migration failed for ${PackResult[i],,}.git and continue migration"
+                  echo -e "ERROR: Production Migration failed for ${PackResult[i],,}.git" >> "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_error.log"
+                  #break;
+                fi
+                mv "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt" "/migrate/ztpfsys/${SourceCore}/tools/scmrepos/${SourceCore}_migrate_scm_${PackResult[i]^^}.txt"
+              else
+                echo -e "ERROR: creation of repository in git for ${PackResult[i],,}"; _RC=${EC};
+              fi
+              let _start=(${i}+1)
+              ProgressBar ${_start} ${#PackResult[@]} ${PackResult[i]^^}
+            done
+          fi
+        else
+          echo -e "INFO: Delta - Migration Analysis finised for ${SourceCore}"; _RC=${RC};
+        fi
+      else
+        echo -e "ERROR: Migration SCM input file for prodmigration is missing Please verify in /ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt"; _RC=${EC};
+      fi
+    #else
+    #  echo -e "ERROR: Migration Analysis Failed"; _RC=${EC};
+    #fi
+  #else
+  #  echo -e "ERROR: Migration MCF analysis file is missing under /ztpfsys/${SourceCore}/tools/"; _RC=${EC};
+  #fi
+  return "${_RC}"
+}
+#
+#-------------------TRAVELPORT MIGRATION SECTION------------------------------#
+function travelportMigration {
+  local PackResult;
+  echo -e "TravelPort - Migration Analysis started for ${SourceCore}"
+  #if [ -f "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate.txt" ]; then
+    # shellcheck disable=2086
+    #bash ${MTP_ENV}/mtpgitmigaratenonibm "${SourceCore}" &> /dev/null; _RC=$?;
+    #if [[ "${_RC}" -eq 0 ]]; then
+      if [ -f "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt" ]; then
+        # shellcheck disable=2002
+        grep -v 'OK ' "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt"
+        PackResult=($(cat /migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt | awk '{print $3}' | sort |uniq|tr '\n' ' '))
+        echo -e ""
+        echo -e "INFO: Functional Packages are ${PackResult[*]}"
+        if [[ "${Migrationtype}" == "prodmigration" ]]; then
+          if [[ ! -z "${PackResult[0]}" ]]; then
+            if [ -f "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_error.log" ]; then
+              rm -f "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_error.log"; # Repo error log
+            fi
+            mkdir -p "/migrate/ztpfsys/${SourceCore}/tools/scmrepos"; # successful migration functional packs
+            mv "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt" "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.master.txt"
+            for((i=0; i<${#PackResult[*]}; i++));
+            do
+              bash ${MTP_ENV}/mtpgitcreateprodrepo "tpf" "tp" "nonibm" "${PackResult[i],,}" "${PackResult[i]^^}" "${RepoOwner}"; _RC=$?;
+              if [ "${_RC}" -eq 0 ]; then
+                sleep 5
+                grep -w "${PackResult[i]^^}" "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.master.txt" > "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt"
+                bash ${MTP_ENV}/mtpgitmigrateprodrepo "MCF" "${SourceCore}" "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt" "ssh://${PRD_RHOST}:${PRD_SRC_PORT}/tpf/tp/nonibm/nonibm_${PackResult[i],,}.git"; _RC=$?;
+                if [ "${_RC}" -eq 0 ]; then
+                  echo -e "INFO: Production Migration completed, Please verify gitblit TravelPort prod repository for nonibm_${PackResult[i]} and branch ${SourceCore} functional package"
+                else
+                  echo -e "INFO: Production Migration failed for nonibm_${PackResult[i],,}.git and continue migration"
+                  echo -e "ERROR Production Migration failed for ${PackResult[i],,}.git" >> "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_error.log"
+                  #break;
+                fi
+                mv "/migrate/ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt" "/migrate/ztpfsys/${SourceCore}/tools/scmrepos/${SourceCore}_migrate_scm_${PackResult[i]^^}.txt"   # successful backup fun pack
+              else
+                echo -e "ERROR: creation of repository in git for ${PackResult[i],,}"; _RC=${EC};
+              fi
+              let _start=(${i}+1)
+              ProgressBar ${_start} ${#PackResult[@]}
+            done
+          fi
+        else
+          echo -e "INFO: TravelPort - Migration Analysis finised for ${SourceCore}"; _RC=${RC};
+        fi
+      else
+        echo -e "ERROR: Migration SCM input file for prodmigration is missing Please verify in /ztpfsys/${SourceCore}/tools/${SourceCore}_migrate_scm.txt"; _RC=${EC};
+      fi
+    #else
+    #   echo -e "ERROR: Migration Analysis Failed"; _RC=${EC};
+    #fi
+  #else
+  #  echo -e "ERROR: Please Verify MCF input file under /ztpfsys/${SourceCore}/tools/ Please verify proceed again"; _RC=${EC};
+  #fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+#
+if [ "$RC" -eq 0 ]; then
+  case "${SourceCore}" in
+      apo)
+        travelportMigration; RC=$?;
+      ;;
+      pgr)
+        travelportMigration; RC=$?;
+      ;;
+      pre)
+        travelportMigration; RC=$?;
+      ;;
+      wsp)
+        travelportMigration; RC=$?;
+      ;;
+      air)
+        deltaMigration; RC=$?;
+      ;;
+      res)
+        deltaMigration; RC=$?;
+      ;;
+      oss)
+        deltaMigration; RC=$?;
+  esac
+else
+  sendLOG "ERROR" "$0" "INPUT:invalid inputs RC:$RC"
+fi
+sendLOG "INFO" "$0" "Migration analysis/migrationcompleted in $(printf '%02dh:%02dm:%02ds\n' $(($SECONDS/3600)) $(($SECONDS%3600/60)) $(($SECONDS%60))) RC:$RC"
+echo "Migration analysis/migrationcompleted in $(printf '%02dh:%02dm:%02ds\n' $(($SECONDS/3600)) $(($SECONDS%3600/60)) $(($SECONDS%60)))"
+#-----------------------------------------------------------------------------#
+exit "${RC}"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

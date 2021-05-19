@@ -1,0 +1,3 @@
+com\tsi\workflow\gbldap\TPLdapSyncService.class
+com\tsi\workflow\gbldap\TPLdapAuthProvider.class
+com\tsi\workflow\gbuser\TPUserService.class

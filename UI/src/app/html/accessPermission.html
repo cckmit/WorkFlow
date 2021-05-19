@@ -1,0 +1,235 @@
+<section class="content scrollingFunction" id="scroll_function">
+    <div class="col-md-12 animated slideInLeft">
+        <div class="row">
+            <div class="well well-sm" style="background-color:#fff;height: 85vh;">
+                <div class="row col-md-12">
+                    <fieldset style="background: white;">
+                        <legend>
+                            Notification
+                        </legend>
+                        <div class="row">
+                            <div class="col-md-12" style="padding-left:25px">
+                                <md-checkbox style="margin-bottom: 0px" md-no-ink
+                                    aria-label="Receive All Notification Emails" ng-change="changeEmailNotify()"
+                                    ng-model="vm.notifyEmails" class="md-primary">
+                                    Receive All Notification Emails
+                                </md-checkbox>
+                            </div>
+                        </div>
+                        <br>
+
+                    </fieldset>
+                </div>
+                <div class="row margin-none style=" height:65% "">
+                    <div class="col-md-4  padding-none height-inherit">
+
+                        <fieldset style="background: white;">
+                            <legend>
+                                Default Permissions for Repository
+                            </legend>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <label>Repository
+                                        <span class="requiredField">*</span>
+                                        <span style="color:#aaa;" ng-if="ProductionRepoList.length == 0">
+                                            No data found</span>
+                                    </label>
+                                    <select name="functionalArea" ng-model="vm.defaultfunctionArea"
+                                        ng-change="chooseFunctionalArea(vm.defaultfunctionArea)" class="form-control">
+                                        <option ng-hide="vm.defaultfunctionArea" value="">Select</option>
+                                        <option value="{{repo.repository.name}}" title="{{repo.repository.name}}"
+                                            ng-repeat="repo in ProductionRepoList" aria-label="{{repo.name}}">
+                                            {{ repo.repository.name | getRepoName}}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+                            <br>
+
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <label>Permissions
+                                        <!-- <span class="requiredField">*</span> -->
+                                        <span style="color:#aaa;"
+                                            ng-if="RepoPermissionList.length == 0 || RepoPermissionList == null">
+                                            No data found</span>
+                                    </label>
+                                    <select name="permission" ng-model="vm.defaultpermission" class="form-control">
+                                        <option ng-hide="vm.defaultpermission" value="">Select</option>
+                                        <option value="{{key}}" title="{{key}}"
+                                            ng-repeat="(key, value) in RepoPermissionList track by $index"
+                                            aria-label="{{permission}}">
+                                            {{ key }}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <label>Description of Functional Package
+                                        <span class="requiredField">*</span>
+                                    </label>
+                                    <md-input-container class="md-icon-float md-block mdIChange spacingThree">
+                                        <textarea id="funcDescription" aria-label="funcdesc" name="funcDescription"
+                                            ng-model="vm.repoFuncdesc"></textarea>
+                                    </md-input-container>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <label>Allow new source artifact creation
+                                        <span class="requiredField">*</span>
+                                    </label>
+                                    <md-input-container class="md-icon-float md-block">
+                                        <md-radio-group layout="row" ng-model="vm.filecreateFlag">
+                                            <md-radio-button value="Yes">Yes</md-radio-button>
+                                            <md-radio-button value="No">No</md-radio-button>
+                                        </md-radio-group>
+                                    </md-input-container>
+                                </div>
+                            </div>
+                            <br>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <button style="float:right" type="submit" ng-click="vm.SetDefault()"
+                                        class="form-inline btn btn-primary themeButton"
+                                        aria-label="Unit Testing Completed">
+                                        <span ng-if="vm.loader.setdefault">
+                                            <i class="fa fa-spinner fa-pulse" style="color:white"></i>
+                                        </span>
+                                        Update
+                                    </button>
+                                </div>
+                            </div>
+                            <br>
+
+                        </fieldset>
+                    </div>
+
+
+                    <div class="col-md-8  height-inherit">
+                        <fieldset style="background: white;">
+                            <legend>
+                                Special Permissions for Privileged Users
+                            </legend>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label>Repository
+                                        <span class="requiredField">*</span>
+                                        <span style="color:#aaa;" ng-if="ProductionRepoList.length == 0">
+                                            No data found</span>
+                                    </label>
+                                    <select name="specialfunctionalArea" ng-model="vm.specialfunctionalArea"
+                                        ng-change="chooseSpecialFunctionalArea(vm.specialfunctionalArea)"
+                                        class="form-control">
+                                        <option ng-hide="vm.specialfunctionalArea" value="">Select</option>
+                                        <option value="{{repo.repository.name}}" title="{{repo.repository.name}}"
+                                            ng-repeat="repo in ProductionRepoList" aria-label="{{repo.name}}">
+                                            {{ repo.repository.name | getRepoName}}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label>Default Permissions
+                                        <span class="requiredField"></span>
+                                    </label>
+                                    <input type="text" class="form-control" ng-value="vm.specialDelegate" disabled />
+                                </div>
+                            </div>
+                            <br>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label>Privileged User(s)
+                                        <span class="requiredField">*</span>
+                                        <span style="color:#aaa;"
+                                            ng-if="vm.repoOwnersList.length == 0 || vm.repoOwnersList == null">
+                                            No data found</span>
+                                    </label>
+
+                                    <select select2 data-placeholder="Privileged User(s)" id="repositoryOwners"
+                                        ng-model="vm.specialRepoOwners" class="form-control" multiple>
+                                        <option value="{{user.id}}"
+                                            ng-repeat="user in vm.repoOwnersList | orderBy:'displayName'">
+                                            {{user.displayName}}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label>Special Permissions
+                                        <span class="requiredField">*</span>
+                                    </label>
+                                    <select name="permission" ng-model="vm.specialpermission" class="form-control">
+                                        <option ng-hide="vm.specialpermission" value="">Select</option>
+                                        <option value="{{key}}" title="{{key}}"
+                                            ng-repeat="(key, value) in RepoPermissionList track by $index"
+                                            aria-label="{{permission}}">
+                                            {{ key }}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+                            <br>
+
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <button style="float:right" type="submit" ng-click="SetSpecial()"
+                                        class="form-inline btn btn-success themeButton"
+                                        aria-label="Unit Testing Completed">
+                                        <span ng-if="vm.loader.unitTest">
+                                            <i class="fa fa-spinner fa-pulse" style="color:white"></i>
+                                        </span>
+                                        Set Special Permission
+                                    </button>
+                                </div>
+                            </div>
+                            <br>
+                            <!-- ng-show="Object.keys(vm.repoOwnersDisplayList).length >= 0" -->
+                            <!-- <div ng-show="showOwnerList" class="pull-right"><input type="text" placeholder="Search Users" ng-model="vm.searchRepo"/></div> -->
+                            <br>
+                            <div ng-show="showOwnerList" style="margin-top:8px" class="list-group">
+                                <li class="list-group-item uploadHeader">
+                                    Special Privileged User(s)
+                                    <input class="pull-right" style="color:black" type="text" placeholder="Search Users"
+                                        ng-model="vm.searchRepo" />
+                                </li>
+                                <li ng-if='!showRepoList' class="list-group-item">
+                                    All Users have Read/Write Access.
+                                </li>
+                                <li ng-if='showRepoList' style="list-style:none;">
+                                    <ul class="nav header" style="background: rgba(44, 150, 133, 0.4);">
+                                        <li class="col-md-4 ">Users
+                                        </li>
+                                        <li class="col-md-4 ">Permission
+                                        </li>
+
+                                    </ul>
+                                    <div style="max-height: 110px;margin-bottom:10px"
+                                        class="list-group-item maxFileList col-md-12">
+                                        <div style="overflow:hidden;">
+                                            <div class="nav"
+                                                ng-repeat="(key, value) in searchFilter(vm.repoOwnersDisplayList)"
+                                                style="border-bottom: 1px solid #ddd;display: flex;align-items: center;">
+                                                <div class="col-md-4 word-wrap">
+                                                    {{expandOwnerDisplayName(key)}}
+                                                </div>
+                                                <div class="col-md-4 word-wrap">
+                                                    {{expandPermissionAbbreviations(value)}}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </li>
+                            </div>
+
+                        </fieldset>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</section>
+<!-- /.content -->

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:activiti="http://activiti.org/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" typeLanguage="http://www.w3.org/2001/XMLSchema" expressionLanguage="http://www.w3.org/1999/XPath" targetNamespace="http://www.activiti.org/test">
+  <process id="zTPFWorkflow_Implementation_Process" name="zTPFWorkflow Implementation Process Flow" isExecutable="true">
+    <startEvent id="ImplementationStart" name="Start"></startEvent>
+    <userTask id="DEVCheckoutSegments" name="Checkout Segments" activiti:formKey="checkoutSegments">
+      <extensionElements>
+        <activiti:formProperty id="implementationId" name="Implementation Id" type="string"></activiti:formProperty>
+        <activiti:formProperty id="stepImplementationFlag" name="Step Implementation Falg" type="string" required="true"></activiti:formProperty>
+      </extensionElements>
+    </userTask>
+    <userTask id="DevUnitTesting" name="Unit Testing" activiti:formKey="unitTesting">
+      <extensionElements>
+        <activiti:formProperty id="implementationId" name="Implementation Id" type="string"></activiti:formProperty>
+        <activiti:formProperty id="stepFlag" name="Step Flag" type="string"></activiti:formProperty>
+      </extensionElements>
+    </userTask>
+    <sequenceFlow id="flow3" sourceRef="DEVCheckoutSegments" targetRef="DevUnitTesting"></sequenceFlow>
+    <endEvent id="ImplementationEnd" name="End"></endEvent>
+    <sequenceFlow id="flow4" sourceRef="DevUnitTesting" targetRef="ImplementationEnd"></sequenceFlow>
+    <sequenceFlow id="flow5" sourceRef="ImplementationStart" targetRef="DEVCheckoutSegments"></sequenceFlow>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_zTPFWorkflow_Implementation_Process">
+    <bpmndi:BPMNPlane bpmnElement="zTPFWorkflow_Implementation_Process" id="BPMNPlane_zTPFWorkflow_Implementation_Process">
+      <bpmndi:BPMNShape bpmnElement="ImplementationStart" id="BPMNShape_ImplementationStart">
+        <omgdc:Bounds height="35.0" width="35.0" x="375.0" y="150.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="DEVCheckoutSegments" id="BPMNShape_DEVCheckoutSegments">
+        <omgdc:Bounds height="55.0" width="105.0" x="470.0" y="140.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="DevUnitTesting" id="BPMNShape_DevUnitTesting">
+        <omgdc:Bounds height="55.0" width="105.0" x="620.0" y="140.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="ImplementationEnd" id="BPMNShape_ImplementationEnd">
+        <omgdc:Bounds height="35.0" width="35.0" x="770.0" y="150.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
+        <omgdi:waypoint x="575.0" y="167.0"></omgdi:waypoint>
+        <omgdi:waypoint x="620.0" y="167.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow4" id="BPMNEdge_flow4">
+        <omgdi:waypoint x="725.0" y="167.0"></omgdi:waypoint>
+        <omgdi:waypoint x="770.0" y="167.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow5" id="BPMNEdge_flow5">
+        <omgdi:waypoint x="410.0" y="167.0"></omgdi:waypoint>
+        <omgdi:waypoint x="470.0" y="167.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

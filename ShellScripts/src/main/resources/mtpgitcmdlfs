@@ -1,0 +1,202 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdlfs                                                 #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to store derived artifacts in binary repository (git-lfs)       #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation ID                                                #
+#                                                                             #
+#   EXAMPLE:                                                                  #
+#      $MTP_ENV/mtpgitcmdproduction "t1700098"                                #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   31082017    ARUL    Created the script                                    #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090,SC2164,SC2155,SC2002
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ImplPlanId="$1";                       #Read Implementation name
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplPlanId} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  lCore="apo"
+  if [ -d "${STG_TPF_APP}/${ImplPlanId}" ] || [ -d "${STG_TPF_SYS}/${ImplPlanId}" ]; then
+    #Delete temp workspace if alreay exist
+    getParmFromBranch "${ImplPlanId}" "STG"; #Get workspace parm
+    [ -d "${HOME}/${USER}_${ImplPlanId}" ] && rm -rf "${HOME}/${USER}_${ImplPlanId}"
+    GIT_SSL_NO_VERIFY=true git clone -b master_apo "${PRD_BIN_RURL}/gitblit/r/tpf/tp/source/${ImplPlanId}.git" "/${HOME}/${USER}_${ImplPlanId}/${ImplPlanId}_SRC" &> /dev/null; RC=$?;
+    if [ "$RC" -eq 0 ]; then
+      pushd "${HOME}/${USER}_${ImplPlanId}"
+        pushd "${ImplPlanId}_SRC"
+        git submodule update --init
+        declare -a _srcProdUrl=$(cat .gitmodules | grep url | cut -d ' ' -f3)
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_srcProdUrl[*]} RC:$RC"
+        echo "${_srcProdUrl[*]}"
+        declare -a _srcProdPath=$(cat .gitmodules | grep path | cut -d ' ' -f3)
+        for i in "${_srcProdPath[@]}"
+        do
+          pushd "${i}"
+            git checkout "${ImplPlanId}_apo"
+          popd
+        done
+        # shellcheck disable=SC2207
+        declare -a _srcProdList=( $(find .gitref/ -type f) )
+        popd
+      popd
+      GIT_SSL_NO_VERIFY=true git clone -b master_apo "${PRD_BIN_RURL}/gitblit/r/tpf/tp/derived/${ImplPlanId}.git" "${HOME}/${USER}_${ImplPlanId}/${ImplPlanId}_BIN" &> /dev/null; RC=$?;
+      if [ "$RC" -eq 0 ]; then
+        pushd "${HOME}/${USER}_${ImplPlanId}"
+        if [ -d "${STG_TPF_APP}/${ImplPlanId}" ]; then
+          # shellcheck disable=SC2045
+          for i in $(ls -d "${STG_TPF_APP}/${ImplPlanId}"/*); do
+            lCore=${i##*/};
+            git checkout "master_${lCore}" &> /dev/null; RC=$?;
+            if [ "$RC" -eq 0 ]; then
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/lib" ] && mkdir -p lib && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/lib" . &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/load" ] && mkdir -p load && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/load" . &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/exp" ] && mkdir -p exp && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/exp" . &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/obj" ] && mkdir -p obj && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/obj" . &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/lst" ] && mkdir -p lst && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/lst" . &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/base/lib" ] && mkdir -p base/lib && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/base/lib" base/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/base/load" ] && mkdir -p base/load && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/base/load" base/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/base/exp" ] && mkdir -p base/exp && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/base/exp" base/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/base/obj" ] && mkdir -p base/obj && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/base/obj" base/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/base/lst" ] && mkdir -p base/lst && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/base/lst" base/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/bss/lib" ] && mkdir -p bss/lib && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/bss/lib" bss/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/bss/load" ] && mkdir -p bss/load && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/bss/load" bss/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/bss/exp" ] && mkdir -p bss/exp && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/bss/exp" bss/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/bss/obj" ] && mkdir -p bss/obj && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/bss/obj" bss/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/bss/lst" ] && mkdir -p bss/lst && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/bss/lst" bss/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/derived/lib" ] && mkdir -p lib && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/derived/lib" derived/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/derived/load" ] && mkdir -p load && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/derived/load" derived/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/derived/exp" ] && mkdir -p exp && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/derived/exp" derived/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/derived/obj" ] && mkdir -p obj && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/derived/obj" derived/ &> /dev/null
+              [ -d "${STG_TPF_APP}/${ImplPlanId}/${lCore}/derived/lst" ] && mkdir -p lst && cp -Ru "${STG_TPF_APP}/${ImplPlanId}/${lCore}/derived/lst" derived/ &> /dev/null
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${lCore} - remote branch having issues RC:$EC"
+              echo -e "\nERROR: ${lCore} - remote branch having issues."
+            fi
+            echo -e "derived/* binary\nlib/* binary\nload/* binary\nobj/* binary\nbase/lib/* binary\nbase/load/* binary\nbase/obj/* binary\nbss/lib/* binary\nbss/load/* binary\nbss/obj/* binary\n" > .gitattributes
+            git add . &> /dev/null
+            git commit -am "Build updated" &> /dev/null
+            git push origin "master_${lCore}" &> /dev/null; RC=$?;
+            if [ "$RC" -eq 0 ]; then
+              git checkout master
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$ImplPlanId - unable to push to remote RC:$EC"
+              echo -e "\nError: $ImplPlanId - unable to push to remote."
+            fi
+          done
+        fi
+        #
+        # NON-IBM Segments
+        #
+        if [ -d "${STG_TPF_SYS}/${ImplPlanId}" ]; then
+          pushd "${ImplPlanId}_BIN"
+          if [ ! -d "./.gitref" ]; then
+            mkdir .gitref;
+          fi
+          git submodule update --init
+          for i in "${_srcProdUrl[@]}"
+          do
+            _subName="${i##*ibm}"
+            git submodule add -f --name "./.gitref/derived${_subName%%.*}" -- "${PRD_BIN_RURL}/gitblit/r/tpf/tp/ibm/derived${_subName}" ".gitref/derived${_subName%%.*}"
+            pushd ".gitref/derived${_subName%%.*}"
+            git branch -a | grep "${ImplPlanId}_apo"; _FC=$?;
+            if [ "$_FC" -ne 0 ]; then
+              git checkout -b "${ImplPlanId}_apo"
+              git push -u origin "${ImplPlanId}_apo"
+            fi
+            popd
+          done
+          for j in "${_srcProdList[@]}"
+          do
+            echo "file-${j}"
+            j1="${j##*/}"
+            j2="${j1%.*}"
+            if [ -n "$j2" ]; then
+              pwd
+              # shellcheck disable=2207,2061,2086,2035
+              _devBinList=( $( find "${STG_TPF_SYS}/${ImplPlanId}/${lCore}" -type f \( -name *${j2}* -o -name *${j2^^}* \) ) )
+              for k in "${_devBinList[@]}"
+              do
+                echo "FILE-$k"
+                k1="${k##*/}"
+                if [[ "$k1" =~ ($EXT_TPF_APP) ]]; then
+                  echo "SKIP-$j1"
+                elif [[ "$j1" != "$k1" ]]; then
+                  _copyFile="${k##*apo/}"
+                  echo "COPY-$k"
+                  if [[ "${_copyFile}" =~ / ]]; then
+                    #echo "mkdir ${_copyFile%/*}"
+                    echo "mkdir -p .gitref/derived_${_tempCut2}/${_copyFile%/*}"
+                    mkdir -p ".gitref/derived_${_tempCut2}/${_copyFile%/*}"
+                  fi
+                  echo "copy -fr ${k} ${k##*apo/}"
+                  cp -fr "${k}" "${_copyFile}"
+                  #Production reference
+                  _tempCut0="${j#*/}"
+                  echo "${_tempCut1}"
+                  _tempCut1="${_tempCut0%%/*}"
+                  _tempCut2="${_tempCut1#*_}"
+                  echo "${_tempCut2}"
+                  echo "PWD-$PWD"
+                  echo "CP- cp -fr ${k} .gitref/${_tempCut2}/${_copyFile}"
+                  cp -fr "${k}" ".gitref/derived_${_tempCut2}/${_copyFile}"
+                fi
+              done
+            fi
+            if [ -d ".gitref/derived_${_tempCut2}" ]; then
+              pushd ".gitref/derived_${_tempCut2}"
+              git checkout "${ImplPlanId}_apo"
+              git add .
+              git commit -am "Segments copied."
+              git push -u origin "${ImplPlanId}_apo"
+              popd
+            fi
+          done
+        fi
+        popd
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$ImplPlanId - derived repo not accessible RC:$EC"
+        echo -e "\nERROR: ${ImplPlanId} - derived repo not accessible."
+      fi
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$ImplPlanId - workspace not found RC:$EC"
+    echo -e "\nERROR: ${ImplPlanId} - workspace not found."
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplPlanId} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

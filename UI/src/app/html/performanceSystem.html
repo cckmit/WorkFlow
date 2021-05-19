@@ -1,0 +1,235 @@
+<section class="animated slideInLeft scrollingFunction" id="scroll_function">
+	<section class="" style="background: #fff;margin: 10px;">
+		<div class="col-md-12">
+			<div class="row">
+				<div class="systemTasks">
+					<div class="tab-content">
+						<div class="well well-sm" style="background: #fff;margin-bottom: 10px;">
+							<div class="row margin-left-none margin-right-none">
+								<div class="row">
+									<div class="col-md-4">
+										<div class="col-md-6 padding-none">
+											<label style="margin: 4px 0;">Data Collect:</label>
+										</div>
+										<div class="col-md-6 padding-none">
+											<label style="float: left;margin: 4px 10px 0 0;">OFF</label>
+											<span style="float: left;">
+												<md-switch style="margin: 0;" md-no-ink="" ng-model="vm.switchOnOff" 
+													ng-change="performanceSwitchOfOff(vm.switchOnOff)" aria-label="Performance Switch">
+														<label>ON</label>
+												</md-switch>
+											</span>
+										</div>
+									</div>
+									<div class="col-md-8" style="text-align: right;">
+										<md-button ng-click="vm.generateUserAction($event)" class="md-raised planSaveBtn" style="background: #3c8dbc;color: white;margin: 0!important;">
+											<span>userAction</span>
+										</md-button>
+									</div> 
+								</div>
+								<div class="row marginTB-10">
+									<div class="col-md-3">
+										<label>Workflow Application
+											<span class="requiredField">*</span>
+										</label>
+										<md-input-container class="md-icon-float md-block spacingTwo">
+											<md-radio-group layout="row" ng-model="vm.performanceData.hostName">
+												<md-radio-button md-autofocus="true" id="{{pValue.name}}"
+												aria-label="platform" ng-click="selectedPlatform(pValue.id)" 
+												value="{{pValue.name}}"
+													ng-repeat="pValue in vm.pList">
+													{{pValue.name}}
+												</md-radio-button>
+											</md-radio-group>
+										</md-input-container>
+									</div>
+									<div class="col-md-3">
+										<label>Start Date
+											<span class="requiredField">*</span>
+										</label>
+										<input class="form-control" ng-model="vm.performanceData.startDates"
+											ng-model-options="{ updateOn: 'blur' }" placeholder="Choose Start date"
+											format="MM-DD-YYYY" locale="en" min-view="month"
+											moment-picker="vm.performanceData.startDates">
+									</div>
+									
+									<div class="col-md-3">
+										<label>End Date
+											<span class="requiredField">*</span>
+										</label>
+										<input class="form-control" ng-model="vm.performanceData.endDates"
+											ng-model-options="{ updateOn: 'blur' }" placeholder="Choose End date"
+											format="MM-DD-YYYY" locale="en" min-view="month"
+											moment-picker="vm.performanceData.endDates">
+									</div>
+									<div class="col-md-3">
+										<label>Start Time
+											<span class="requiredField">*</span>
+										</label>
+										<input class="form-control" ng-model="vm.performanceData.startTimes"
+											ng-model-options="{ updateOn: 'blur' }" placeholder="Choose Start time"
+											format="HH:mm:ss" locale="de"  moment-picker="vm.performanceData.startTimes">
+									</div>
+								</div>
+								<div class="row marginTB-10">
+									<div class="col-md-3 ">
+										<label>End Time
+											<span class="requiredField">*</span>
+										</label>
+										<input class="form-control performEndTime" ng-model="vm.performanceData.endTimes"
+											ng-model-options="{ updateOn: 'blur' }" placeholder="Choose End time"
+											format="HH:mm:ss" locale="de" moment-picker="vm.performanceData.endTimes">
+									</div>
+									<div class="col-md-3">
+										<label>User name:
+											<span class="requiredField">*</span>
+										</label>
+										<div class="userNameSelection moment-picker">
+											<select id="performanceUserName" ng-model="vm.performanceData.userName"
+												data-placeholder="User Name(s)" class="form-control " multiple>
+												<option value="0">
+													ALL
+												</option>
+												<option value="{{userAction.id}}" ng-repeat="userAction in vm.userNameList | orderBy: 'displayName'">
+													{{ userAction.displayName }}
+												</option>
+											</select>
+										</div>
+									</div>
+									<div class="col-md-3">
+										<label>User initiated action:
+											<span class="requiredField">*</span>
+										</label>
+										<div class="userNameSelection moment-picker">
+											<select id="performanceUserAction" ng-model="vm.performanceData.userAction"
+												data-placeholder="User Action(s)" class="form-control userNameSelection" multiple>
+												<option value="0">
+													ALL
+												</option>
+												<option value="{{user}}" ng-repeat="user in vm.userActionList | orderBy: 'user'">
+													{{ user }}
+												</option>
+											</select>
+										</div>
+									</div>
+									<div class="col-md-3">
+										<label>Implementation Plan:
+											<!-- <span class="requiredField">*</span> -->
+										</label>
+										<div class="moment-picker">
+											<input class="form-control" ng-model="vm.performanceData.planId"
+												placeholder="Provide Implementation Plan">
+										</div>
+									</div>
+									
+								</div>
+								<div class="row">
+									<div class="col-md-3">
+										<md-button ng-click="vm.submitPerformanceData(vm.performanceData)" 
+											class="md-raised planSaveBtn" 
+											style="background: #3c8dbc;color: white;margin: 10px 0 0 0!important;">
+											<span>Generate Report</span>
+										</md-button>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+	
+	<section class="" style="background: #fff;margin: 10px;">
+		<div class="col-md-12">
+			<div class="row">
+				<div class="systemTasks">
+	
+					<div ng-if="!searchKeyClickedOnScreen" class="tab-content"
+						style="background-color:#fff;color:#ddd;text-align:center;font-size:20px;padding:100px 0px;">
+						<b>Perform Search</b>
+					</div>
+					<div ng-if="vm.noDataFound" class="tab-content"
+						style="background-color:#fff;color:#ddd;text-align:center;font-size:20px;padding:100px 0px;">
+						<b>No Data Found</b>
+					</div>
+					<div class="tab-content" ng-if="searchKeyClickedOnScreen && vm.searchFlag">
+						<div style="text-align: right;">
+							<button type="submit" class="btn btn-warning" style="background: #3c8dbc;border: 0px;margin:5px;"
+								ng-click="exportReport()" aria-label="commonSearchButton">
+								<i class="fa fa-download"></i> EXPORT
+							</button>
+						</div>
+						<div style=" margin: 0 0 2em 0;" class="performanceResponseDiv">
+							<div class="row" style="margin: 0 0 10px 0;">
+								<div class="col-md-3">Workflow Application: <b>{{vm.performanceSystemReport.inputParam.hostName}}</b> </div>
+								<div class="col-md-3">Start Date: <b>{{vm.startDate}}</b> </div>
+								<div class="col-md-3">End Date: <b>{{vm.endDate}}</b></div>
+								<div class="col-md-3">Start Time: <b>{{vm.startTime}}</b> </div>
+							</div>
+							<div class="row" style="margin: 0 0 10px 0;">
+								<div class="col-md-3">End Time: <b>{{vm.endTime}}</b></div>
+								<div class="col-md-3">User Name: 
+									<span ng-if="vm.allUserName == '0' || vm.allUserName.length == 0" class="funcArea"><b>ALL<span class="funcComma">,&nbsp
+									</span> </b></span>
+									<span ng-if="vm.allUserName != '0'" ng-repeat="username in vm.performanceSystemReport.inputParam.userName"
+										class="funcArea"><b>{{username}}<span class="funcComma">,&nbsp </span> </b></span>
+								</div>
+								<div class="col-md-3">User Action: 
+									<span ng-if="vm.allUserAction == '0' || vm.allUserAction.length == 0" class="funcArea"><b>ALL<span class="funcComma">,&nbsp
+										</span> </b></span>
+									<span ng-if="vm.allUserAction != '0'" ng-repeat="useraction in vm.performanceSystemReport.inputParam.userAction"
+										class="funcArea"><b>{{useraction}}<span class="funcComma">,&nbsp </span> </b></span>
+								</div>
+								<div class="col-md-3">Impl Plan ID: <b>{{(vm.performanceSystemReport.inputParam.planId == null) ? '-' : vm.performanceSystemReport.inputParam.planId}}</b></div>
+							</div>
+							<table border="1" class="reportTable">
+								<thead class="performanceSystemResponseTheadTR">
+									<tr>
+										<th colspan="2">Start / End time</th>
+										<th colspan="2">Implementation Plan</th>
+										<th rowspan="2">User-Initiated Action</th>
+										<th rowspan="2">User Role</th>
+										<th rowspan="2">Initiated by</th>
+										<th colspan="3">Response Time</th>
+										<th colspan="3">Servers Involved</th>
+									</tr>
+									<tr>
+										<th>Date/Time - initiated</th>
+										<th>Date/Time - completed</th>
+										<th>Impl Plan #</th>
+										<th>Impl #</th>
+										<th>ms</th>
+										<th>sec</th>
+										<th>min</th>
+										<th>x686</th>
+										<th>zLinux</th>
+										<th>zOS</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr ng-repeat="performanceSystem in vm.performanceSystemReport.responseParam" class="performanceSystemResponseTbodyTR">
+										<td>{{(performanceSystem.startDateTime | dCheck) ? (performanceSystem.startDateTime | dCheck) : '-'}}</td>
+										<td>{{(performanceSystem.endDateTime | dCheck) ? (performanceSystem.endDateTime | dCheck) : '-'}}</td>
+										<td>{{(performanceSystem.planId) ? performanceSystem.planId : '-' }}</td>
+										<td>{{(performanceSystem.impId) ? performanceSystem.impId : '-'}}</td>
+										<td>{{(performanceSystem.userAction) ? performanceSystem.userAction : '-' }}</td>
+										<td>{{(performanceSystem.userRole) ? performanceSystem.userRole: '-'}}</td>
+										<td>{{(performanceSystem.userName) ? performanceSystem.userName : '-'}}</td>
+										<td>{{(performanceSystem.responseTimeMs) ? performanceSystem.responseTimeMs : '-'}}</td>
+										<td>{{(performanceSystem.responseTimeSec) ? performanceSystem.responseTimeSec : '-'}}</td>
+										<td>{{(performanceSystem.responseTimeMin) ? performanceSystem.responseTimeMin : '-'}}</td>
+										<td>{{(performanceSystem.hostName) ? performanceSystem.hostName : '-'}}</td>
+										<td>{{(performanceSystem.tdx)? performanceSystem.tdx : '-'}}</td>
+										<td>{{(performanceSystem.zOs)? performanceSystem.zOs : '-'}}</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+			</div>
+	
+		</div>
+	</section>
+</section>

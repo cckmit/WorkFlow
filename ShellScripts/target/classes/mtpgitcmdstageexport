@@ -1,0 +1,433 @@
+#!/bin/bash
+#shellcheck disable=2164,2207
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdstageexport                                         #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to export the source from implementation plan master core       #
+#             remote branch to stage workspace                                #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#         This script needs to integrated with existing export                #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Project directory path                                           #
+#      $2  - Branch name                                                      #
+#      $3  - User id (Linux)                                                  #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   01062017    ARUL    Created script                                        #
+#   11212018    VINOTH  Create new file in prod when nonprod have new file    #
+#   12022019    VINOTH  GC update policy given to prod repo                   #
+#   04292019    GOWTHAM Updated with logger support                           #
+#   05172019    GOWTHAM non-IBM .mak file update with implementtation no      #
+#   05222019    VINOTH  Githook's for JAVA to update the DB for newfile       #
+#   24062019    GOWTHAM Master branch validation and creation on repo         #
+#   09182019    VINOTH  Update create file using json API                     #
+#   02172020    VINOTH  New file creation status yes or no                    #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+shopt -s extglob nullglob              #Expand BASH options
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ImplID="$1";                           #Read ImplPlan ID
+NewFile="$2";                          #Read New file status
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+startDate=$(date +%Y%m%d%H%M%S);
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplID} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#                                JSON RESULT                                  #
+#-----------------------------------------------------------------------------#
+function jsonUpdateCommit {
+  arr=()
+  # shellcheck disable=SC2162
+  while read x y z w;
+  do
+    # shellcheck disable=SC2206
+    arr=("${arr[@]}" $x $y $z $w )
+  done  <<< "${gitCreateInfo[@]}"
+  # shellcheck disable=SC2206
+  vars=(${arr[@]})
+  len=${#arr[@]}
+  for (( i=0; i<len; i+=4 ))
+  do
+    # shellcheck disable=SC2059
+    objectRes+="{ \"fileName\":\"${vars[i]}\",\"commitId\":\"${vars[i+1]}\",\"fileHashCode\":\"${vars[i+2]}\",\"sourceUrl\":\"${vars[i+3]}\" }"
+    if [ $i -lt $((len-4)) ] ; then
+      objectRes+=","
+    fi
+  done
+}
+#-----------------------------------------------------------------------------#
+#   Nonprod file create in prod when doing STG create workspace               #
+#-----------------------------------------------------------------------------#
+function nonProdfile {
+  local _RC=${RC};
+  local _nameFile;
+  local i="";
+  local _ProdURLRepo;
+  local _newProdCreate;
+  local _submDate;
+  local _taskDate;
+  local _execDate;
+  if [[ "${USR_IMPL_PLAN}" =~ t ]]; then
+    REF_COMPANY=tp;
+  elif [[ "${USR_IMPL_PLAN}" =~ d ]]; then
+    REF_COMPANY=dl;
+  fi
+  errorMes="";
+  _execDate=$(date +%-S)
+    if [ -n "${tempDir// /}" ]; then
+      pushd "${tempDir}" &> /dev/null;
+      declare -a _srcUrl=( $(cat .gitmodules | grep url | cut -d ' ' -f3) );
+      for _srcProdUrl in "${_srcUrl[@]}";
+        do
+         _Src_repo="${_srcProdUrl##*${DEV_SRC_RURL_SMOD}/}"
+         _Src_Url="${DEV_BIN_RURL_SMOD}"/gitblit/r/"${_Src_repo}"
+         GIT_SSL_NO_VERIFY=true git ls-remote "${_Src_Url}" |grep "${USR_MASTER_CORE}"; _RC=$?;
+         if [ "${_RC}" -eq 1 ]; then
+           repo_Name="${_Src_repo##*_}"
+		       echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Implementation branch not availabe in ${repo_Name} repo"
+           _submDate=$(date +%-S)
+           bash "${MTP_ENV}/mtpgitcreatebranch" "${USR_IMPL_CORE}" "${REF_COMPANY}" "${repo_Name%.*}" ; _RC=$?;
+		       if [ "${_RC}" -eq 0 ]; then
+             echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Implementation branch created in ${repo_Name} repo RC-${_RC} - $(($(date +%-S)-_submDate))s"
+           else
+             echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Implementation branch creation in ${repo_Name} repo failed RC-${_RC} - $(($(date +%-S)-_submDate))s"
+            fi
+		       echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Implementation branch validated with ${repo_Name} repo - $(($(date +%-S)-_taskDate))s"
+           sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Branch creation for prod repo just executed RC:$EC"
+         fi
+        done
+      popd &> /dev/null
+    fi
+  _fileList=$(curl -s -k "${PRD_API_RURL_SMOD_USR}/${PRD_API_WKF}/common/getNewFileList?planId=${USR_IMPL_PLAN^^}&pSystem=${USR_IMPL_CORE^^}")
+  if [ -n "${_fileList[0]// /}" ] && [ "${_RC}" -eq 0 ] && [ "${NewFile}" == "true" ]; then
+    _newProdCreate="${HOME}/mtpNewFile_$MTP_SUSR/$ImplID"
+    rm -rf "${_newProdCreate}";
+    mkdir -p "${_newProdCreate}";
+    if [ -d "${_newProdCreate}" ]; then
+      pushd "${_newProdCreate}" &> /dev/null
+        while IFS= read -r line
+        do
+          _nameFile="${line%%,*}";             #file name
+          _ProdURLRepo="${line##*,}";       # prod server prod repo.
+          if [[ "${_nameFile}" != "NOT_FOUND" ]]; then
+            subModRepo="${_ProdURLRepo##*/}"
+            subModule="${subModRepo%%.*}"
+            git clone -b "master_${USR_IMPL_CORE}" "${_ProdURLRepo}" "${subModule}" &> /dev/null ; _RC=$?;
+		      	echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: git clone of branch master_${USR_IMPL_CORE} success RC:${_RC} - $(($(date +%-S)-_execDate))s"
+            if [ ${_RC} -ne 0 ]; then
+              rm -rf "${subModule}";
+              echo -e "WARN: $(date +"%Y-%m-%d %H:%M:%S") git clone failed, hitting curl call for git doGC Company=${REF_COMPANY} RepoName=${subModule} and try clone"
+              sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:git clone failed, hitting curl call for git doGC Company=${REF_COMPANY} RepoName=${subModule} and try clone RC:${_RC}"
+              #https://ztpfdevopstoolchainint.dv.tvlport.com:8443/JGitAPI/jgit/doGC?pCompany=tp&pRepoName=t1900801&pisSource=true
+              curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=${subModule}&pisSource=true"|grep 'true' &>/dev/null;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git GC with ${subModule} submodule index completed - $(($(date +%-S)-_taskDate))s"
+              sleep 5
+              git clone -b "master_${USR_IMPL_CORE}" "${_ProdURLRepo}" "${subModule}" &> /dev/null ; _RC=$?;
+            fi
+            if [ ${_RC} -eq 0 ]; then
+              pushd "${subModule}" &> /dev/null
+                if [ ! -f "${_nameFile}" ]; then
+                  git checkout "master_${USR_IMPL_CORE}"; _RC=$?
+                  _currentDate="$(date +%Y%m%d%H%M%S)";
+                  if [ "${_RC}" -eq 0 ]; then
+                    mkdir -p "$(dirname "$_nameFile")" && touch "$_nameFile";
+                    git add "$_nameFile";
+                    git commit -m "Date:${_currentDate}, Type:New, PlanID:${USR_IMPL_PLAN}, PlanOwner:${USER}, SourceRef:xxxxxxx, Status:newfile" -- "$_nameFile" &> /dev/null;
+                    git tag -a "newfile-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" -m "newfile-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)";
+                    getGitData "SRC" "${_newProdCreate}/${subModule}" "${USR_IMPL_PLAN}" "${_currentDate}" "false" ; _RC=$?;
+                    if [ "${_RC}" -eq 0 ]; then
+                      sendGitData "${USR_IMPL_CORE}" "false";
+                    fi
+                    retryCMD "git push origin master_${USR_IMPL_CORE} --tags &> /dev/null" "N" "N" "Company=${REF_COMPANY}&pRepoName=${subModule}&pisSource=true"; _RC=$?
+                    commitCode=$(git log -1 --pretty=format:"%H" "${_nameFile}")
+                    hashCode=$(git hash-object "${_nameFile}")
+                    remoteURL=$(git remote -v| grep fetch | awk '{print $2}')
+                    if [ "${_RC}" -eq 0 ] && [ -n "${hashCode// /}" ] && [ -n "${commitCode// /}" ] && [ -n "${remoteURL// /}" ]; then
+                      gitCreateInfo+="${_nameFile} ${commitCode} ${hashCode} ${remoteURL} "
+                    else
+                      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:GIT Failed to push new file ${_nameFile} to the remote git master repo ${subModule} RC:$EC"
+                      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: GIT Failed to push new file $_nameFile to the remote git master repo ${subModule} - $(($(date +%-S)-_taskDate))s"
+                    fi
+                  else
+                    errorMes+="$_nameFile:master_${USR_IMPL_CORE} "
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to create new file -$_nameFile into the master_${USR_IMPL_CORE} branch. Please verify production repository RC:$EC"
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Failed to create new file -$_nameFile into the master_${USR_IMPL_CORE} branch. Please verify production repository- $(($(date +%-S)-_taskDate))s"
+                  fi
+                else
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: New File:${_nameFile} is already available in master branch of ${subModule} - $(($(date +%-S)-_execDate))s"
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:New File:${_nameFile} is already available in master branch of ${subModule} RC:$EC"
+                fi
+              popd &> /dev/null
+            else
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR:Unable to clone - branch:master_${USR_IMPL_CORE} prodrepoURL:${_ProdURLRepo} submoduleDir:${subModule} - $(($(date +%-S)-_execDate))s"
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to clone - branch:master_${USR_IMPL_CORE} prodrepoURL:${_ProdURLRepo} submoduleDir:${subModule} RC:$EC"
+            fi
+            rm -Rf "${subModule}"
+          fi
+        done < <(printf '%s\n' "$_fileList")
+      popd &> /dev/null
+    fi
+    if [ -n "${gitCreateInfo[0]// /}" ]; then
+      jsonUpdateCommit
+    fi
+  fi
+}
+#-----------------------------------------------------------------------------#
+#   IBM Segments export from git to stage implementation plan worksapce       #
+#-----------------------------------------------------------------------------#
+function sysExport {
+  local _RC=0;
+  local _srcList;
+  if [ -d "${SYS_STG_IMPL_CWRK}" ]; then
+    # shellcheck disable=SC2086
+    rm -rf "${SYS_STG_IMPL_CWRK}"* &> /dev/null #Clean-up dir
+    for i in {0..2} #Retry if it's failed
+    do
+      #shellcheck disable=SC2086
+      mv -f !($DIR_TPF_APP|.*) "${SYS_STG_IMPL_CWRK}" &> /dev/null; _RC=$?;
+      if [ "${_RC}" -eq 0 ]; then
+        #Timestamp copy from DVL workspace
+        pushd "${SYS_STG_IMPL_CWRK}" &> /dev/null
+          _srcList=( $(find . -type f) )
+          for((j=0; j<${#_srcList[*]}; j++));
+          do
+            touch -r "${DVL_TPF_SYS}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}${_srcList[j]#.*}" "${SYS_STG_IMPL_CWRK%/*}/${_srcList[j]#./*}"
+          done
+        popd &> /dev/null
+        break;
+      else
+        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:NON_IBM file copy re-try - $i RC:$_RC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARNING: NON_IBM file copy re-try - $i" &> /dev/null; #DEBUG
+      fi
+    done
+    #Remove SYS workspace if it's empty
+    if [ ! "$(ls -A "${SYS_STG_IMPL_CWRK}")" ]; then
+      rm -Rf "${SYS_STG_IMPL_CWRK}"
+      #Remove SYS impl.plan if it's empty
+      if [ ! "$(ls -A "${STG_TPF_SYS}/${USR_IMPL_PLAN}")" ]; then
+        rm -Rf "${STG_TPF_SYS:?}/${USR_IMPL_PLAN}"
+      fi
+    else
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Export to ${SYS_STG_IMPL_CWRK} RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Export to ${SYS_STG_IMPL_CWRK}"
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Workspace doesn't exist - ${SYS_STG_IMPL_CWRK} RC:$_RC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Workspace doesn't exist - ${SYS_STG_IMPL_CWRK}"
+  fi
+}
+#-----------------------------------------------------------------------------#
+#   NON-IBM Segments .mac file update with implementation number              #
+#-----------------------------------------------------------------------------#
+function makImpTag {
+local _RC=0;
+  if [ -n "${_srcList[*]// /}" ]; then
+    makFile=( $(find . -type f -name '*.mak' | grep -v '.gitref' | sort -u) )
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${makFile[*]} RC:$RC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Make files updated with source reference usage in this plan - ${makFile[*]}"
+    for mF in "${makFile[@]}"
+    do
+      segSrc=($(find . -type f \( -name "*.c" -o -name "*.cpp" -o -name "*.asm" \)|grep -v '.gitref'))
+      #grepFile=( $(grep -Pn '\.c|\.asm' "${mF}") )
+      for _sSegFile in "${segSrc[@]}"
+      do
+	    #shellcheck disable=SC2086
+        grepFile=$(grep -nP '^(?!#)' "${mF}"| grep -Fw ${_sSegFile##*/})
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${grepFile[*]} RC:$RC"
+        echo -e "${grepFile[*]}"
+        IFS='$\n' read -r -a grFile <<< "${grepFile[*]}"
+        for gF in "${grFile[@]}"
+        do
+		      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Grep source entry from ${mF} file >${gF}< RC:$RC"
+          echo "$(date +"%Y-%m-%d %H:%M:%S") INFO: Grep source entry from ${mF} file >${gF}<"
+          replString="${gF#*:}"
+          replString="${replString%#*}"
+          replString=$(printf "%-61s%-0s#${ImplID%%_*}\n" "${replString}")
+          grepString="${gF// /}"
+          grepLine="${grepString%%:*}"
+          grepTemp="${grepString#*=}"
+          grepTemp="${grepTemp%#*}"
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${grepTemp} RC:$RC"
+          echo "$(date +"%Y-%m-%d %H:%M:%S") INFO: Line number ${grepLine} updated for ${grepTemp} source in ${mF} file"
+          findFile=$(find . -type f -name "${grepTemp}" | grep -v '.gitref' | sort -u)
+          # shellcheck disable=SC2076
+          if [ -n "${findFile// /}" ] && [[ "${findFile}" =~ "${grepTemp}" ]]; then
+            sed -i "${grepLine}d" "${mF}"
+            sed -i "${grepLine}i ${replString}" "${mF}"
+            echo "$(date +"%Y-%m-%d %H:%M:%S") INFO: Line number ${grepLine} updated for ${grepTemp} source in ${mF} file"
+          fi
+        done
+      done
+    done
+  fi
+}
+#-----------------------------------------------------------------------------#
+#   NON-IBM Segments export from git to stage implementation plan workspace   #
+#-----------------------------------------------------------------------------#
+function appExport {
+  local _RC=0;
+  if [ -d "${APP_STG_IMPL_CWRK}" ]; then
+    rm -rf "${APP_STG_IMPL_CWRK}"* &> /dev/null #Clean-up dir
+    if [ ${#tempDir[@]} -gt 0 ]; then
+      if [ "$(ls -A)" ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Export to ${APP_STG_IMPL_CWRK}.\\n RC:$_RC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Export to ${APP_STG_IMPL_CWRK}.\\n"
+        for i in {0..2} #Retry if it's failed
+        do
+          shopt -s dotglob; mv -- * "${APP_STG_IMPL_CWRK}"; _RC=$?;
+          if [ "${_RC}" -eq 0 ]; then
+            #Timestamp copy from DVL workspace
+            pushd "${APP_STG_IMPL_CWRK}" &> /dev/null
+              _srcList=( $(find . -type f) )
+              for((j=0; j<${#_srcList[*]}; j++));
+              do
+                touch -r "${DVL_TPF_APP}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}${_srcList[j]#.*}" "${APP_STG_IMPL_CWRK%/*}/${_srcList[j]#./*}"
+              done
+              makImpTag;
+            popd &> /dev/null
+            break;
+          else
+            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:NON_IBM file copy re-try - $i RC:$_RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARNING: NON_IBM file copy re-try - $i" &> /dev/null; #DEBUG
+          fi
+        done
+      fi
+      #Remove APP workspace if it's empty
+      if [ ! "$(ls -A "${APP_STG_IMPL_CWRK}")" ]; then
+        rm -Rf "${APP_STG_IMPL_CWRK}"
+        #Remove APP impl.plan if it's empty
+        if [ ! "$(ls -A "${STG_TPF_APP}/${USR_IMPL_PLAN}")" ]; then
+          rm -Rf "${STG_TPF_APP:?}/${USR_IMPL_PLAN}"
+        fi
+      fi
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Workspace doesn't exist - ${APP_STG_IMPL_CWRK}.\\n RC:$_RC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Workspace doesn't exist - ${APP_STG_IMPL_CWRK}.\\n"
+  fi
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ "${USER}" == "${MTP_SUSR}" ]; then
+    getParmFromBranch "${ImplID}" "STG";
+    mkdir -p "${SYS_STG_IMPL_CWRK}" "${APP_STG_IMPL_CWRK}"
+    if [ -d "${SYS_STG_IMPL_CWRK}" ] && [ -d "${APP_STG_IMPL_CWRK}" ]; then
+      if [ "${ImplID:0:1}" == "t" ]; then
+        activeRepo="${PRD_SRC_RURL}/tpf/tp/source/${USR_IMPL_PLAN}.git"
+      elif [ "${ImplID:0:1}" == "d" ]; then
+        activeRepo="${PRD_SRC_RURL}/tpf/dl/source/${USR_IMPL_PLAN}.git"
+      fi
+      originRepo="${activeRepo/\/*@///${MTP_SUSR}@}"
+      tempDir="${HOME}/mtpGit_$MTP_SUSR/$ImplID"
+      rm -rf "${tempDir}"
+	  execDate=$(date +%-S)
+      for i in {0..2} #Retry if it's failed
+      do
+        rm -rf "${tempDir}"
+        git clone -b "master_${USR_IMPL_CORE}" "${originRepo}" "${tempDir}" &> /dev/null; RC=$?;
+        if [ "${RC}" -eq 0 ]; then
+          break;
+        elif [ "${RC}" -eq 128 ]; then
+          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:git remote re-try - $i RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+          sleep 3;
+          RC="$EC";
+        else
+          RC="$EC";
+        fi
+      done
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Implementation source repository ${USR_IMPL_PLAN}.git cloned - $(($(date +%-S)-execDate))s"
+      if [ "$RC" -eq 0 ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Source export in progress... RC:$RC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Source export in progress..."
+        if [ ${#tempDir[@]} -gt 0 ]; then
+          #shellcheck disable=SC2164
+          cd "${tempDir}";
+          #Support submodule file create in prod
+          execDate=$(date +%-S)
+          nonProdfile; RC=$?;
+          if [ "$RC" -eq 0 ]; then
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: New files add into production package completed - $(($(date +%-S)-execDate))s"
+            #Remvo git support data
+            rm .git* -Rf
+            if [ -d "${SYS_STG_IMPL_CWRK}" ]; then
+              execDate=$(date +%-S)
+              sysExport;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: IBM segments export to STG workspace directory completed - $(($(date +%-S)-execDate))s"
+            else
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: There is no IBM segments to export STG workspace from this plan"
+            fi
+            if [ -d "${APP_STG_IMPL_CWRK}" ]; then
+              execDate=$(date +%-S)
+              appExport;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: NON-IBM segments export to STG workspace directory completed - $(($(date +%-S)-execDate))s"
+            else
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: There is no NON-IBM segments to export STG workspace from this plan"
+            fi
+          else
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: New files add into production package failed RC:$RC - $(($(date +%-S)-execDate))s"
+          fi
+          echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+        else
+          echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Nothing to export. RC:$RC"
+          echo -e "INFO: Nothing to export.\\n"
+        fi
+      else
+        echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to reach remote repository. RC:$EC"
+        echo -e "ERROR: Unable to reach remote repository.\\n"; RC="$EC";
+      fi
+    else
+      echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to build staging workspace path. RC:$EC"
+      echo -e "ERROR: Unable to build staging workspace path.\\n"; RC="$EC";
+    fi
+  else
+    echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Request denied for the user - $USER. RC:$EC"
+    echo -e "ERROR: Request denied for the user - $USER.\\n"; RC="$EC";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Invalid inputs"
+  echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+fi
+if [ -n "${errorMes// /}" ] && [ -z "${objectRes}" ]; then
+  echo -e "\\nJSON RESULT --> { \"errorMessage\" :\"ERROR: Failed to merge new file < ${errorMes} > branch. Please verify production repository.\"}\n";
+  RC="${EC}";
+elif [ -n "${errorMes// /}" ] && [ -n "${objectRes// /}" ]; then
+  echo -e "\\nJSON RESULT --> { \"errorMessage\" :\"ERROR: Failed to merge new file < ${errorMes} > branch. Please verify production repository.\",\"newSegmentInfo\" :[${objectRes}]}\n";
+  RC="${EC}";
+elif [ -z "${errorMes}" ]  && [ -n "${objectRes// /}" ]; then
+  echo -e "\\nJSON RESULT --> { \"newSegmentInfo\" :[${objectRes}]}\n";
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplID} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

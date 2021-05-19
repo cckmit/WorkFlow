@@ -1,0 +1,393 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdchkmak                                              #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to fetch the support .mak file for the source                   #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - source name with extention                                       #
+#      $2  - Core or system                                                   #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   05162017    ARUL    Created the script                                    #
+#   06302017 NARASHIMAN Added output messages                                 #
+#   12308017    ARUL    Common core support and permission error handled      #
+#   11142018    VINOTH  Allowed segments asm,c,cpp                            #
+#   01232019    ARUL    Handled strict file name in the validation            #
+#   02202019    VINOTH  Mak file grep content with proper name                #
+#   04292019    GOWTHAM   Updated with logger support                         #
+#   07202019    GOWTHAM   Updated with core name for accuracy .mak  file      #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090,SC2164
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+#declare -i _ExIP=3;                    #Expected number of input parms
+#declare -i _ReIP="$#";                 #Received number of input parms
+#
+SrcName="$1";                          #Read source name with extenstion
+SrcCore="$2";                          #Read core reference
+SrcPlan="$3";                          #For new component validation plan path
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+#minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Start ${SrcName} ${SrcCore} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function cmdchkmak {
+  local makRes1;
+  local makRes2;
+  local makRes3;
+  local makRes4;
+  local makRes5;
+  local makRes6;
+  local makResult;
+  local _tmpResult;
+  if [ -d "/ztpfrepos/${SrcCore}" ]; then #NON-IBM production path
+    pushd "/ztpfrepos/${SrcCore}" &> /dev/null
+    maktemp=( "$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${SrcName}\b" {} + 2>&1 | grep -v 'Permission')" );
+    # shellcheck disable=SC2206
+    makList=(${maktemp[*]});
+    for((i=0; i<"${#makList[@]}"; ++i));
+    do
+      _tmpResult="$(grep -P '^(?!#)' "${makList[i]}" |grep -Fw "${SrcName}")"
+      if [[ "${_tmpResult}" =~ \.asm ]]; then
+        _tmpResult="${_tmpResult%\.asm*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.asm";
+      elif [[ "${_tmpResult}" =~ \.cpp ]]; then
+        _tmpResult="${_tmpResult%\.cpp*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.cpp";
+      elif [[ "${_tmpResult}" =~ \.c ]]; then
+        _tmpResult="${_tmpResult%\.c*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.c";
+      else
+        _tmpResult="${_tmpResult%#*}";
+        _tmpResult="${_tmpResult// /}";
+      fi
+      if [[ "${_tmpResult##*=}" == "${SrcName}" ]]; then
+        if [ "$i" -gt 0 ] && [[ ! "${makRes1}" =~ ${makList[i]##*/} ]]; then
+          makRes1="${makRes1},${makList[i]##*/}";
+        else
+          makRes1="${makList[i]##*/}";
+        fi
+      fi
+    done
+    if [ "${makRes1}" != "" ]; then
+      makResult="${makRes1}";
+    fi
+    makResult="${makResult#,}";
+    makResult="${makResult%,}";
+    popd &> /dev/null
+  fi
+  if [ -d "/ztpfsys/${SrcCore}/prod" ]; then #IBM modified production path
+    pushd "/ztpfsys/${SrcCore}/prod" &> /dev/null
+    maktemp=( "$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${SrcName}\b" {} + 2>&1 | grep -v 'Permission')" );
+    # shellcheck disable=SC2206
+    makList=(${maktemp[*]});
+    for((i=0; i<"${#makList[@]}"; ++i));
+    do
+      _tmpResult="$(grep -P '^(?!#)' "${makList[i]}" |grep -Fw "${SrcName}")";
+      if [[ "${_tmpResult}" =~ \.asm ]]; then
+        _tmpResult="${_tmpResult%\.asm*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.asm";
+      elif [[ "${_tmpResult}" =~ \.cpp ]]; then
+        _tmpResult="${_tmpResult%\.cpp*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.cpp";
+      elif [[ "${_tmpResult}" =~ \.c ]]; then
+        _tmpResult="${_tmpResult%\.c*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.c";
+      else
+        _tmpResult="${_tmpResult%#*}";
+        _tmpResult="${_tmpResult// /}";
+      fi
+      if [[ "${_tmpResult##*=}" == "${SrcName}" ]]; then
+        if [ "${i}" -gt 0 ] && [[ ! "${makRes2}" =~ ${makList[i]##*/} ]]; then
+          makRes2="${makRes2},${makList[i]##*/}";
+        else
+          makRes2="${makList[i]##*/}";
+        fi
+      fi
+    done
+    if [ "${makRes2}" != "" ] && [ "${makResult}" != "" ]; then
+      if [[ ! "${makResult}" =~ ${makRes2} ]]; then
+        makResult="${makResult},${makRes2}";
+      fi
+    elif [ "${makRes2}" != "" ] && [ "${makResult}" == "" ]; then
+      makResult="${makRes2}";
+    fi
+    makResult="${makResult#,}";
+    makResult="${makResult%,}";
+    #IBM modified common production path
+    if [ "${makResult}" == "" ] && [[ "${SrcCore}" =~ ^(apo|pgr|pre)$ ]]; then
+      if [ -d "/ztpfsys/common/prod" ]; then
+        pushd "/ztpfsys/common/prod" &> /dev/null
+        maktemp=( "$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${SrcName}\b" {} + 2>&1 | grep -v 'Permission')" );
+        # shellcheck disable=SC2206
+        makList=(${maktemp[*]});
+        for((i=0; i<"${#makList[@]}"; ++i));
+        do
+          _tmpResult="$(grep -P '^(?!#)' "${makList[i]}" |grep -Fw "${SrcName}")"
+          if [[ "${_tmpResult}" =~ \.asm ]]; then
+            _tmpResult="${_tmpResult%\.asm*}";
+            _tmpResult="${_tmpResult// /}";
+            _tmpResult="${_tmpResult}.asm";
+          elif [[ "${_tmpResult}" =~ \.cpp ]]; then
+            _tmpResult="${_tmpResult%\.cpp*}";
+            _tmpResult="${_tmpResult// /}";
+            _tmpResult="${_tmpResult}.cpp";
+          elif [[ "${_tmpResult}" =~ \.c ]]; then
+            _tmpResult="${_tmpResult%\.c*}";
+            _tmpResult="${_tmpResult// /}";
+            _tmpResult="${_tmpResult}.c";
+          else
+            _tmpResult="${_tmpResult%#*}";
+            _tmpResult="${_tmpResult// /}";
+          fi
+          if [[ ${_tmpResult##*=} == "${SrcName}" ]]; then
+            if [ "$i" -gt 0 ] && [[ ! "${makRes3}" =~ ${makList[i]##*/} ]]; then
+              makRes3="${makRes3},${makList[i]##*/}";
+            else
+              makRes3="${makList[i]##*/}";
+            fi
+          fi
+        done
+        if [ "${makRes3}" != "" ] && [ "${makResult}" != "" ]; then
+          if [[ ! "${makResult}" =~ ${makRes3} ]]; then
+            makResult="${makResult},${makRes3}";
+          fi
+        elif [ "${makRes3}" != "" ] && [ "${makResult}" == "" ]; then
+          makResult="${makRes3}";
+        fi
+        makResult="${makResult#,}";
+        makResult="${makResult%,}";
+        popd &> /dev/null
+      fi
+    fi
+    popd &> /dev/null
+  fi
+  if [ -d "/ztpf/ibm/prod" ]; then     #IBM Vannila production path
+    pushd "/ztpf/ibm/prod" &> /dev/null
+    maktemp=( "$( find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${SrcName}\b" {} + 2>&1 | grep -v 'Permission')" );
+    # shellcheck disable=SC2206
+    makList=(${maktemp[*]});
+    for((i=0; i<"${#makList[@]}"; ++i));
+    do
+      _tmpResult="$(grep -P '^(?!#)' "${makList[i]}" |grep -Fw "${SrcName}")"
+      if [[ "${_tmpResult}" =~ \.asm ]]; then
+        _tmpResult="${_tmpResult%\.asm*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.asm";
+      elif [[ "${_tmpResult}" =~ \.cpp ]]; then
+        _tmpResult="${_tmpResult%\.cpp*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.cpp";
+      elif [[ "${_tmpResult}" =~ \.c ]]; then
+        _tmpResult="${_tmpResult%\.c*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.c";
+      else
+        _tmpResult="${_tmpResult%#*}";
+        _tmpResult="${_tmpResult// /}";
+      fi
+      if [[ "${_tmpResult##*=}" == "${SrcName}" ]]; then
+        if [ "${i}" -gt 0 ]; then
+          makRes4="${makRes4},${makList[i]##*/}";
+        else
+          makRes4="${makList[i]##*/}";
+        fi
+      fi
+    done
+    if [ "${makRes4}" != "" ] && [ "${makResult}" != "" ]; then
+      if [[ ! "${makResult}" =~ ${makRes4} ]]; then
+        makResult="${makResult},${makRes4}";
+      fi
+    elif [ "${makRes4}" != "" ] && [ "${makResult}" == "" ]; then
+      makResult="${makRes4}";
+    fi
+    makResult="${makResult#,}";
+    makResult="${makResult%,}";
+    popd &> /dev/null
+  fi
+  if [ "${makResult}" == "" ]; then
+    echo NOTFOUND &> /dev/null
+  else
+    match=$(echo "${makResult[@]:0}" | grep -o 'generic\|base')
+    [[ -n "${match// /}" ]] && echo "GENERIC"
+  fi
+#NON-IBM production path (Staging)
+  if [ -d "/ztpfrepos/stg" ]; then
+    pushd "/ztpfrepos/stg" &> /dev/null
+    maktemp=( "$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${SrcName}\b" {} + 2>&1 | grep -v 'Permission' | grep "${SrcCore}")" );
+    # shellcheck disable=SC2206
+    makList=(${maktemp[*]});
+    for((i=0; i<"${#makList[@]}"; ++i));
+    do
+      _tmpResult="$(grep -P '^(?!#)' "${makList[i]}" |grep -Fw "${SrcName}")"
+      if [[ "${_tmpResult}" =~ \.asm ]]; then
+        _tmpResult="${_tmpResult%\.asm*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.asm";
+      elif [[ "${_tmpResult}" =~ \.cpp ]]; then
+        _tmpResult="${_tmpResult%\.cpp*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.cpp";
+      elif [[ "${_tmpResult}" =~ \.c ]]; then
+        _tmpResult="${_tmpResult%\.c*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.c";
+      else
+        _tmpResult="${_tmpResult%#*}";
+        _tmpResult="${_tmpResult// /}";
+      fi
+      if [[ "${_tmpResult##*=}" == "${SrcName}" ]]; then
+        if [ "${i}" -gt 0 ] && [[ ! "${makRes5}" =~ ${makList[i]##*/} ]]; then
+          makRes5="${makRes5},${makList[i]##*/}";
+        else
+          makRes5="${makList[i]##*/}";
+        fi
+      fi
+    done
+    if [ "${makRes5}" != "" ]; then
+      makResult="${makRes5}";
+    fi
+    makResult="${makResult#,}";
+    makResult="${makResult%,}";
+    popd &> /dev/null
+  fi
+##IBM modified production path (staging)
+  if [ -d "/ztpfsys/stg" ]; then
+    pushd "/ztpfsys/stg" &> /dev/null
+    maktemp=( "$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${SrcName}\b" {} + 2>&1 | grep -v 'Permission' | grep "${SrcCore}")" );
+    # shellcheck disable=SC2206
+    makList=(${maktemp[*]});
+    for((i=0; i<"${#makList[@]}"; ++i));
+    do
+      _tmpResult="$(grep -P '^(?!#)' "${makList[i]}" |grep -Fw "${SrcName}")"
+      if [[ "${_tmpResult}" =~ \.asm ]]; then
+        _tmpResult="${_tmpResult%\.asm*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.asm";
+      elif [[ "${_tmpResult}" =~ \.cpp ]]; then
+        _tmpResult="${_tmpResult%\.cpp*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.cpp";
+      elif [[ "${_tmpResult}" =~ \.c ]]; then
+        _tmpResult="${_tmpResult%\.c*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.c";
+      else
+        _tmpResult="${_tmpResult%#*}";
+        _tmpResult="${_tmpResult// /}";
+      fi
+      if [[ "${_tmpResult##*=}" == "${SrcName}" ]]; then
+        if [ "${i}" -gt 0 ] && [[ ! "${makRes6}" =~ ${makList[i]##*/} ]]; then
+          makRes6="${makRes6},${makList[i]##*/}";
+        else
+          makRes6="${makList[i]##*/}";
+        fi
+      fi
+    done
+    if [ "${makRes6}" != "" ] && [ "${makResult}" != "" ]; then
+      if [[ ! "${makResult}" =~ ${makRes6} ]]; then
+        makResult="${makResult},${makRes6}";
+      fi
+    elif [ "${makRes6}" != "" ] && [ "${makResult}" == "" ]; then
+      makResult="${makRes6}";
+    fi
+    makResult="${makResult#,}";
+    makResult="${makResult%,}";
+    popd &> /dev/null
+  fi
+  if [ -d "${SrcPlan}" ]; then
+    pushd "${SrcPlan}" &> /dev/null
+    maktemp=( "$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${SrcName}\b" {} + 2>&1 | grep -v 'Permission' )" );
+    # shellcheck disable=SC2206
+    makList=(${maktemp[*]});
+    for((i=0; i<"${#makList[@]}"; ++i));
+    do
+      _tmpResult="$(grep -P '^(?!#)' "${makList[i]}" |grep -Fw "${SrcName}")"
+      if [[ "${_tmpResult}" =~ \.asm ]]; then
+        _tmpResult="${_tmpResult%\.asm*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.asm";
+      elif [[ "${_tmpResult}" =~ \.cpp ]]; then
+        _tmpResult="${_tmpResult%\.cpp*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.cpp";
+      elif [[ "${_tmpResult}" =~ \.c ]]; then
+        _tmpResult="${_tmpResult%\.c*}";
+        _tmpResult="${_tmpResult// /}";
+        _tmpResult="${_tmpResult}.c";
+      else
+        _tmpResult="${_tmpResult%#*}";
+        _tmpResult="${_tmpResult// /}";
+      fi
+      if [[ "${_tmpResult##*=}" == "${SrcName}" ]]; then
+        if [ "${i}" -gt 0 ] && [[ ! "${makRes6}" =~ ${makList[i]##*/} ]]; then
+          makRes6="${makRes6},${makList[i]##*/}";
+        else
+          makRes6="${makList[i]##*/}";
+        fi
+      fi
+    done
+    if [ "${makRes6}" != "" ] && [ "${makResult}" != "" ]; then
+      if [[ ! "${makResult}" =~ ${makRes6} ]]; then
+        makResult="${makResult},${makRes6}";
+      fi
+    elif [ "${makRes6}" != "" ] && [ "${makResult}" == "" ]; then
+      makResult="${makRes6}";
+    fi
+    makResult="${makResult#,}";
+    makResult="${makResult%,}";
+    popd &> /dev/null
+  fi
+  if [ "${makResult}" != "" ]; then
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${makResult} RC:$RC"
+    echo "${makResult}";
+ fi
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  SrcExt="${SrcName##*.}";
+  if [ "${SrcExt}" == "asm" ] || [ "${SrcExt}" == "c" ] || [ "${SrcExt}" == "cpp" ]; then
+    case "${SrcCore,,}" in
+      apo|pgr|pre|wsp|air|res|oss)     #Check System name
+      SrcCore="${SrcCore,,}";
+      cmdchkmak;                       #Get mak file details
+    ;;
+    *)
+      RC="$EC"                         #Incorrect System
+    ;;
+    esac
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${SrcName} ${SrcCore} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

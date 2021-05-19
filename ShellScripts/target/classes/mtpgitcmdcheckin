@@ -1,0 +1,1029 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164,SC2046
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdcheckin                                             #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to merge with origin master branch                              #
+#                                                                             #
+#   COMMANDS  :                                                               #
+#     ./mtpgitcmdcheckin "t1700058_001_apo"                                   #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation id with core reference                            #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   06092017    ARUL    Created the script                                    #
+#   12042017    ARUL    Code updated with specific segments                   #
+#   05212018    ARUL    Re-try added to git operations                        #
+#   07062018    ARUL    Auto-merge conflict support enabled to handle master  #
+#   09142018    ARUL    Delete workspace implemented when there's no file     #
+#   10162018    VINOTH  Trace deleted segment while checkin impl to avoid file#
+#   10312018    VINOTH  Support INC UPDATE for REX call to improve performance#
+#   03222019    VINOTH  Support to pull master remote branch                  #
+#   04292019    GOWTHAM Updated with logger support                           #
+#   02052019    VINOTH  Retry method changed with curl                        #
+#   13052019    VINOTH  Auto-merge conflict resolve message changed.          #
+#   07082019    GOWTHAM Retry added to pull and error message changed         #
+#   08232019    VINOTH  Rebuilt option enable at the plan segments            #
+#   08282019    ARUL    Update to support auto comment in .mak file with impl #
+#   09052019    VINOTH  Improve version of logs in commit ids                 #
+#   09062019    VINOTH  Restore error message is not good improving           #
+#   11062019    ARUL    Clean-up unused submodules from the plan              #
+#   12062019    VINOTH  del-chkin-del errormessage modified                   #
+#   01302020    ARUL    Delete file restored from prev-version of the file    #
+#   02192020    VINOTH  Prompt to remove unwanted git files                   #
+#   03062020    VINOTH  Display files which are really affectes               #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ImplementationID="$1";                 #Read impl id with core from input
+PreviousCheckin="$2";                  #Read previous checkin
+TypeOfCheckin="$3";                    #either delete action or actual chekcin
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplementationID} ${PreviousCheckin} ${TypeOfCheckin} RC:$RC"
+#-----------------------------------------------------------------------------#
+# Git submodule analyze to remove unused remotes
+function cleanupSubmodules {
+  local _RC=0;
+  local _implBranches;
+  local _implSubmodul;
+  local _branch;
+  local _implSubm;
+  local _branchSubm;
+  mkdir ".gitref" &> /dev/null
+  _implBranches=( $(git branch --all | grep origin | grep "${USR_IMPL_PLAN}") )
+  _implSubmodul=( $(git config -f .gitmodules --list | grep path | cut -d '=' -f 2) )
+  for _branch in "${_implBranches[@]}";
+  do
+    _branch="${_branch#*/}"
+    _implSubm=( $(git ls-tree --name-only "origin/${_branch#*/}" -- .gitref/) )
+    if [ -n "${_implSubm[*]}" ]; then
+      for _branchSubm in "${_implSubm[@]}";
+      do
+        if [[ ! "${_branchSubm}" =~ ${_implSubmodul[*]} ]] || [ -z "${_implSubmodul[*]}" ]; then
+          if [[ "${_branchSubm}" =~ nonibm ]]; then
+            git submodule --quiet add -f "${DEV_SRC_RURL_SMOD}/tpf/${REF_COMPANY}/nonibm/${_branchSubm#*/}.git" "${_branchSubm}" &> /dev/null
+          else
+            git submodule --quiet add -f "${DEV_SRC_RURL_SMOD}/tpf/${REF_COMPANY}/ibm/${_branchSubm#*/}.git" "${_branchSubm}" &> /dev/null
+          fi
+          git submodule -q update --init &> /dev/null
+          #DO NOT DOUBLE QUOTE AND GIT STATUS -S COMMAND
+          git commit -m "${USR_PLAN_CORE} - ${_delmName#*/} production repo cleanup" $(git status -s -- .gitref/ | awk '{print $2}' ) &> /dev/null
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_branchSubm} submodule synced from other implementation for master branch RC:${_RC}"
+        fi
+      done
+    else
+      for _branchSubm in "${_implSubmodul[@]}";
+      do
+        git submodule deinit "${_branchSubm}" &> /dev/null
+        rm -rf "${_branchSubm}" &> /dev/null
+        git rm -f "${_branchSubm}" &> /dev/null
+        git config -f .gitmodules --remove-section submodule."${_branchSubm}" &> /dev/null
+        #DO NOT DOUBLE QUOTE AND GIT STATUS -S COMMAND
+        git commit -m "${USR_PLAN_CORE} - ${_delmName#*/} production repo cleanup" $(git status -s -- .gitref/ | awk '{print $2}' ) &> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_branchSubm} submodule removed based on other implementation references for master branch RC:${_RC}"
+      done
+    fi
+  done
+  _implSubmodul=( $(git config -f .gitmodules --list | grep path | cut -d '=' -f 2) )
+  if [ -z "${_implSubmodul[*]}" ]; then
+    rm -rf ".gitref" &> /dev/null
+    #DO NOT DOUBLE QUOTE AND GIT STATUS -S COMMAND
+    git commit -m "${USR_PLAN_CORE} - ${_delmName#*/} production repo cleanup" $(git status -s -- .gitref/ | awk '{print $2}' ) &> /dev/null
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+# Git submodule analyze to remove unused remotes
+function detachSubmodule {
+  local _RC=0;
+  local _submRepo;
+  local _submFile;
+  local _submList;
+  local _delmList;
+  local _delmName;
+  local _implSubmodul;
+  local _submPASS=0;
+  local _submFAIL=0;
+  pushd "${USR_IMPL_CWRK}" &> /dev/null
+    _implSubmodul=( $(git config -f .gitmodules --list | grep path | cut -d '=' -f 2) )
+    if [ -n "${_implSubmodul[*]}" ]; then
+      if [ -d .gitref ]; then
+        pushd ".gitref" &> /dev/null
+          # Analyze all submodule reference with implementation source
+          for _submRepo in *
+          do
+            if [[ "${_submRepo}" =~ ${_implSubmodul[*]} ]]; then
+              if [ -d "${_submRepo}" ]; then
+                pushd "${_submRepo}" &> /dev/null
+                  git remote -v | grep -q "${_submRepo}" &> /dev/null; _RC=$?;
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule analyze with implementation source RC:${_RC}";
+                  if [ "${_RC}" -eq 0 ]; then
+                    git reset --hard &> /dev/null
+                    git checkout "${USR_PLAN_CORE}" &> /dev/null; _RC=$?;
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} force to switch ${USR_PLAN_CORE} branch RC:${_RC}"
+                    if [ "${_RC}" -eq 0 ]; then
+                      #if [ -f "${_srcPath}" ]; then
+                        _submList=( $(find . -type f -not -name "README.md" -a -not -name ".git") )
+                        for _submFile in "${_submList[@]}"
+                        do
+                          # Validate source with implementation and then set FLAGS
+                          if [ -f "${USR_IMPL_CWRK}/${_submFile#*/}" ]; then
+                            _submPASS=1;
+                          else
+                            _submFAIL=1;
+                          fi
+                        done
+                      #fi
+                    fi
+                  fi
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule analyze with implementation source completed RC:${_RC}"
+                popd &> /dev/null
+              fi
+            else
+              _submFAIL=1;
+            fi
+            # Add unused segments in submodule repo to delete module list
+            if [ "${_submPASS}" -eq 0 ] && [ "${_submFAIL}" -eq 1 ]; then
+              _delmList+=("${_submRepo}")
+            fi
+            _submPASS=0;
+            _submFAIL=0;
+          done
+        popd &> /dev/null
+      fi
+    else
+      rm -rf ".gitref" &> /dev/null
+      #DO NOT DOUBLE QUOTE AND GIT STATUS -S COMMAND
+      git commit -m "${USR_ACT_BRANCH} - ${_delmName#*/} production repo cleanup" $(git status -s -- .gitref/ | awk '{print $2}' ) &> /dev/null
+    fi
+    # Remove unused submodules from the implementation
+    if [ -n "${_delmList[*]// /}" ]; then
+      for _delmName in "${_delmList[@]}"
+      do
+        _delmName=".gitref/${_delmName// /}"
+        git submodule deinit "${_delmName}" &> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule deinit from implementation RC:$?"
+        rm -rf "${_delmName}" &> /dev/null
+        git rm -f "${_delmName}" &> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule directory removed from implementation RC:$?"
+        git config -f .gitmodules --remove-section submodule."${_delmName}" &> /dev/null
+        git remote remove "${_delmName#*/}" &> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule config reference removed from implementation RC:$?"
+        git commit -m "${USR_ACT_BRANCH} - ${_delmName#*/} production repo detached" ".gitmodules" "${_delmName}" &> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule detached from implementation RC:$?"
+      done
+      git push origin "${ImplementationID}" &> /dev/null
+    fi
+  popd &> /dev/null
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+# Merge plans
+function mergePlan {
+  local _RC=0;
+  local _output;
+  local _makRestore;
+  local _exclBranch;
+  local _makBranch;
+  local _makHistory;
+  local _makCommit;
+  local _overPullWri;
+  local _overWritten;
+  local i;
+  local y;
+  git checkout "${USR_MASTER_CORE}" &> /dev/null; _RC=$?;
+  if [ "${_RC}" -eq 0 ]; then
+    for i in {0..2}                      #Retry if it's failed
+    do
+      git pull origin "${USR_MASTER_CORE}" --tags &> /dev/null; _RC=$?;
+      if [ "${_RC}" -eq 0 ]; then
+        break;
+        sendLOG "pid[${SPID}]" "${SPNM##*/}:Git pull ${USR_MASTER_CORE} from remote origin success - $i RC:$_RC"
+      elif [ "${_RC}" -eq 128 ]; then
+        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git pull ${USR_MASTER_CORE} from remote origin re-try - $i RC:$_RC"
+        echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+        sleep 3;
+        _RC="$EC";
+      else
+        _RC="$EC";
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git pull origin ${USR_MASTER_CORE} failed RC:$EC"
+      fi
+    done
+    if [ "${_RC}" -eq 0 ]; then
+      for i in {0..2}                    #Retry if it's failed
+      do
+        _output="";                      #Empty output
+        _output="$(git pull origin "${USR_ACT_BRANCH}" 2>&1)"
+        _RC=$?;
+        if [[ "${_output}" =~ CONFLICT ]]; then
+          _mergeMaster=( $(echo "${_output}" | grep CONFLICT | awk '{ print $NF }' | tr '\n' ',' | sed 's/,$/\n/') )
+          _RC="$EC";
+          break;
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Existing file in conflict still not resolved by user at workspace RC:$_RC"
+        elif [[ "${_output}" =~ unresolved ]]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:You have unmerged files because of an unresolved conflict RC:$EC"
+          echo -e "ERROR: You have unmerged files because of an unresolved conflict";
+          _RC="$EC";
+          break;
+        elif [[ "${_output}" =~ Auto-merging ]]; then
+          if [[ -f .gitmodules ]]; then
+            cat -n ".gitmodules" | sort -uk2 | sort -nk1 | cut -f2- > ".gitmodules.tmp" && mv ".gitmodules.tmp" ".gitmodules";
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Auto-merging and check .gitmodules duplicate entries RC:$RC"
+            echo -e "INFO: Auto-merging and check .gitmodules duplicate entries";
+          fi
+        elif [ "${_RC}" -eq 128 ]; then
+          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$_RC"
+          echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+          sleep 3;
+          _RC="$EC";
+        elif [ "${_RC}" -ne 0 ]; then
+          _RC="$EC";
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git pull ${USR_ACT_BRANCH} from remote origin failed RC:$_RC"
+        elif [ "${_RC}" -eq 0 ]; then
+          break;
+        fi
+      done
+      if [ "${_RC}" -ne 0 ] && [ -n "${_mergeMaster[0]// /}" ]; then
+        IFS=',' read -r -a _MergeIMP <<< "${_mergeMaster[@]}"; #Read source as array
+        for y in "${_MergeIMP[@]}"
+        do
+          if [[ "${y}" =~ gitmodules ]] || [[ "${y}" =~ gitignore ]]; then #Automerge
+            sed -i "/<<<<<<</d" "${y}";
+            sed -i "/=======/d" "${y}";
+            sed -i "/>>>>>>>/d" "${y}";
+            if [[ "${y}" == .gitmodules ]]; then
+              cat -n "${y}" | sort -uk2 | sort -nk1 | cut -f2- > "${y}.tmp" && mv "${y}.tmp" "${y}";
+            fi
+            git add "${y}";
+          elif [ -f "${y}" ]; then
+            git checkout "${USR_ACT_BRANCH}" -- "${y}" &> /dev/null;
+            git add "${y}" &> /dev/null;
+          fi
+        done
+        unset IFS;
+      fi
+      #Git restore deleted files from the implementation but it's still used in other implementation
+      #_makRestore=$(echo "${_output}" | grep Removing | grep '\.mak' | awk '{print $2}' | tr '\n' ',' | sed 's/,$/\n/')
+      _makRestore=$(echo "${_output}" | grep Removing | grep -v '\.git' | awk '{print $2}' | tr '\n' ',' | sed 's/,$/\n/')
+      if [ -n "${_makRestore// /}" ]; then
+        IFS=',' read -r -a _makFile <<< "${_makRestore[@]}"; #Read source as array
+        for y in "${_makFile[@]}"
+        do
+          _exclBranch="${USR_ACT_BRANCH}"
+          _makBranch="NULL"
+          until [ -z "${_makBranch// /}" ]
+          do
+            _makHistory=$(git log --oneline --follow -- "${y}" | grep -v "${_exclBranch}" | head -1 | awk '{print $1,$2}')
+            _makBranch=$(echo "${_makHistory}" | awk '{print $2}')
+            if [ -n "${_makBranch// /}" ]; then
+              #shellcheck disable=SC2046,SC2143
+              if [ $(git ls-tree origin/"${_makBranch}" -r --name-only | grep -v '\.git' | grep "${y}" 2> /dev/null) ]; then
+                _makCommit=$(echo "${_makHistory}" | awk '{print $1}')
+                break
+              else
+                _exclBranch="${_exclBranch}\|${_makBranch}"
+              fi
+            fi
+          done
+          if [ -n "${_makCommit// /}" ]; then
+            git checkout "${_makCommit}" -- "${y}"
+            git commit -m "${USR_ACT_BRANCH} - Restored ${y} from ${_makCommit}" "${y}"
+          fi
+        done
+      fi
+      #Git submodule analyze to remove unused remotes
+      cleanupSubmodules;
+      #git commit -am "${USR_ACT_BRANCH} - Merge with ${USR_ACT_BRANCH}" &> /dev/null;
+      git commit -am "${USR_ACT_BRANCH} - Merge to ${USR_MASTER_CORE}" &> /dev/null;
+      retryCMD "git push -u origin ${USR_MASTER_CORE} --tags" "N" "N"; _RC=$?;
+      if [ "${_RC}" -ne 0 ]; then
+        curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"|grep 'true' &>/dev/null; _RC=$?;
+        if [ "${_RC}" -eq 0 ]; then
+          retryCMD "git push -u origin ${USR_MASTER_CORE} --tags" "N" "N"; _RC=$?;
+        else
+          _RC="$EC"
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to do doGC operation to refresh ${USR_IMPL_PLAN} repo RC:$_RC"
+        fi
+      fi
+      if [ "${_RC}" -eq 0 ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Check-in completed with ${USR_MASTER_CORE} branch RC:$_RC"
+        #echo -e "INFO: Check-in completed with ${USR_MASTER_CORE} branch";
+        git checkout "${USR_ACT_BRANCH}" &> /dev/null; #Switch back to user branch
+      else
+        git checkout "${USR_ACT_BRANCH}" &> /dev/null; #Switch back to user branch
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Check-in failed with ${USR_MASTER_CORE} branch | Server busy, please try after some time. Please contact DevOps Support team if problem still persists (${USR_IMPL_CORE^^}) RC:$EC"
+        echo -e "ERROR: Server busy, please try after some time. Please contact DevOps Support team if problem still persists (${USR_IMPL_CORE^^}).";
+        _RC="${EC}";
+      fi
+    else
+      _overPullWri=($(git pull origin "${USR_MASTER_CORE}" 2>&1 | grep -v "ssh://"|grep '/'))
+      if [ -n "${_overPullWri[0]}" ]; then
+        git reset --hard &> /dev/null;
+        git checkout "${USR_ACT_BRANCH}" &> /dev/null; #Switch back to user branch
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:ERROR: Artifact(s) ${_overPullWri[*]} that were not checked out in your implementation via toolchain but it is present in your project workspace | git pull (${USR_IMPL_CWRK})RC:$EC"
+        echo -e "ERROR: Artifact(s) ${_overPullWri[*]} that were not checked out in your implementation via toolchain but it is present in your project workspace (${USR_IMPL_CWRK}). Please move or remove them and continue with the checkin process. You may checkout the same artifact(s) via Toolchain in your implementation if they are required.";
+        _RC="${EC}";
+      else
+        git reset --hard &> /dev/null;
+        git checkout "${USR_ACT_BRANCH}" &> /dev/null; #Switch back to user branch
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to get latest from remote ${USR_ACT_BRANCH} branch | Server busy, please try after some time. Please contact DevOps Support team if problem still persists (${USR_IMPL_CORE^^}) RC:$EC"
+        echo -e "ERROR: Server busy, please try after some time. Please contact DevOps Support team if problem still persists (${USR_IMPL_CORE^^}).";
+        _RC="${EC}";
+      fi
+    fi
+  else
+    _overWritten=($(git checkout "${USR_MASTER_CORE}" 2>&1 | grep '/'))
+    git checkout "${USR_ACT_BRANCH}" &> /dev/null; #Switch back to user branch
+    if [ -n "${_overWritten[0]}" ]; then
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:ERROR: Artifact(s) ${_overWritten[*]} that were not checked out in your implementation via toolchain but it is present in your project workspace | git checkout (${USR_IMPL_CWRK})RC:$EC"
+      echo -e "ERROR: Artifact(s) ${_overWritten[*]} that were not checked out in your implementation via toolchain but it is present in your project workspace (${USR_IMPL_CWRK}). Please move or remove them and continue with the checkin process. You may checkout the same artifact(s) via Toolchain in your implementation if they are required.";
+      _RC="${EC}";
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to checkout to ${USR_MASTER_CORE} branch | Server busy, please try after some time. Please contact DevOps Support team if problem still persists (${USR_IMPL_CORE^^}) RC:$EC"
+      echo -e "ERROR: Server busy, please try after some time. Please contact DevOps Support team if problem still persists (${USR_IMPL_CORE^^}).";
+      _RC="${EC}";
+    fi
+  fi
+
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+function mergeMaster {
+  local _RC=0;
+  local _FC=0;
+  local _FF=8;
+  local _mergeFile;
+  local i;
+  local x;
+  getRepoList; _RC=$?;                 #Get active repository from project dir
+  retryCMD "git ls-remote --exit-code -h" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+  if [[ $(git status) =~ unmerged ]] && [ "${_RC}" -eq 0 ]; then
+    IFS=$'\n'
+    for _gitStatusList in $(git status -s | cut -c 4- )
+    do
+      for _gitBranchList in $(git ls-tree -r --name-only "origin/${ImplementationID}" )
+      do
+        if [[ "${_gitStatusList}" == "${_gitBranchList}" ]]; then
+          git add "${_gitStatusList}" &> /dev/null
+          break;
+        fi
+      done
+    done
+    unset IFS
+    _modules_Dupli=$(git diff --name-only "origin/$USR_MASTER_CORE" "origin/$USR_ACT_BRANCH" | grep ".gitmodules")
+    if [[ "${_modules_Dupli}" == .gitmodules ]]; then
+      cat -n "${_modules_Dupli}" | sort -uk2 | sort -nk1 | cut -f2- > "${_modules_Dupli}.tmp" && mv "${_modules_Dupli}.tmp" "${_modules_Dupli}";
+    fi
+    git commit -am "Auto-commit while merge with ${USR_MASTER_CORE}" &> /dev/null
+    if [[ ! "${USR_ACT_BRANCH}" == "${ImplementationID}" ]]; then
+      git checkout "${ImplementationID}" &> /dev/null
+    fi
+  fi
+  if [ "${_RC}" -eq 0 ]; then
+    i="";
+    retryCMD "git pull origin ${USR_ACT_BRANCH} --tags" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+    if [ "${_RC}" -ne 0 ]; then
+      curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"|grep 'true' &>/dev/null; _RC=$?;
+      if [ "${_RC}" -eq 0 ]; then
+        retryCMD "git pull origin ${USR_ACT_BRANCH} --tags" "N" "N"; _RC=$?;
+      else
+        _RC="$EC"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to do doGC operation to refresh ${USR_IMPL_PLAN} repo RC:$_RC"
+      fi
+    fi
+    if [ "${_RC}" -eq 0 ]; then
+      git fetch origin "${ImplementationID}" &> /dev/null
+      git fetch origin "${USR_MASTER_CORE}" &> /dev/null
+      if [ -f ".gitconflict" ]; then
+        #shellcheck disable=SC2143
+        if [[ $(grep -Rnw . -e '<<<<<<<') ]] && [[ $(grep -Rnw . -e '>>>>>>>') ]] && [[ $(grep -Rnw . -e '=======') ]]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Existing merge conflict not yet fixed - please fix and try again | Source contentions notified earlier are still not resolved. Please remove conflict resolution markers >>>> <<<< ====== and then commit RC:$EC"
+          echo -e "ERROR: Source contentions notified earlier are still not resolved. Please remove conflict resolution markers >>>> <<<< ====== and then commit";
+          _RC="${EC}";
+        else
+          retryCMD "git push -u origin ${USR_ACT_BRANCH}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+          if [ "${_RC}" -eq 0 ]; then
+            mergePlan; _RC=$?;
+            if [ "${_RC}" -eq 0 ]; then
+              rm .gitconflict &> /dev/null;
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to access remote ${USR_ACT_BRANCH} branch or repository secured RC:$EC"
+            echo -e "ERROR: Unable to access remote ${USR_ACT_BRANCH} branch or repository secured";
+            _RC="${EC}";
+          fi
+        fi
+      else
+        #Do selective file merge from master core branch
+        _mergeFile=( $(git diff --name-only "origin/$USR_MASTER_CORE" "origin/$USR_ACT_BRANCH" | grep -v ".git" | tr '\n' ',' | sed 's/,$/\n/' ) )
+        if [ -n "${_mergeFile[0]// /}" ]; then   #If empty string
+          _mergeFile=( $(git diff --name-only "origin/$USR_MASTER_CORE" "origin/$USR_ACT_BRANCH" | grep -v ".git" | tr '\n' ',' | sed 's/,$/\n/' ) )
+        fi
+        if [ -z "${_mergeFile[0]}" ]; then       #If empty string
+          retryCMD "git push -u origin ${USR_ACT_BRANCH}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+          if [ "${_RC}" -eq 0 ]; then
+            mergePlan; _RC=$?;
+            if [ "${_RC}" -eq 0 ]; then
+              rm .gitconflict &> /dev/null;
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to access remote ${USR_ACT_BRANCH} branch or repository secured RC:$EC"
+            echo -e "ERROR: Unable to access remote ${USR_ACT_BRANCH} branch or repository secured";
+            _RC="${EC}";
+          fi
+          #echo -e "INFO: Nothing to Check-in"
+        else
+          IFS=',' read -r -a _MergeSRC <<< "${_mergeFile[@]}"; #Read source as array
+          for x in "${_MergeSRC[@]}"
+          do
+            if [ -f "$(git ls-files|grep -v .git| grep -w "${x}")" ]; then
+              retryCMD "git fetch --force" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+              git checkout "${USR_MASTER_CORE}" &> /dev/null;
+              git checkout "${USR_ACT_BRANCH}" &> /dev/null;
+              retryCMD "git ls-tree -r --name-only origin/${USR_MASTER_CORE} | grep ${x}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+              if [ "${_RC}" -eq 0 ]; then #Get source from master branch
+                retryCMD "git show origin/${USR_MASTER_CORE}:${x} > ${x}.mergeMaster" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+                if [ "${_RC}" -ne 0 ]; then
+                  rm -f "${x}.mergeMaster" &> /dev/null;
+                  cp --preserve=all "${x}" "${x}.mergeMaster" &> /dev/null; #If master branch doesn't have file
+                  _RC="$RC";
+                fi
+                git merge-base "${USR_ACT_BRANCH}" "${USR_MASTER_CORE}" &> /dev/null; _RC=$?;
+                if [ "${_RC}" -eq 0 ]; then #Get source from active branch and ma
+                  #shellcheck disable=SC2086
+                  git show "$(git merge-base ${USR_ACT_BRANCH} ${USR_MASTER_CORE})":"${x}" > "${x}.mergeBase" 2> /dev/null; _RC=$?;
+                  if [ "${_RC}" -ne 0 ]; then
+                    #shellcheck disable=2143,2046
+                    if [ $(grep -o fatal "${x}.mergeBase") ] || [ ! -s "${x}.mergeBase" ]; then
+                      rm -f "${x}.mergeBase" &> /dev/null;
+                      touch "${x}.mergeBase";
+                    else
+                      rm -f "${x}.mergeBase" &> /dev/null;
+                      cp --preserve=all "${x}" "${x}.mergeBase" &> /dev/null;
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Merge with local file - ${x} RC:$RC"
+                      echo -e "INFO: Merge with local file - ${x}";
+                      _RC="$RC";
+                    fi
+                  fi
+                else
+                  cp --preserve=all "${x}" "${x}.mergeBase" &> /dev/null;
+                fi
+                if [ -s "${x}.mergeMaster" ]; then #Do if file present and it's size grater then zero
+                  git merge-file "${x}" "${x}.mergeBase" "${x}.mergeMaster" &> /dev/null; _RC=$?;
+                  _SF="${_RC}";        #second file if there is no change
+                fi
+                if [ "${_RC}" -ne 0 ]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Merge conflict - ${x} >> .gitconflict RC:$EC"
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Auto-merge file failed - ${x} resolve the source contention manually and commit/check-in again RC:$EC"
+                  echo -e "Merge conflict - ${x}" >> .gitconflict;
+                  echo -e "ERROR: Source contention identified in ${x}. Please verify/update the differences highlighted by conflict resolution markers >>>>> <<<<< =====, remove the markers, commit and re-checkin the source artifact";
+                  _FF=$?;
+                  _FFX="${x}";
+                  _RC="${EC}";
+                  _FC="${EC}";
+                fi
+                rm -f "${x}.mergeMaster" "${x}.mergeBase" &> /dev/null; #Delete file
+              else
+                git ls-tree -r --name-only "origin/${USR_MASTER_CORE}" | grep "${x}" &> /dev/null; _RC=$?;
+                if [ "${_RC}" -ne 0 ]; then
+                  git ls-tree -r --name-only "origin/${ImplementationID}" | grep "${x}" &> /dev/null; _RC=$?;
+                  if [ "${_RC}" -eq 0 ]; then
+                    git checkout "${USR_MASTER_CORE}" &> /dev/null;
+                    git pull origin "${USR_MASTER_CORE}" &> /dev/null;
+                    git checkout "${ImplementationID}" -- "${x}" &> /dev/null;
+                    git add "${x}"
+                    #git commit -m "Merge with ${ImplementationID}" "${x}" &> /dev/null;
+                    git commit -m "${ImplementationID} - Merge to ${USR_MASTER_CORE}" "${x}" &> /dev/null;
+                    git checkout "${ImplementationID}" &> /dev/null;
+                    _RC="${RC}";       #If the file not found in master branch
+                  fi
+                fi
+              fi
+            fi
+          done
+          unset IFS;
+          if [ "${_FF}" -eq 0 ] && [ "${_SF}" -eq 0 ]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Source contention identified in ${_FFX}. Please verify/update the differences highlighted by conflict resolution markers >>>>> <<<<< =====, remove the markers, commit and re-checkin the source artifact RC:$EC"
+            echo -e "ERROR: Source contention identified in ${_FFX}. Please verify/update the differences highlighted by conflict resolution markers >>>>> <<<<< =====, remove the markers, commit and re-checkin the source artifact";
+            _RC="${EC}";
+          fi
+          if [ "${_RC}" -eq 0 ] && [ "${_FC}" -eq 0 ]; then
+            git commit -am "${USR_ACT_BRANCH} - Merge to ${USR_MASTER_CORE}" &> /dev/null;
+            retryCMD "git push -u origin ${USR_ACT_BRANCH} --tags" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+            if [ "${_RC}" -eq 0 ]; then
+              mergePlan; _RC=$?;
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to access remote ${USR_ACT_BRANCH} branch or repository secured RC:$EC"
+              echo -e "ERROR: Unable to access remote ${USR_ACT_BRANCH} branch or repository secured";
+              _RC="${EC}";
+            fi
+          fi
+        fi
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to access remote ${USR_ACT_BRANCH} branch RC:$EC"
+      echo -e "ERROR: Unable to access remote ${USR_ACT_BRANCH} branch";
+      _RC="${EC}";
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Remote repository not accessible RC:$EC"
+    echo -e "ERROR: Remote repository not accessible."; _RC="${EC}";
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+function sabreUpdateinc {
+  local sabreFiles;
+  local _RC=0;
+  sabreFiles=($(git ls-files|grep -v ".git" | grep ".inc"))
+  if [[ "${USR_IMPL_CORE}" == "${REF_DL_CORE}" ]] || [[ "${USR_IMPL_CORE}" == "${REF_WS_CORE}" ]]; then
+    if [ -n "${sabreFiles[0]// /}" ]; then
+      for((i=0; i<"${#sabreFiles[@]}"; ++i));
+      do
+        sabreSeg=${sabreFiles[i]};
+        sabreSegment=${sabreSeg##*/};
+        sabreDvl=${sabreSeg%/*}
+        "${SAB_DEV_INC}" "${USR_IMPL_CORE}" "${USR_IMPL_CWRK}/${sabreDvl}" "UPDATE" "${sabreSegment}" &> /dev/null; _RC=$?;
+        if [ "${_RC}" -ne 0 ]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Updating include ${sabreSegment} to the REXX worker machine failed RC:$EC"
+          echo -e "ERROR: Updating include ${sabreSegment} to the REXX worker machine failed."
+          _RC="${EC}";
+          break
+        fi
+      done
+    fi
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+function localcommmit {
+  local _RC=0;
+  local _localcomchk;
+  #shellcheck disable=2022
+  _localcomchk=( $(git status -s | grep -w M | grep -v ".git" | awk '{print $2}'| tr '\n' ',' | sed 's/,$/\n/') );
+  if [ -z "${_localcomchk[0]}" ]; then
+    mergeMaster; _RC=$?;
+    if [ "${_RC}" -eq 0 ]; then
+      sabreUpdateinc; _RC=$?           #Sabre inc file to add REXX machine worker
+      if [[ -n "${PreviousCheckin// /}" ]]; then
+        tempAfrDir="/tmp/cmitArfChk_${ImplementationID}";
+        rm -rf "${tempAfrDir}";
+        mkdir -p "${tempAfrDir}";
+        if [[ -d "${tempAfrDir}" ]] && [[ -n "${implPlanURL[0]// /}" ]]; then
+          git clone -b "master_${USR_IMPL_CORE}" "${implPlanURL}" "${tempAfrDir}" &> /dev/null ; _RC=$?;
+          if [ "${_RC}" -eq 0 ]; then
+            pushd "${tempAfrDir}" &> /dev/null
+              latestCommitID=$(git log -1 --pretty=%h)
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: latest--${latestCommitID} success RC:$RC"
+            popd &> /dev/null
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git commit difference checker for after failed due to unable to clone, sending NULL -- $USR_PLAN_CORE RC:$EC"
+          fi
+        fi
+      fi
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:ERROR: Check-in/delete action detects uncommitted files ${_localcomchk[*]} in ${USR_IMPL_CORE} project directory. Please commit and then try to delete/check-in again. RC:$EC"
+    echo -e "ERROR: Check-in/delete action detects uncommitted files ${_localcomchk[*]} in ${USR_IMPL_CORE} project directory. Please commit and then try to delete/check-in again.";
+    _RC="${EC}";
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+function gitDeletechk {
+  git status -s | grep -w 'D' &> /dev/null; _RC=$?
+  if [ "${_RC}" -eq 0 ]; then
+    deletedfile=$(git status -s | grep -w 'D' | awk '{print $2}' |tr '\n' ' ')
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to check-in the segment(s) ${deletedfile[*]} got out of sync from Git, Please use Restore action from the implementation summary line to revert the changes to an earlier point. (${USR_IMPL_CORE^^}) RC:${EC}"
+    echo -e "ERROR: Failed to check-in the segments ${deletedfile[*]} got out of sync from Git, Please use Restore action from the implementation summary line to revert the changes to an earlier point."
+    _RC=${EC}
+  else
+    _RC=${RC}
+  fi
+  return ${_RC}
+}
+#-----------------------------------------------------------------------------#
+if [ "${RC}" -eq 0 ]; then
+  checkCWRK="";
+  getParmFromBranch "${ImplementationID}" "USR"; RC=$?; #Extract parm from input
+  if [ "${RC}" -eq 0 ]; then
+    pushd "${USR_IMPL_CWRK}" &> /dev/null; #Change from origin to project dir
+    if [[ -n "${PreviousCheckin// /}" ]]; then
+      implPlanURL="$(git remote -v | grep ssh| grep push|awk '{print $2}')"
+      tempBefDir="/tmp/cmitBefChk_${ImplementationID}";
+      rm -rf "${tempBefDir}";
+      mkdir -p "${tempBefDir}";
+      if [[ -d "${tempBefDir}" ]] && [[ -n "${implPlanURL[0]// /}" ]]; then
+        git clone -b "master_${USR_IMPL_CORE}" "${implPlanURL}" "${tempBefDir}" &>/dev/null ; _RC=$?;
+        if [ "${_RC}" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git clone for master_${USR_IMPL_CORE} ${implPlanURL} ${tempBefDir} success -- $USR_PLAN_CORE RC:$RC"
+          pushd "${tempBefDir}" &> /dev/null
+            prevCommitID=$(git log -1 --pretty=%h)
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: previous -- ${prevCommitID} success -- $USR_PLAN_CORE RC:$RC"
+          popd &> /dev/null
+          rm -rf "${tempBefDir}";
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git commit difference checker for before failed due to unable to clone, sending NULL -- $USR_PLAN_CORE RC:$EC"
+          rm -rf "${tempBefDir}";
+        fi
+      fi
+    fi
+    popd &> /dev/null;
+  fi
+  for i in {0..1}                      #Retry if it's failed
+  do
+    getParmFromBranch "${ImplementationID}" "USR"; RC=$?; #Extract parm from input
+    if [ "${RC}" -eq 0 ]; then
+      pushd "${USR_IMPL_CWRK}" &> /dev/null; #Change from origin to project dir
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Switch to project dir - ${USR_IMPL_CWRK} RC:$RC"
+        #echo -e "INFO: Switch to project dir - ${USR_IMPL_CWRK}" &> /dev/null;
+        getGitStatus; RC=$?;           #Validate git project status
+        if [ "${RC}" -eq 0 ]; then
+          gitDeletechk; RC=$?          #Delete file check in project folder
+          if [ "${RC}" -eq 0 ]; then
+            getActiveBranch; RC=$?;    #Get active branch from project dir
+            if [[ "${USR_ACT_BRANCH}" == "${ImplementationID}" ]]; then
+              localcommmit; RC=$?;     #To check local changes commited or not
+            elif [[ "${USR_ACT_BRANCH}" =~ master|${USR_IMPL_PLAN} ]]; then
+              git checkout -q -f "${ImplementationID}" &> /dev/null;
+              USR_ACT_BRANCH="${ImplementationID}";
+              localcommmit; RC=$?;     #To check local changes commited or not
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_ACT_BRANCH} - branch detached | Git local repository actions interrupted possibly due to unintended user action on source artifacts. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:$EC"
+              echo -e "ERROR: Git local repository actions interrupted possibly due to unintended user action on source artifacts. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}).";
+              RC="${EC}";
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_IMPL_CWRK} - Not a valid git project | Git local repository deleted possibly due to unintended user action on the .git folder. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:$EC"
+            echo -e "ERROR: Git local repository deleted possibly due to unintended user action on the .git folder. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}).";
+            RC="${EC}";
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_IMPL_CWRK} - Not a valid git project | Git local repository deleted possibly due to unintended user action on the .git folder. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:$EC"
+          echo -e "ERROR: Git local repository deleted possibly due to unintended user action on the .git folder. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}).";
+          RC="${EC}";
+        fi
+        remoteFile=( $(git ls-tree -r --name-only "origin/${ImplementationID}" | grep -v .git) )
+        if [ -z "${remoteFile[0]}" ]; then
+          delProj="YES"
+        fi
+      popd &> /dev/null;               #Return to origin
+    elif [[ "${checkCWRK}" == BAD ]]; then
+      RC="$RC";
+    else
+      checkCWRK="BAD"
+    fi
+  done
+  if [[ "${checkCWRK}" == BAD ]] && [ "${RC}" -ne 0 ]; then
+    if [ ! -d "${USR_IMPL_CWRK}" ]; then
+     sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Workspace ${USR_IMPL_CWRK} not found | Local workspace deleted possibly due to unintended user action on the project folder. Please use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:$EC"
+     echo -e "ERROR: Local workspace deleted possibly due to unintended user action on the project folder. Please use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^})."
+    fi
+  elif [[ "${delProj}" == YES ]] && [ -d "${USR_IMPL_CWRK}" ]; then
+    detachSubmodule;
+    rm -rf "${USR_IMPL_CWRK}" &> /dev/null
+    if [ -z "$(ls -A "${USR_IMPL_WRK}")" ]; then
+      rm -rf "${USR_IMPL_WRK}" &> /dev/null
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Local workspace ${USR_IMPL_WRK} deleted from project RC:$RC"
+      echo -e "INFO: Local workspace ${USR_IMPL_WRK} deleted from project"
+    else
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Local workspace ${USR_IMPL_CWRK} deleted from project RC:$RC"
+      echo -e "INFO: Local workspace ${USR_IMPL_CWRK} deleted from project"
+    fi
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+if [ -n "${prevCommitID// /}" ] && [ -n "${latestCommitID// /}" ]; then
+  if [[ "${prevCommitID}" != "${latestCommitID}" ]]; then
+    if [ -d "${tempAfrDir}" ]; then
+      pushd "${tempAfrDir}" &> /dev/null
+        modifiedGitFiles=$(git diff --name-only "${prevCommitID}" "${latestCommitID}" --diff-filter=[AM]|grep -v "\.git*"|tr '\n' ',')
+        #AddedGitFiles=$(git diff --name-only "${prevCommitID}" "${latestCommitID}" --diff-filter=[A]|grep -v ".git*"|tr '\n' ',')
+        DeletedGitFiles=$(git diff --name-only "${prevCommitID}" "${latestCommitID}" --diff-filter=[D]|grep -v "\.git*"|tr '\n' ',')
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git Files before checkin and after checkin having some modification ${modifiedGitFiles[*]} -- $USR_PLAN_CORE RC:${RC}"
+        if [ -n "${modifiedGitFiles[*]// /}" ] || [ -n "${DeletedGitFiles[*]// /}" ]; then
+          if [ -n "${modifiedGitFiles[*]// /}" ]; then
+            IFS=',' read -r -a supModify <<< "${modifiedGitFiles[@]}";
+            for sup_Files in "${supModify[@]}";
+            do
+              sourceFile="${sup_Files##*/}";
+              sourceEXT="${sourceFile##*.}"
+              if [ "${sourceEXT}" == "asm" ] || [ "${sourceEXT}" == "c" ] || [ "${sourceEXT}" == "cpp" ]; then
+                suPPFiles=$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${sourceFile}\b" {} + 2>&1 | grep -v '\.git'|sed "s|^\./||")
+                if [ -n "${suPPFiles[0]// /}" ]; then
+                  echo -e "${modifiedGitFiles}" | grep -w "${suPPFiles}" &>/dev/null; TC=$?;
+                  if [ "${TC}" -eq 0 ]; then
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required mak file which is already present in collection of modified files -- $USR_PLAN_CORE RC:${RC}"
+                  else
+                    modifiedGitFiles+="${suPPFiles},"
+                    TC=0;
+                  fi
+                fi
+              elif [ "${sourceEXT}" == mac ]; then
+                macFilesDep=($(git ls-files | grep -v .git| grep "\.asm\|.sbt"|tr '\n' ' '))
+                if [ -n "${macFilesDep[0]// /}" ]; then
+                  for macMak in "${macFilesDep[@]}";
+                  do
+                    if [ "${macMak##*.}" == "asm" ]; then
+                      macFile="${macMak##*/}"
+                      # this for mak because of mac
+                      macsuPPFiles=$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${macFile}\b" {} + 2>&1 | grep -v '.git'|sed "s|^\./||")
+                      if [ -n "${macsuPPFiles[0]// /}" ]; then
+                        echo -e "${modifiedGitFiles}" | grep -w "${macsuPPFiles}" &>/dev/null; TC=$?;
+                        if [ "${TC}" -eq 0 ]; then
+                          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${macsuPPFiles} file which is already present in collection of modified files -- $USR_PLAN_CORE RC:${RC}"
+                        else
+                          modifiedGitFiles+="${macsuPPFiles},"
+                          TC=0;
+                        fi
+                      fi
+                    fi
+                    echo -e "${modifiedGitFiles}" | grep -w "${macMak}" &> /dev/null; TC=$?;
+                    if [ "${TC}" -eq 0 ]; then
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${macMak} which is already present in collection of modified files -- $USR_PLAN_CORE RC:${RC}"
+                    else
+                      modifiedGitFiles+="${macMak},"
+                      TC=0;
+                    fi
+                  done
+                fi
+              elif [ "${sourceEXT}" == inc ]; then
+                sbtFilesDep=($(git ls-files | grep -v .git| grep ".sbt"|tr '\n' ' '))
+                if [ -n "${sbtFilesDep[0]// /}" ]; then
+                  for sbtModChk in "${sbtFilesDep[@]}";
+                  do
+                    echo -e "${modifiedGitFiles}" | grep -w "${sbtModChk}" &> /dev/null; TC=$?;
+                    if [ "${TC}" -eq 0 ]; then
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${sbtModChk} which is already present in collection of modified files -- $USR_PLAN_CORE RC:${RC}"
+                    else
+                      modifiedGitFiles+="${sbtModChk},"
+                      TC=0;
+                    fi
+                  done
+                fi
+              elif [ "${sourceEXT}" == hpp ] || [ "${sourceEXT}" == h ]; then
+                cFilesDep=($(git ls-files | grep -v .git| grep "\.c\|.cpp"|tr '\n' ' '))
+                if [ -n "${cFilesDep[0]}" ]; then
+                  for cMak in "${cFilesDep[@]}";
+                  do
+                    if [ "${cMak##*.}" != "cpy" ]; then
+                      if [ "${cMak##*.}" == "c" ] || [ "${cMak##*.}" == "cpp" ]; then
+                        cFile="${cMak##*/}"
+                        # this for mak because of mac
+                        csuPPFiles=$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${cFile}\b" {} + 2>&1 | grep -v '\.git'|sed "s|^\./||")
+                        if [ -n "${csuPPFiles[0]// /}" ]; then
+                          echo -e "${modifiedGitFiles}" | grep -w "${csuPPFiles}" &>/dev/null; TC=$?;
+                          if [ "${TC}" -eq 0 ]; then
+                            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${csuPPFiles} file which is already present in collection of modified files -- $USR_PLAN_CORE RC:${RC}"
+                          else
+                            modifiedGitFiles+="${csuPPFiles},"
+                            TC=0;
+                          fi
+                        fi
+                      fi
+                      echo -e "${modifiedGitFiles}" | grep -w "${cMak}" &> /dev/null; TC=$?;
+                      if [ "${TC}" -eq 0 ]; then
+                        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${cMak} which is already present in collection of modified files -- $USR_PLAN_CORE RC:${RC}"
+                      else
+                        modifiedGitFiles+="${cMak},"
+                        TC=0;
+                      fi
+                    fi
+                  done
+                fi
+              elif [ "${sourceEXT}" == cpy ]; then
+                cpyFilesDep=($(git ls-files | grep -v '\.git' | grep "\.asm" | tr '\n' ' '))
+                if [ -n "${cpyFilesDep[0]// /}" ]; then
+                  for cpyMak in "${cpyFilesDep[@]}";
+                  do
+                    if [ "${cpyMak##*.}" == "asm" ]; then
+                      cpyFile="${cpyMak##*/}"
+                      # this for mak because of mac
+                      cpysuPPFiles=$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${cpyFile}\b" {} + 2>&1 | grep -v '\.git'|sed "s|^\./||")
+                      if [ -n "${cpysuPPFiles[0]// /}" ]; then
+                        echo -e "${modifiedGitFiles}" | grep -w "${cpysuPPFiles}" &>/dev/null; TC=$?;
+                        if [ "${TC}" -eq 0 ]; then
+                          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${cpysuPPFiles} file which is already present in collection of modified files -- $USR_PLAN_CORE RC:${RC}"
+                        else
+                          modifiedGitFiles+="${cpysuPPFiles},"
+                          TC=0;
+                        fi
+                      fi
+                    fi
+                    echo -e "${modifiedGitFiles}" | grep -w "${cpyMak}" &> /dev/null; TC=$?;
+                    if [ "${TC}" -eq 0 ]; then
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${cpyMak} which is already present in collection of modified files -- $USR_PLAN_CORE RC:${RC}"
+                    else
+                      modifiedGitFiles+="${cpyMak},"
+                      TC=0;
+                    fi
+                  done
+                fi
+              fi
+            done
+            unset IFS
+          fi
+          #if [ ! -z "${AddedGitFiles[0]}" ]; then
+          #  IFS=',' read -r -a supAdded <<< "${AddedGitFiles[@]}";
+          #  for Add_Files in "${supAdded[@]}";
+          #  do
+          #    sourceFile="${Add_Files##*/}";
+          #    suPPFiles=$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${sourceFile}\b" {} + 2>&1 | grep -v '.git'|sed "s|^\./||")
+          #    if [ ! -z "${suPPFiles[0]}" ]; then
+          #      echo -e "${modifiedGitFiles}" | grep -w "${suPPFiles}" &>/dev/null; TC=$?;
+          #      if [ "${TC}" -eq 0 ]; then
+          #        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${suPPFiles} file which is already present in collection of modified files -- $USR_PLAN_CORE RC:${RC}"
+          #      else
+          #        modifiedGitFiles+="${suPPFiles},"
+          #        TC=0;
+          #      fi
+          #    fi
+          #    echo -e "${modifiedGitFiles}" | grep -w "${Add_Files}" &>/dev/null; TC=$?;
+          #    if [ "${TC}" -eq 0 ]; then
+          #        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${Add_Files} file which is already present in collection of new  files -- $USR_PLAN_CORE RC:${RC}"
+          #    else
+          #      modifiedGitFiles+="${Add_Files},"
+          #      TC=0;
+          #    fi
+          #  done
+          #  unset IFS
+          #  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: TEST ${AddedGitFiles} -- $USR_PLAN_CORE RC:${RC}"
+          #fi
+          if [ -n "${DeletedGitFiles[*]// /}" ]; then
+            IFS=',' read -r -a supDel <<< "${DeletedGitFiles[@]}";
+            for Del_Files in "${supDel[@]}";
+            do
+              sourceFile="${Del_Files##*/}";
+              sourceEXT="${sourceFile##*.}"
+              if [ "${sourceEXT}" == "asm" ] || [ "${sourceEXT}" == "c" ] || [ "${sourceEXT}" == "cpp" ]; then
+                suPPFiles=$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${sourceFile}\b" {} + 2>&1 | grep -v '\.git' | sed "s|^\./||")
+                if [ -n "${suPPFiles[0]// /}" ]; then
+                  echo -e "${modifiedGitFiles}" | grep -w "${suPPFiles}" &>/dev/null; TC=$?;
+                  if [ "${TC}" -eq 0 ]; then
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required mak file which is already present in collection of Deleted dependent files -- $USR_PLAN_CORE RC:${RC}"
+                  else
+                    modifiedGitFiles+="${suPPFiles},"
+                    TC=0;
+                  fi
+                fi
+              elif [ "${sourceEXT}" == mac ]; then
+                macFilesDep=($(git ls-files | grep -v \.git | grep "\.asm\|.sbt" | tr '\n' ' '))
+                if [ -n "${macFilesDep[0]// /}" ]; then
+                  for macMak in "${macFilesDep[@]}";
+                  do
+                    if [ "${macMak##*.}" == "asm" ]; then
+                      macFile="${macMak##*/}"
+                      # this for mak because of mac
+                      macsuPPFiles=$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${macFile}\b" {} + 2>&1 | grep -v '.git'|sed "s|^\./||")
+                      if [ -n "${macsuPPFiles[0]}" ]; then
+                        echo -e "${modifiedGitFiles}" | grep -w "${macsuPPFiles}" &>/dev/null; TC=$?;
+                        if [ "${TC}" -eq 0 ]; then
+                          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${macsuPPFiles} file which is already present in collection of Deleted dependent files -- $USR_PLAN_CORE RC:${RC}"
+                        else
+                          modifiedGitFiles+="${macsuPPFiles},"
+                          TC=0;
+                        fi
+                      fi
+                    fi
+                    echo -e "${modifiedGitFiles}" | grep -w "${macMak}" &> /dev/null; TC=$?;
+                    if [ "${TC}" -eq 0 ]; then
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${macMak} which is already present in collection of Deleted dependent files -- $USR_PLAN_CORE RC:${RC}"
+                    else
+                      modifiedGitFiles+="${macMak},"
+                      TC=0;
+                    fi
+                  done
+                fi
+              elif [ "${sourceEXT}" == inc ]; then
+                sbtFilesDep=($(git ls-files | grep -v .git| grep ".sbt"|tr '\n' ' '))
+                if [ -n "${sbtFilesDep[0]// /}" ]; then
+                  for sbtModChk in "${sbtFilesDep[@]}";
+                  do
+                    echo -e "${modifiedGitFiles}" | grep -w "${sbtModChk}" &> /dev/null; TC=$?;
+                    if [ "${TC}" -eq 0 ]; then
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${sbtModChk} which is already present in collection of Deleted dependent files -- $USR_PLAN_CORE RC:${RC}"
+                    else
+                      modifiedGitFiles+="${sbtModChk},"
+                      TC=0;
+                    fi
+                  done
+                fi
+              elif [ "${sourceEXT}" == hpp ] || [ "${sourceEXT}" == h ]; then
+                cFilesDep=($(git ls-files | grep -v \.git | grep "\.c\|.cpp" | tr '\n' ' '))
+                if [ -n "${cFilesDep[0]// /}" ]; then
+                  for cMak in "${cFilesDep[@]}";
+                  do
+                    if [ "${cMak##*.}" != cpy ]; then
+                      if [ "${cMak##*.}" == cpp ] || [ "${cMak##*.}" == c ]; then
+                        cFile="${cMak##*/}"
+                        # this for mak because of mac
+                        csuPPFiles=$(find . -type f -name "*\.mak" -exec grep  -l -e "^[^#].*\b${cFile}\b" {} + 2>&1 | grep -v '\.git' | sed "s|^\./||")
+                        if [ -n "${csuPPFiles[0]// /}" ]; then
+                          echo -e "${modifiedGitFiles}" | grep -w "${csuPPFiles}" &>/dev/null; TC=$?;
+                          if [ "${TC}" -eq 0 ]; then
+                            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${csuPPFiles} file which is already present in collection of Deleted dependent files -- $USR_PLAN_CORE RC:${RC}"
+                          else
+                            modifiedGitFiles+="${csuPPFiles},"
+                            TC=0;
+                          fi
+                        fi
+                      fi
+                      echo -e "${modifiedGitFiles}" | grep -w "${cMak}" &> /dev/null; TC=$?;
+                      if [ "${TC}" -eq 0 ]; then
+                        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${cMak} which is already present in collection of Deleted dependent files -- $USR_PLAN_CORE RC:${RC}"
+                      else
+                        modifiedGitFiles+="${cMak},"
+                        TC=0;
+                      fi
+                    fi
+                  done
+                fi
+              elif [ "${sourceEXT}" == cpy ]; then
+                cpyFilesDep=($(git ls-files | grep -v \.git | grep "\.asm" | tr '\n' ' '))
+                if [ -n "${cpyFilesDep[0]// /}" ]; then
+                  for cpyMak in "${cpyFilesDep[@]}";
+                  do
+                    if [ "${cpyMak##*.}" == asm ]; then
+                      cpyFile="${cpyMak##*/}"
+                      # this for mak because of mac
+                      cpysuPPFiles=$(find . -type f -name "*.mak" -exec grep  -l -e "^[^#].*\b${cpyFile}\b" {} + 2>&1 | grep -v '\.git' | sed "s|^\./||")
+                      if [ -n "${cpysuPPFiles[0]// /}" ]; then
+                        echo -e "${modifiedGitFiles}" | grep -w "${cpysuPPFiles}" &>/dev/null; TC=$?;
+                        if [ "${TC}" -eq 0 ]; then
+                          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${cpysuPPFiles} file which is already present in collection of Deleted dependent files -- $USR_PLAN_CORE RC:${RC}"
+                        else
+                          modifiedGitFiles+="${cpysuPPFiles},"
+                          TC=0;
+                        fi
+                      fi
+                    fi
+                    echo -e "${modifiedGitFiles}" | grep -w "${cpyMak}" &> /dev/null; TC=$?;
+                    if [ "${TC}" -eq 0 ]; then
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Required ${cpyMak} which is already present in collection of Deleted dependent files -- $USR_PLAN_CORE RC:${RC}"
+                    else
+                      modifiedGitFiles+="${cpyMak},"
+                      TC=0;
+                    fi
+                  done
+                fi
+              fi
+            done
+            unset IFS
+          fi
+          modifiedFile="${modifiedGitFiles%,*}";
+          deleFile="${DeletedGitFiles%,*}";
+          echo -e "changedFiles:${modifiedFile}";
+          if [ -n "${deleFile// /}" ]; then
+            echo -e "deletedFiles:${deleFile}";
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Prev-${prevCommitID} and latest-${latestCommitID} commits are different and deletedFile:${deleFile} - $USR_PLAN_CORE RC:${RC}"
+          fi
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Prev-${prevCommitID} and latest-${latestCommitID} commits are different and changedFiles:${modifiedFile} -- $USR_PLAN_CORE RC:${RC}"
+        else
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Prev-${prevCommitID} and latest-${latestCommitID} commits are different but there is no modified changes in segment sending changedFiles:NULL -- $USR_PLAN_CORE RC:${RC}"
+          echo -e "changedFiles:NULL"; #deleted
+        fi
+        rm -rf "${tempAfrDir}";
+      popd &> /dev/null
+    fi
+  elif [ "${RC}" -eq 0 ]; then
+    modifiedFile="NULL";
+    rm -rf "${tempAfrDir}";
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:prev-${prevCommitID} and latest-${latestCommitID} both are identical hence sending changedFiles:NULL -- $USR_PLAN_CORE RC:${RC}"
+    echo -e "changedFiles:${modifiedFile}";  ## empty checking
+  fi
+elif [ "${RC}" -eq 0 ]; then
+  modifiedFile="NULL";
+  rm -rf "${tempAfrDir}";
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:prev-${prevCommitID} latest-${latestCommitID} either one or both is null RC=0 Hence changedFiles:NULL -- $USR_PLAN_CORE RC:${RC}"
+  echo -e "changedFiles:${modifiedFile}";
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplementationID} ${PreviousCheckin} ${TypeOfCheckin} RC:${RC}"
+exit "${RC}";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,35 @@
+<div class="row">
+    <div class="col-md-12">
+        <div ng-if="vm.systemLists.length == 0" style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+            <b>No data found</b>
+        </div>
+        <table class="table table-bordered">
+            <thead>
+                <tr class="tableHeader alignText">
+                    <th>Target System</th>
+                    <th>IP Address</th>
+                    <th>Port No</th>
+                    <th>Company Name</th>
+                    <th>Short Name</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr ng-repeat="sysObj in vm.systemLists" class="textCenter hoverCurrentRow">
+                    <td>{{sysObj.name}}</td>
+                    <td>
+                        {{sysObj.ipaddress}}
+                    </td>
+                    <td>
+                        {{sysObj.portno}}
+                    </td>
+                    <td>
+                        {{sysObj.platformId.name}}
+                    </td>
+                    <td>
+                        {{sysObj.platformId.nickName}}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>

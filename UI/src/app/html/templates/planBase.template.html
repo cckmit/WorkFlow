@@ -1,0 +1,235 @@
+<md-progress-linear style="background: #3c8dbc;" ng-if="isLoading" md-mode="indeterminate"></md-progress-linear>
+<div class="row" ng-if="vm.impPlanList.length != 0">
+    <div class="col-md-12 leadTotalCount">
+        <span> Total number of items: <span class="templateCountSize"> {{vm.totalNumberOfItem}}</span> </span>
+    </div>
+</div>
+<div class="row" style="margin: 10px 0px;">
+    <div class="col-md-12">
+        <div ng-if="vm.impPlanList.length !== 0 && !isLoading" class="row">
+            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                <span style="padding: 10px;">Show</span>
+                <select class="form-control" style="padding:10px;width: 40%;" ng-change="switchPageSize()"
+                    ng-model="tableConfig.pageSize">
+                    <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                        ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                </select>
+                <span style="padding:10px">entries</span>
+            </div>
+            <div class="col-md-3"></div>
+            <div class="col-md-6">
+                <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)"
+                    pagination-id="tablePagination"></dir-pagination-controls>
+            </div>
+        </div>
+    </div>
+</div>
+<div ng-if="vm.impPlanList.length == 0 && !isLoading"
+    style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+    <b>No implementation plans found</b>
+</div>
+<div ng-if="vm.impPlanList.length !== 0 && !isLoading" class="row textCenter divTableHeader">
+    <div class="col-md-1" style="width : 5%">
+    </div>
+    <div class="col-md-1 unselectable" style="padding-right: 0px;">
+        <span class="noClickProp" ng-click="sort('id')">
+            Plan ID
+            <span>
+                <i class="fa fa-long-arrow-down {{sortColumn.id.asc ? '' : 'sortDisabled'}}"></i>
+                <i class="fa fa-long-arrow-up {{sortColumn.id.desc ? '' : 'sortDisabled'}}"></i>
+            </span>
+        </span>
+    </div>
+    <div class="col-md-2 unselectable" style="width: 15%;padding-left: 41px;">
+        <span class="noClickProp" ng-click="sort('planDesc')">
+            Description
+            <span>
+                <i class="fa fa-long-arrow-down {{sortColumn.planDesc.asc ? '' : 'sortDisabled'}}"></i>
+                <i class="fa fa-long-arrow-up {{sortColumn.planDesc.desc ? '' : 'sortDisabled'}}"></i>
+            </span>
+        </span>
+    </div>
+
+    <!-- <div class="col-md-1 unselectable">
+            Target System
+        </div>
+        <div class="col-md-1 unselectable">
+            Load Date/Time
+        </div> -->
+
+    <div class="col-md-3 unselectable textCenter" style="width: 26%;">
+        <div class="row">
+            <div class="col-md-4 " style="width: 45%;padding-left: 19px;">
+                Target System
+            </div>
+            <div class="col-md-8" style="width: 55%;" ng-click="sort('loaddatetime')">
+                Load Date/Time
+                <span>
+                    <i class="fa fa-long-arrow-down {{sortColumn.loaddatetime.asc ? '' : 'sortDisabled'}}"></i>
+                    <i class="fa fa-long-arrow-up {{sortColumn.loaddatetime.desc ? '' : 'sortDisabled'}}"></i>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-1 unselectable" style="width: 13%">
+        <!--<span class="noClickProp" ng-click="sort('planStatus')">-->
+        Status
+        <!--<span class="pull-right">
+                                <i class="fa fa-long-arrow-down {{sortColumn.planStatus.asc ? '' : 'sortDisabled'}}"></i>
+                                <i class="fa fa-long-arrow-up {{sortColumn.planStatus.desc ? '' : 'sortDisabled'}}"></i>
+                            </span>-->
+        <!-- </span> -->
+    </div>
+
+
+    <div class="col-md-2 unselectable">
+        <span class="noClickProp" ng-click="sort('createdBy')">
+            Created By
+            <span>
+                <i class="fa fa-long-arrow-down {{sortColumn.createdBy.asc ? '' : 'sortDisabled'}}"></i>
+                <i class="fa fa-long-arrow-up {{sortColumn.createdBy.desc ? '' : 'sortDisabled'}}"></i>
+            </span>
+        </span>
+    </div>
+    <div class="col-md-2" style="width: 14%">Actions</div>
+</div>
+<div ng-if="!isLoading">
+<div dir-paginate="pObj in vm.impPlanList | filter: q | itemsPerPage: tableConfig.pageSize" 
+    total-items="tableConfig.totalItems" current-page="tableConfig.currentPage" pagination-id="tablePagination">
+    <div class="row textCenter {{pObj.plan.id}} divTableBody hoverCurrentRow">
+        <div class="col-md-1" style="width : 5%">
+            <a ng-if="pObj.plan.expanded" aria-label="{{pObj.plan.id}}" ng-click="pObj.plan.expanded = false;">
+                <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+            </a>
+            <a ng-if="!pObj.plan.expanded" aria-label="{{pObj.plan.id}}"
+                ng-click="pObj.plan.expanded = true;loadSystemImplApproverList(pObj.plan);">
+                <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+            </a>
+        </div>
+        <div class="col-md-1">
+            {{pObj.plan.id}}
+        </div>
+        <div class="col-md-2 displayDesc2 " style="word-wrap: break-word;">
+            {{pObj.plan.planDesc }}<md-tooltip class="searchTooltip">{{pObj.plan.planDesc}}</md-tooltip>
+        </div>
+        <div class="col-md-3 textCenter">
+            <ul class="row" style="padding: 0px" ng-repeat="taskSystemObj in pObj.systemLoadList">
+                <span class="col-md-4 ">
+                    <!-- <span class="text-primary" ng-if="validateIPStatus(taskSystemObj.ip_addr)" title="{{taskSystemObj.ip_addr}}">
+                            <i class="fa fa-info-circle"></i>
+                        </span> -->
+                    <!-- <span class="text-danger" ng-if="taskSystemObj.ip_addr == false">
+                            <i class="fa fa-times-circle"></i>
+                        </span> -->
+                    {{taskSystemObj.systemId.name}}
+                </span>
+                <span class="col-md-8">
+                    {{taskSystemObj.loadDateTime | formattedDateTimeWithoutSeconds}}
+                </span>
+            </ul>
+        </div>
+
+        <div class="col-md-1" style="width: 13%">
+            <span plan-status-to-display-label="{{pObj.plan.planStatus}}"></span>
+        </div>
+
+        <div class="col-md-2">
+            {{pObj.plan.createdBy}}
+        </div>
+        <div class="col-md-2" style="width: 14%">
+            <div class="btn-group btnLeft" ng-if="getActionLeadAccess(vm.currentUser.id,pObj.plan)">
+                <button plan-action-control action="edit" status="{{pObj.plan.planStatus}}"
+                    username="{{pObj.plan.leadId}}" ui-sref="app.updateImpPlan({planId:pObj.plan.id})"
+                    style="background:#ddd;" class="btn btn-xs">
+                    <md-tooltip md-direction='top'>Edit</md-tooltip><span style="font-size: 12px;">
+                        <i class="fa  fa-edit"></i></span>
+                </button>
+                <button plan-action-control action="delete" status="{{pObj.plan.planStatus}}"
+                    username="{{pObj.plan.leadId}}" ng-disabled="!pObj.isDeleteAllowed"
+                    ng-click="deletePlan($event, pObj.plan.id)"
+                    style="background: #F44336 !important;color: #eee !important;" class="btn btn-xs">
+                    <md-tooltip md-direction='top'>Delete</md-tooltip><span style="font-size: 12px;">
+                        <i class="fa fa-trash"></i></span>
+                </button>
+                <div status="{{pObj.plan.planStatus}}" username="{{pObj.plan.leadId}}" ng-if="pObj.isDeploymentFlag"
+                    ng-click="vm.deploymentStatus($event, pObj.plan.id)" style="background:#ddd;" class="btn btn-xs">
+                    <div
+                        ng-if="pObj.plan.deploymentStatus == null || pObj.plan.deploymentStatus === 'NONE' || pObj.plan.deploymentStatus === 'START_DEPLOYMENT' ">
+                        <md-tooltip md-direction='top'>Stop Deployment</md-tooltip><span style="font-size: 12px;">
+                            <i class="fa fa-exclamation-triangle" style="font-size:15px;color:red"></i></span>
+                    </div>
+                    <div ng-if="pObj.plan.deploymentStatus === 'STOP_DEPLOYMENT'">
+                        <md-tooltip md-direction='top'>Reallow Deployment</md-tooltip><span style="font-size: 12px;">
+                            <i class="fa fa-exclamation-triangle" style="font-size:15px;color:green"></i></span>
+                    </div>
+                </div>
+                <!-- <button disabled ui-sref="#" style="background: #795548 !important;color: #eee !important;" class="btn btn-xs disabled">
+                    <md-tooltip md-direction='top'>Pull</md-tooltip>
+                    <span
+                            style="font-size: 12px;"><i
+                            class="fa fa-arrow-down"></i></span>
+                </button> -->
+                <button plan-action-control action="reject" status="{{pObj.plan.planStatus}}"
+                    username="{{pObj.plan.leadId}}" ng-click="rejectPlan($event, pObj.plan.id)"
+                    style="background: #F44336 !important;color: #eee !important;" class="btn btn-xs"
+                    aria-label="reject_{{pObj.plan.id}}">
+                    <md-tooltip md-direction='top'>Reject</md-tooltip><span style="font-size: 12px;"><i
+                            class="fa fa-close"></i></span>
+                </button>
+                <button plan-action-control action="submit" status="{{pObj.plan.planStatus}}"
+                    username="{{pObj.plan.leadId}}" class="btn btn-xs" ng-if="pObj.isSubmitReady"
+                    ng-disabled="pObj.isInProgress != ''" ng-click="submitPlan(pObj)"
+                    style="background: #4CAF50 !important;color: #eee !important;" aria-label="submit_{{pObj.plan.id}}">
+                    <span ng-if="pObj.isInProgress == ''">
+                        <md-tooltip md-direction='top'>Submit</md-tooltip><span style="font-size: 12px;"><i
+                                class="fa fa-check"></i></span>
+                    </span>
+                    <span ng-if="pObj.isInProgress != ''">
+                        <md-tooltip md-direction='top'>Submit In-Progress</md-tooltip><span style="font-size: 12px;"><i
+                                class="fa fa-spinner fa-pulse" style="color:white"></i></span>
+                    </span>
+
+                </button>
+
+                <button plan-action-control action="create_implementation" status="{{pObj.plan.planStatus}}"
+                    username="{{pObj.plan.leadId}}" ui-sref="app.newImp({planId:pObj.plan.id})" class="btn btn-xs"
+                    style="background: #3c8dbc !important;color:white;">
+                    <md-tooltip md-direction='top'>Create Implementation
+                    </md-tooltip><span style="font-size: 12px;"><i class="fa fa-plus"></i></span>
+                </button>
+
+                <!-- <button plan-action-control action="status" status="{{pObj.plan.planStatus}}" username="{{pObj.plan.leadId}}" ng-click="planStatusModal($event, pObj.plan.id)" style="background: #ddd !important;" class="btn btn-xs" aria-label="status_{{pObj.plan.id}}"> -->
+                <!-- <md-tooltip md-direction='top'>Status</md-tooltip><span -->
+                <!-- style="font-size: 12px;"><i class="fa fa-info-circle"></i></span> -->
+                <!-- </button> -->
+            </div>
+        </div>
+    </div>
+    <div class="row animated fadeIn labelFix" style="margin:0px;" ng-if="pObj.plan.expanded" ng-init="pObj=pObj.plan">
+        <div ng-include='templatePath+"/impPlan.template.html"'></div>
+    </div>
+</div>
+</div>
+<div class="row" style="margin: 10px 0px;" >
+    <div class="col-md-12">
+        <div ng-if="vm.impPlanList.length !== 0 && !isLoading" class="row">
+            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                <span style="padding: 10px;">Show</span>
+                <select class="form-control" style="padding:10px;width: 40%;" ng-change="switchPageSize()"
+                    ng-model="tableConfig.pageSize">
+                    <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                        ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                </select>
+                <span style="padding:10px">entries</span>
+            </div>
+            <div class="col-md-3"></div>
+            <div class="col-md-6">
+                <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)"
+                    pagination-id="tablePagination"></dir-pagination-controls>
+            </div>
+        </div>
+    </div>
+</div>

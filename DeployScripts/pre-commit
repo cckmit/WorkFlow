@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+echo -e "ZTPFM - Maven Java files import validation init.."
+$MAVEN_HOME/bin/mvn impsort:check
+if [ $? -ne 0 ]; then
+ echo "Import Validation must pass before commit!"
+ exit 1
+fi
+
+echo -e "ZTPFM - Maven Java files formatter validation init.."
+$MAVEN_HOME/bin/mvn formatter:validate
+if [ $? -ne 0 ]; then
+ echo "Format Validation pass before commit!"
+ exit 1
+fi
+exit 0

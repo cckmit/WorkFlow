@@ -1,0 +1,90 @@
+<md-dialog aria-label="insertDTNDialog" style="width: 65%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <label style="color:white;">Update Project Number</label>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content" style="height:35vh;">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label>Project Number Ex:12345_01 or 123456_01 </label>
+                        <md-input-container class="md-icon-float md-block clearMargin">
+                            <textarea ng-disabled="true" aria-label="DeltaTrackingNum" name="dtn"
+                                ng-model="vmid.form.projectNumber"
+                                ng-pattern-restrict="^[0-9]{0,6}(_[0-9]{0,2})?$"></textarea>
+                        </md-input-container>
+                    </div>
+                    <div class="col-md-6">
+                        <label>Project Manager<span class="requiredField">*</span></label>
+
+                        <md-input-container style="margin-top: 0px;" class="md-icon-float md-block multipleSelect2">
+                            <select tabindex="3" name="approver" id="approver" ng-model="vmid.form.managerId"
+                                class="form-control" multiple="multiple" aria-label="approver">
+                                <option ng-value="dv.id" ng-selected="vmid.form.managerId.indexOf(dv.id)>=0"
+                                    ng-repeat="dv in vmid.devManagerList  | orderBy :'displayName'">
+                                    {{ dv.displayName }}
+                                </option>
+                            </select>
+                        </md-input-container>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="spacingFour">Project Title <span class="requiredField">*</span></label>
+                        <md-input-container class="md-icon-float md-block clearMargin">
+                            <textarea aria-label="dtnTitle" name="title" ng-model="vmid.form.projectName"></textarea>
+                        </md-input-container>
+                    </div>
+                    <div class="col-md-6">
+                        <label>Maintenance
+                            <span class="requiredField">*</span>
+                        </label>
+                        <md-input-container class="md-icon-float md-block">
+                            <md-radio-group layout="row" ng-model="vmid.form.maintanceFlag"
+                                ng-selected="vmid.form.maintanceFlag">
+                                <md-radio-button value="Yes">
+                                    Yes</md-radio-button>
+                                <md-radio-button value="No">No
+                                </md-radio-button>
+                            </md-radio-group>
+                        </md-input-container>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label>Line of Business</label>
+                        <md-input-container class="md-icon-float md-block spacingFive">
+                            <md-input-container class="md-icon-float md-block clearMargin">
+                                <textarea aria-label="lob" name="lb" ng-model="vmid.form.lineOfBusiness"></textarea>
+                            </md-input-container>
+                        </md-input-container>
+                    </div>
+                    <div class="col-md-6">
+                        <label>Project Sponsor</label>
+                        <md-input-container class="md-icon-float md-block spacingFive">
+                            <md-input-container class="md-icon-float md-block clearMargin">
+                                <textarea aria-label="projectSponser" name="ps"
+                                    ng-model="vmid.form.sponsorId"></textarea>
+                            </md-input-container>
+                        </md-input-container>
+                    </div>
+                </div>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <span flex></span>
+            <md-button ng-click="cancel()" aria-label="cancelDTNUpdate">
+                Cancel
+            </md-button>
+            <md-button class="md-primary" ng-click="vmid.updateDTNDetails(vmid.form)" aria-label="updateDTNWindow">
+                Update
+            </md-button>
+
+        </md-dialog-actions>
+    </form>
+</md-dialog>

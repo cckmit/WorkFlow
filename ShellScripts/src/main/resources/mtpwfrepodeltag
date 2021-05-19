@@ -1,0 +1,105 @@
+#!/bin/bash
+#shellcheck disable=SC2164
+#************************************************************************************#
+#   SCRIPT NAME: mtpwfrepodeltag                                                     #
+#                                                                                    #
+#   DESCRIPTION:                                                                     #
+#      This script is to delete Tag the GIT repository from the workflow.            #
+#                                                                                    #
+#   NOTE: Don't alter CONSOLE messages                                               #
+#                                                                                    #
+#   INPUT:                                                                           #
+#      $1  - Tagname                                                                 #
+#      $2  - Repository Name                                                         #
+#                                                                                    #
+#   OUTPUT:                                                                          #
+#      exit with 0, successfull delete tagging process                               #
+#      exit with 8, delete failed                                                    #
+#                                                                                    #
+#************************************************************************************#
+#************************************************************************************#
+#                                                                                    #
+#                            M A I N T E N A N C E                                   #
+#                                                                                    #
+#------------------------------------------------------------------------------------#
+#   MMDDYYYY    INIT        COMMENT                                                  #
+#   --------    ----------  ---------------------------------------------------------#
+#   08112017    NARASHIMAN  Created the script                                       #
+#   12142017    VINOTH      Updated Tag delete                                       #
+#   14022018    ARUL        Refactore with delete tag support                        #
+#   04252019    GOWTHAM   Updated with logger support                                #
+#************************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090,SC1073
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+TAG_NAME="$1";                         #Read Tag from input
+REMOTE_REPO_NAME="$2";                 #Read Repo Name from Input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${TAG_NAME} ${REMOTE_REPO_NAME} RC:$RC"
+#
+#------------------------------------------------------------------------------------#
+# Delete Tag the repository
+function delRepoTag {
+  local _RC=0;
+  local TAG_Name;
+  local _TAG_NAME;
+  if [ -d "${TEMP_TAG_DIR}" ]; then
+    pushd "${TEMP_TAG_DIR}" &> /dev/null;
+      IFS=',' read -r -a TAG_Name <<< "${TAG_NAME[@]}"
+      for _TAG_NAME in "${TAG_Name[@]}";
+      do
+        git tag | grep "${_TAG_NAME}" &> /dev/null; _RC=$?; #Check this tag if already available
+        if [ "${_RC}" -eq 0 ]; then
+          git tag -d "${_TAG_NAME}" &> /dev/null; _RC=$?; #Delete tag from the Repo
+          if [ "${_RC}" -eq 0 ]; then
+            git push origin :refs/tags/"${_TAG_NAME}" &> /dev/null; _RC=$?; #Push remaining tags to repo
+            if [ "${_RC}" -eq 0 ]; then
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Delete Tagging ${BRANCH_NAME} Success RC:$_RC"
+              echo -e "\\nSTATUS: Delete Tagging ${BRANCH_NAME} Success."; #CONSOLE
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Delete Tagging ${BRANCH_NAME} Failed [Push] RC:$EC"
+              echo -e "\\nSTATUS: Delete Tagging ${BRANCH_NAME} Failed [Push]."; _RC="${EC}"; #CONSOLE
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Delete Tagging ${BRANCH_NAME} Failed RC:$EC"
+            echo -e "\\nSTATUS: Delete Tagging ${BRANCH_NAME} Failed."; _RC="${EC}"; #CONSOLE
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Delete Tagging ${BRANCH_NAME} Skipped [not found] RC:$RC"
+          echo -e "\\nSTATUS: Delete Tagging ${BRANCH_NAME} Skipped [not found]."; _RC="${RC}"; #CONSOLE
+        fi
+      done
+      unset IFS
+    popd &> /dev/null
+    rm -Rf "${TEMP_TAG_DIR}" &> /dev/null
+  fi
+  return "${_RC}"
+}
+#------------------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  TEMP_TAG_DIR="${HOME}/${REMOTE_REPO_NAME##*/}_tag"
+  git clone "${DEV_SRC_RURL}${REMOTE_REPO_NAME}.git" "${TEMP_TAG_DIR}" &> /dev/null; RC=$?;
+  if [ "${RC}" -eq 0 ]; then
+    delRepoTag; RC=$?;
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Delete Tagging ${BRANCH_NAME} Failed [Clone] RC:$EC"
+    echo -e "\\nSTATUS: Delete Tagging ${BRANCH_NAME} Failed [Clone]."; #CONSOLE
+    RC="$EC";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#------------------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${TAG_NAME} ${REMOTE_REPO_NAME} RC:$RC"
+exit "${RC}"
+#------------------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,5 @@
+vld0.mak LDFLAGS_VLD0 := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+vld2.mak LDFLAGS_VLD2 := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+vld4.mak LDFLAGS_VLD4 := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+vlfr.mak LDFLAGS_VLFR := -Xlinker --defsym -Xlinker CGCC_31BIT=0
+vlu4.mak LDFLAGS_VLU4 := -Xlinker --defsym -Xlinker CGCC_31BIT=0

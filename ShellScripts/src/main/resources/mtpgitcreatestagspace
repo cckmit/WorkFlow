@@ -1,0 +1,75 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcreatestagspace                                        #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to create common stag workspace for integration testing         #
+#                                                                             #
+#   NOTE:                                                                     #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation plan name with core                               #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   07032017    ARUL    Created the script                                    #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibvalidation"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+RemoteBranchName="$1";                 #Read actual path of prject dir
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${RemoteBranchName} RC:$RC"
+#-----------------------------------------------------------------------------#
+function createStagSpace {
+  local _RC;
+  #Non-IBM DEVL Workspace creation
+  mkdir -p "${APP_STG_IMPL_CWRK}"; _RC=$?;
+  if [ "$_RC" -ne 0 ]; then
+    _RC="$EC";
+  else
+    #IBM DEVL Workspace creation
+    mkdir -p "${SYS_STG_IMPL_CWRK}"; _RC=$?;
+    if [ "$_RC" -ne 0 ]; then _RC="$EC"; fi
+  fi
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  getParmFromBranch "$RemoteBranchName" "STG";
+  if [ ! -d "${APP_STG_IMPL_CWRK}" ] && [ ! -d "${SYS_STG_IMPL_CWRK}" ]; then
+    createStagSpace; RC=$?
+    if [ "$RC" -eq 0 ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:stagging workspace created RC:$RC"
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:stagging workspace creation failed RC:$RC"
+    fi
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${RemoteBranchName} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

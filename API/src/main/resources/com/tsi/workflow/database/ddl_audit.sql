@@ -1,0 +1,25 @@
+CREATE SCHEMA audit AUTHORIZATION workflow;
+GRANT ALL ON SCHEMA audit TO postgres;
+GRANT ALL ON SCHEMA audit TO public;
+GRANT ALL ON SCHEMA audit TO workflow;
+ALTER TABLE audit.api_actions OWNER TO workflow;
+ALTER TABLE audit.api_transaction OWNER TO workflow;
+ALTER TABLE audit.gi_transaction OWNER TO workflow;
+ALTER TABLE audit.linux_servers OWNER TO workflow;
+ALTER TABLE audit.plan_details OWNER TO workflow;
+GRANT ALL ON TABLE audit.api_actions TO postgres;
+GRANT ALL ON TABLE audit.api_actions TO public;
+GRANT ALL ON TABLE audit.api_actions TO workflow;
+GRANT ALL ON TABLE audit.api_transaction TO postgres;
+GRANT ALL ON TABLE audit.api_transaction TO public;
+GRANT ALL ON TABLE audit.api_transaction TO workflow;
+GRANT ALL ON TABLE audit.gi_transaction TO postgres;
+GRANT ALL ON TABLE audit.gi_transaction TO public;
+GRANT ALL ON TABLE audit.gi_transaction TO workflow;
+GRANT ALL ON TABLE audit.plan_details TO postgres;
+GRANT ALL ON TABLE audit.plan_details TO public;
+GRANT ALL ON TABLE audit.plan_details TO workflow;
+GRANT ALL ON TABLE audit.linux_servers TO postgres;
+GRANT ALL ON TABLE audit.linux_servers TO public;
+GRANT ALL ON TABLE audit.linux_servers TO workflow;
+

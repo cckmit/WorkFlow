@@ -1,0 +1,80 @@
+<md-dialog aria-label="lc" style="width: 64%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <label style="color:white;">Update Load Category</label>
+                <!--<span flex></span>-->
+                <!--<md-button class="md-icon-button" ng-click="cancel()">-->
+                <!--<i class="fa fa-close"></i>-->
+                <!--</md-button>-->
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content" style="height: 61vh;">
+
+                <div class="row">
+                    <div class="col-md-3">
+                        <label>Target System(s) <span class="requiredField">*</span></label>
+                        <md-input-container class="md-icon-float md-block clearMargin">
+                            <select name="systems" ng-model="vmid.form.loadCategory.systemId.id" class="form-control" style="margin-left: -3px;margin-top: 10px;">
+                                <option value="">Select</option>
+                                <option ng-value="system.id"
+                                        ng-repeat="system in vmid.systemsList" ng-selected="vmid.form.loadCategory.systemId.id == system.id">
+                                    {{system.name}}
+                                </option>
+                            </select>
+                        </md-input-container>
+                    </div>
+                    <div class="col-md-3 ">
+                        <label class="">Load Category <span class="requiredField">*</span></label>
+                        <md-input-container class="md-icon-float md-block spacingOne">
+                            <input type="text" name="name" aria-label="name" ng-change="vmid.form.loadCategory.name=vmid.form.loadCategory.name.toUpperCase()" ng-model="vmid.form.loadCategory.name" maxlength="1" />
+                        </md-input-container>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="">Load Category Description <span class="requiredField">*</span></label>
+                        <md-input-container class="md-icon-float md-block spacingOne">
+                            <textarea aria-label="desc" name="desc" ng-model="vmid.form.loadCategory.description"></textarea>
+                        </md-input-container>
+
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <label>Days <span class="requiredField">*</span></label>
+
+                        <div layout="row">
+                            <div style="width:100px;border:1px solid #eee;padding: 5px;" data-ng-repeat="days in vmid.daysList">
+                                <md-checkbox name="days_{{days}}" ng-model="vmid.loadDays[days]" aria-label="days">{{days}}
+                                </md-checkbox>
+                                <div ng-repeat="lW in vmid.timeslots[days]">
+                                    <label>Time</label> <a class="close" style="color:red" ng-click="removeSlot(lW, vmid.timeslots[days], vmid.loadDays, days)" aria-label="{{days}}_Remove Slot">&times</a>
+                                    <div class="input-group" moment-picker="lW.timeSlot" format="HH:mm" locale="de">
+                                        <input type="text" name="timeSlot_{{ts}}" aria-label="{{days}}_timeSlot_{{$index}}" class="form-control" ng-model="lW.timeSlot" />
+                                    </div>
+                                    <!--<pre>{{vmid.daysList[days.index] | json}}</pre>-->
+                                </div>
+                                <div>
+                                    <a ng-click="addSlot(days)" aria-label="{{days}}_Add Slot">Add Slot</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <span flex></span>
+            <md-button ng-click="cancel()" aria-label="cancelLoadCategory_updateWindow">
+                Cancel
+            </md-button>
+            <md-button class="md-primary" ng-click="vmid.submitUpdateCategory(vmid.form)" aria-label="updateLoadCategory_updateWindow">
+                Update
+            </md-button>
+
+        </md-dialog-actions>
+    </form>
+</md-dialog>

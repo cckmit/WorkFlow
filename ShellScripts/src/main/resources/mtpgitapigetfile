@@ -1,0 +1,131 @@
+#!/bin/bash
+# shellcheck disable=SC2207,SC1117,SC2034,SC2179,SC2002,SC2128,SC2178,SC2164,SC2086
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitgetapifile                                             #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to get file from generic API to retrieve various metadata       #
+#   and objects from the DevOps Toolchain database                            #
+#   INPUT:                                                                    #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#      $1  - ResApiFile                                                       #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull code migration.                               #
+#      exit with 8, error message                                             #
+#                                                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   04072018    VINOTH       Created the script                               #
+#   04222019    GOWTHAM      Updated with logger support                      #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ResApiFile="$1";                       #Read core data as input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ResApiFile} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+# to get data using API
+function apiGetDate {
+  local _RC="$RC"
+  #echo -e "PWD-$PWD"                  #DEBUG
+  while IFS=" " read -r apiFile
+  do
+    File="( ${apiFile} )";             #Convert File data to array
+    _zlinuxSys="${File[0]}";           #WSP
+    _FileLocation="${File[1]}";        #/tmp
+    _FunPackstatus="${File[2]}";       #NON_IBM or IBM
+    _ProgramName="${File[3]}";         #include/oh1oh.h
+    _RefStatus="${File[4]}";           #ONLINE or T1801034
+    _Rank="${File[5]}";                #0 or 1 or -1
+    _RemoteUrl="${File[6]}";           #tpf/tp/nonibm/nonibm_prc4.git
+    _CommitId="${File[7]}";            #143549272c959f64013d2f9e4e956b83d19eb2da
+    #
+    mkdir -p "${_FileLocation}";
+    if [ -d "${_FileLocation}" ]; then
+      pushd "${_FileLocation}" &> /dev/null
+        _Program="${_ProgramName%.*}"
+        _ProgramSegmExt="${_ProgramName##*/}";
+        _ProgramRemv="${_ProgramSegmExt%.*}";
+        _ProgramExt="${_ProgramName##*.}";
+        #
+        if [[ "${_RefStatus}" =~ T ]] || [[ "${_RefStatus}" =~ D ]]; then
+          if [[ "${_FunPackstatus}" == NON_IBM ]]; then
+            cp -r "${STG_TPF_APP}/${_zlinuxSys,,}/${_RefStatus,,}/${_ProgramName}" "${_FileLocation}/${_Program}_${_RefStatus}.${_ProgramExt}"; _RC=$?;
+          elif [[ "${_FunPackstatus}" == IBM ]]; then
+            cp -r "${STG_TPF_SYS}/${_zlinuxSys,,}/${_RefStatus,,}/${_ProgramName}" "${_FileLocation}/${_Program}_${_RefStatus}.${_ProgramExt}"; _RC=$?;
+          fi
+          if [ "${_RC}" -ne 0 ]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${_ProgramName} copy failed to ${_FileLocation}/${_Program}_${_RefStatus}_${_ProgramExt} RC:$_RC"
+            echo -e "ERROR: ${_ProgramName} copy failed to ${_FileLocation}/${_Program}_${_RefStatus}_${_ProgramExt}"; #CONSOLE
+            _RC=${EC};
+            _ftError="${_RC}"
+          fi
+        else
+          UrlApiFile="${PRD_BIN_RURL_GUSR}/gitblit/raw/${_RemoteUrl}/${_CommitId}/${_ProgramName}";
+          i="";
+          for i in {0..2}                    #Retry if it's failed
+          do
+            curl -k -s --request GET --url "${UrlApiFile}" | grep "<h1>Error</h1><p>Sorry" &> /dev/null; _RC=$?;
+            sendLOG "INFO" "pid[${SPID}]" "${UrlApiFile} RC:$_RC"
+            if [ "${_RC}" -eq 0 ]; then
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Segment ${_ProgramName} is not found in ${_RemoteUrl} RC:$_RC"
+              echo -e "ERROR: Segment ${_ProgramName} is not found in ${_RemoteUrl}."; #CONSOLE
+              _RC="$EC";
+            else
+              wget -O "${_ProgramRemv}_${_Rank}.${_ProgramExt}" -q -N --no-check-certificate "${UrlApiFile}" &> /dev/null;
+              _RC=$?;
+              break;
+            fi
+          done
+          if [ "${_RC}" -ne 0 ]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed RC:$_RC"
+            echo -e "ERROR: Failed" ; _RC=${EC};                       #CONSOLE
+            _ftError="${_RC}"
+          fi
+        fi
+      popd &> /dev/null
+    fi
+  done < "${ResApiFile}"
+  unset IFS
+  if [[ -n "${_ftError[*]// /}" ]]; then
+    _RC=1;
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ -f "${ResApiFile}" ]; then
+    apiGetDate; RC="$?"
+    if [ "${RC}" -eq 0 ]; then
+     rm -f "${ResApiFile}" &> /dev/null
+    fi
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ResApiFile} RC:$RC"
+exit "${RC}"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

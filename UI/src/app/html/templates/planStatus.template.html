@@ -1,0 +1,119 @@
+<div class="">
+	<div class="row">
+		<div class="col-md-12">
+			<div class="content-container">
+				<div class="contented implement" ng-if="!pObj.macroHeader">
+					<div class="content-circles flex">
+						<div class="item" ng-repeat="imp_plan in pObj.trackerImplementationPlan.stages" ng-hide="$last">
+							<div class="circle tooltipDiv" ng-class="{active: imp_plan.currentStatus == 'IN_PROGRESS',
+								complete: (imp_plan.currentStatus == 'COMPLETED' && !imp_plan.byPassStatus), byPassed: imp_plan.byPassStatus}">
+							  <md-tooltip md-diretction='top' ng-if="imp_plan.byPassStatus">BYPASSED</md-tooltip>
+								<span class="tooltiptext" ng-if="imp_plan.currentStatus == 'IN_PROGRESS'">
+									<span ng-repeat="(key,value) in imp_plan.messages"
+										class="imp_message_{{key}}">{{value}}</span>
+								</span>
+							</div>
+						</div>
+					</div>
+					<div class="content-progress-bars flex">
+						<div class="progress-bar" ng-repeat="imp_plan in pObj.trackerImplementationPlan.stages" ng-hide="$last"></div>
+					</div>
+
+					<div class="step-labels flex">
+						<div class="item" ng-repeat="imp_plan in pObj.trackerImplementationPlan.stages" ng-hide="$last">
+							<label >{{imp_plan.status}}</label>
+						</div>
+					</div>
+					<div class="step-labels flex step-indicator" ng-if="!pObj.step_indicator">
+						<div class="item" ng-repeat="imp_plan in pObj.trackerImplementationPlan.stages" ng-hide="$last"
+							ng-class="{indicator: (imp_plan.currentStatus == 'IN_PROGRESS' && !imp_plan.currentStage), 
+								indicator1: imp_plan.currentStatus != 'IN_PROGRESS', 
+								icon_indicator: (imp_plan.currentStatus == 'IN_PROGRESS' && imp_plan.currentStage)}">
+							<div class="implement_text">Plan is here</div>
+							<div><i class="fa fa-arrow-down fa-1x implement_icon" aria-hidden="true"></i></div>
+						</div>
+					</div>
+				</div>
+
+				<div class="contented implement" ng-if="pObj.macroHeader">
+					<div class="content-circles flex">
+						<div class="item" ng-repeat="imp_plan in pObj.trackerImplementationPlan.stages" ng-hide="$last">
+							<div class="circle tooltipDiv" ng-class="{active: imp_plan.currentStatus === 'IN_PROGRESS', 
+								complete: (imp_plan.currentStatus == 'COMPLETED' && !imp_plan.byPassStatus), byPassed: imp_plan.byPassStatus}">
+							  <md-tooltip md-diretction='top' ng-if="imp_plan.byPassStatus">BYPASSED</md-tooltip>
+								<span class="tooltiptext" ng-if="imp_plan.currentStatus == 'IN_PROGRESS'">
+									<span ng-repeat="(key,value) in imp_plan.messages"
+										class="imp_message_{{key}}">{{value}}</span>
+								</span>
+							</div>
+						</div>
+					</div>
+					<div class="content-progress-bars flex">
+						<div class="progress-bar" ng-repeat="imp_plan in pObj.trackerImplementationPlan.stages" ng-hide="$last"></div>
+					</div>
+
+					<div class="step-labels flex">
+						<div class="item" ng-repeat="imp_plan in pObj.trackerImplementationPlan.stages" ng-hide="$last">
+							<label >{{imp_plan.status}}</label>
+						</div>
+					</div>
+					<div class="step-labels flex step-indicator" ng-if="!pObj.step_indicator">
+						<div class="item" ng-repeat="imp_plan in pObj.trackerImplementationPlan.stages" ng-hide="$last"
+							ng-class="{indicator: imp_plan.currentStatus != 'IN_PROGRESS', icon_macro_indicator: imp_plan.currentStatus == 'IN_PROGRESS'}">
+							<div class="implement_text">Plan is here</div>
+							<div><i class="fa fa-arrow-down fa-1x implement_icon" aria-hidden="true"></i></div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div ng-repeat="implement in pObj.trackerImplementationPlan.implementations">
+				<div class="cross-line-{{$index}}">
+				</div>
+			</div>
+
+			<div class="row content-container second-content-container-{{$index}}"
+				ng-repeat="(key,value) in pObj.trackerImplementationPlan.implementations | orderBy:'implementationId'">
+				<div class="col-md-9 contented implement_plan">
+
+					<div class="content-circles flex">
+						<div class="items" ng-repeat="imp in value.stages" ng-hide="$last">
+							<div class="circle tooltipDiv" ng-class="{active: imp.status === pObj.implementationStatus[key], 
+						complete: imp.id < pObj.implementationId[key]}">
+								<span class="tooltiptext" ng-if="imp.status === pObj.implementationStatus[key]" 
+									ng-repeat="message in pObj.implementationMessage[key]">{{message}}</span>
+							</div>
+						</div>
+					</div>
+
+					<div class="content-progress-bars flex">
+						<div class="progress-bar" ng-repeat="imp in value.stages" ng-hide="$last"></div>
+					</div>
+					<div class="step-labels flex">
+						<div class="item" ng-repeat="imp in value.stages" ng-hide="$last">
+							<label>{{ imp.status }}</label>
+						</div>
+					</div>
+					<div class="step-labels flex step-indicator" ng-if="pObj.step_indicator">
+						<div class="item" ng-repeat="imp in value.stages"  ng-hide="$last"
+							ng-class="{imp_indicator: imp.status != pObj.implementationStatus[key], 
+							icon_imp_indicator: imp.status == pObj.implementationStatus[key]}">
+							<div class="implement_text">Implementation is here</div>
+							<div><i class="fa fa-arrow-down fa-1x implement_icon" aria-hidden="true"></i></div>
+						</div>
+					</div>
+
+				</div>
+				<div class="col-md-1" style="padding: 0;s">
+					<span style="margin-right:10px;">
+						<i class="fa fa-arrow-right fa-1x"aria-hidden="true"></i>
+					</span> 
+				</div>
+				<div class="col-md-2" style="padding: 0;position: relative;top: -20px;">
+					<p>Developer: {{value.developerName}}</p>
+					<p>{{value.implementationId}}</p>
+				</div>
+			</div>
+		</div>
+	</div>
+ </div>

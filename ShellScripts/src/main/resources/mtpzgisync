@@ -1,0 +1,90 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpzgisync                                                   #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      GI Support script to get common file path for other systems using      #
+#      Workflow API                                                           #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - File path                                                        #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   09182017    ARUL    Created script                                        #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+FilePath="$1";                         #Read file path from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${FilePath} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  HomePath="${FilePath%%/projects*}"
+  ProjectPath="${FilePath##*projects/}"
+  ImplanID="${ProjectPath%%/*}"
+  CoreFilePath="${ProjectPath#*/}"
+  SegmentPath="${CoreFilePath#*/}"
+  CoreName="${CoreFilePath%%/*}"
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:EXEC:Curl ${PRD_API_WKF}/common/getFileSyncInfo access to read data RC:$RC"
+  #shellcheck disable=SC2207
+  output=( $(curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_API_PORT}/${PRD_API_WKF}/common/getFileSyncInfo?implId=${ImplanID}&file=${SegmentPath}&systemName=${CoreName}") )
+  IFS="|" read -ra result <<< "${output[@]}"
+  if [ "${#result[@]}" -ne 0 ]; then
+    for x in "${result[@]}"
+    do
+      if [[ "${x:0:1}" == t ]]; then
+        if [[ "${x}" != "${ImplanID}" ]]; then
+          break;
+        fi
+      elif [[ "${x:0:1}" == z ]]; then
+        IFS="," read -ra pathref <<< "${x}"
+        for y in "${pathref[@]}"
+        do
+          if [[ "${y:0:1}" == z ]]; then
+            remoteHost="${y}"
+          else
+            remotePath="${remoteHost},${HomePath}/projects/${ImplanID}/${y}"
+            if [[ ! "${remotePath}" =~ ${CoreFilePath} ]]; then
+              echo -e "${remotePath}";                                 #CONSOLE
+            fi
+          fi
+        done
+      fi
+    done
+  else
+    RC="$EC"
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:EXEC:curl ${PRD_API_WKF}/common/getFileSyncInfo failed to access RC:$RC"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${FilePath} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

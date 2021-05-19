@@ -1,0 +1,330 @@
+<style>
+    md-input-container.md-block {
+        /* margin-top:10px; */
+    }
+    
+    .md-select-value *:first-child {
+        flex: initial;
+        width: 100%;
+    }
+    
+    .header li {
+        font-weight: bold;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .select2-results__option[aria-selected=true] {
+        display: none;
+    }
+</style>
+<!-- Content Header (Page header) -->
+<section class="content-header">
+
+    <!-- <ol class="breadcrumb">
+        <li><a><i class="fa fa-dashboard"></i> Dashboard</a></li>
+        <li class="active">Contact Me</li>
+    </ol> -->
+</section>
+<!-- Main content -->
+<section class="content animated slideInLeft scrollingFunction" id="scroll_function">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="well" style="background-color:#fff;padding-top:0px;">
+
+                <form class="row scrollview" data-ng-submit="" name="vm.impForm">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <md-content style="overflow: inherit;padding-left: 15px;padding-right: 15px;">
+                                <fieldset style="padding-bottom:10px;">
+                                    <legend>
+                                        Implementation Information
+                                    </legend>
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <label>Implementation Plan ID
+                                                </label>
+                                            <md-input-container class="md-icon-float md-block spacingTwo">
+                                                <input type="text" aria-label="planid" ng-model="vm.imp.planId.id" ng-init="vm.imp.planId.id=vm.planId" style="color: green;font-weight: bold;" disabled/>
+                                            </md-input-container>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label>Description of Change <span
+                                                    class="requiredField">*</span></label>
+                                            <md-input-container class="md-icon-float md-block spacingTwo">
+                                                <textarea tabindex="1" name="description" aria-label="impdesc" data-ng-model="vm.imp.impDesc" class="form-control"></textarea>
+                                            </md-input-container>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label>Problem Ticket Number</label>
+                                            <md-input-container class="md-icon-float md-block mdIChange">
+                                                <ul tabindex="2" id="iprobTktNo" style="margin-top: 15px;">
+
+                                                </ul>
+                                                <!-- <input type="text" aria-label="tktnum" name="tktNum" data-ng-model="vm.imp.tktNum" class="form-control"> -->
+                                            </md-input-container>
+                                            <span class="requiredField" ng-show="vm.showImpTtktNumberError" style="font-style: italic;">{{vm.iticketErrorMessage}}</span>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <!-- <label style="margin-bottom: 0px">Peer Reviewer(s) <span
+                                                class="requiredField">*</span></label>
+                                            <label ng-if="planLoadType=='EMERGENCY'" style="margin-bottom: 0px">ByPass Peer Review</label>
+                                            <md-checkbox ng-if="planLoadType=='EMERGENCY'" ng-click="vm.imp.peerReviewers=''" ng-disabled="userRole!='Lead'" ng-model="vm.imp.bypassPeerReview" style="margin-bottom:0px;margin-left:0px" aria-label="byPassPeerReviewers"></md-checkbox>
+                                            <md-input-container style="margin-top: 0px" class="md-icon-float md-block multipleSelect2"> -->
+                                                <label>Peer Reviewer(s)<span class="requiredField">*</span></label>
+                                                <md-input-container class="md-icon-float md-block multipleSelect2">
+                                                    <select tabindex="3" name="peerReviewers" id="peerReviewers" ng-disabled="vm.imp.bypassPeerReview" ng-model="vm.imp.peerReviewers" class="form-control" multiple="multiple" aria-label="selectPeerReviewers">
+                                                        <option ng-value="rev.id" 
+                                                                ng-repeat="rev in vm.peerReviewers | orderBy :'displayName'">
+                                                            {{ rev.displayName }}
+                                                        </option>
+                                                    </select>
+                                                </md-input-container>
+                                            <!-- <label>Implementation Status <span
+                                                        class="requiredField">*</span></label>
+                                            <md-input-container class="md-icon-float md-block spacingTwo">
+
+                                                <select name="impStatus" ng-model="vm.imp.impStatus" ng-init="vm.imp.impStatus='IN_PROGRESS'" class="form-control">
+                                                    <option value="{{statusKey}}" ng-repeat="(statusKey,statusValue) in vm.impStatusList"
+                                                            ng-selected="statusKey == vm.imp.impStatus">
+                                                        {{statusValue}}
+                                                    </option>
+                                                </select>
+                                            </md-input-container> -->
+                                        </div>
+
+
+                                    </div>
+                                    <div class="row">
+                                        <!-- <div class="col-md-3">
+                                            <label>Developer Name <span
+                                                    class="requiredField">*</span></label>
+
+                                            <md-input-container class="md-icon-float md-block singleSelect2">
+
+                                                <select tabindex="4" name="developerName" id="developersList" ng-model="vm.imp.devId" class="form-control" aria-label="selectDeveloperList">
+                                                    <option ng-value="dev.id"
+                                                            ng-repeat="dev in vm.developerList">
+                                                        {{ dev.displayName }}
+                                                    </option>
+
+                                                </select>
+                                            </md-input-container>
+
+                                        </div> -->
+                                        <div class="col-md-3" ng-if="!rfcDataFlag">
+                                            <label>Developer Name <span
+                                                    class="requiredField">*</span></label>
+
+                                            <md-input-container class="md-icon-float md-block multipleSelect2">
+
+                                                <select tabindex="4" name="developerName" id="developersList" ng-model="vm.imp.devId" class="form-control" multiple="multiple" aria-label="selectDeveloperList">
+                                                    <option ng-value="dev.id" 
+                                                            ng-repeat="dev in vm.developerList | orderBy :'displayName'">
+                                                        {{ dev.displayName }}
+                                                    </option>
+
+                                                </select>
+                                            </md-input-container>
+
+                                        </div>
+										<div class="col-md-3" ng-if="rfcDataFlag">
+                                            <label>Developer Name <span
+                                                    class="requiredField">*</span></label>
+
+                                            <md-input-container class="md-icon-float md-block multipleSelect2">
+
+                                                <select tabindex="4" name="developerName" id="developersList" ng-model="vm.imp.devId" class="form-control" multiple="multiple" aria-label="selectDeveloperList">
+                                                    <option ng-value="dev.id" ng-if="dev.deltaEmployee" 
+                                                            ng-repeat="dev in vm.developerList | orderBy :'displayName'">
+                                                        {{ dev.displayName }}
+                                                    </option>
+
+                                                </select>
+                                            </md-input-container>
+
+                                        </div>
+                                        <div class="col-md-3 impl">
+                                            <label>Developer Phone Number </label>
+                                            <br/>
+                                            <input tabindex="5" type="text" maxlength="15" class="form-control margin-top-10 w-100" ng-intl-tel-input data-default-country='us' name="developerContact" aria-label="devcontact" ng-model="vm.imp.devContact" />
+                                            <span class="help-block" style="color:red;margin:0px" ng-show="vm.impForm.developerContact.$invalid && vm.impForm.developerContact.$touched">Invalid contact number</span>
+                                        </div>
+
+                                        <div class="col-md-3">
+                                            <label>Developer Location</label>
+                                            <md-input-container class="md-icon-float md-block">
+
+                                                <select tabindex="6" name="devlocation" name="developerLocation" ng-model="vm.imp.devLocation" class="form-control">
+                                                        <option ng-value="dL.value"
+                                                                ng-repeat="dL in vm.developerLocation">
+                                                            {{ dL.value }}
+                                                        </option>
+
+                                                    </select>
+                                            </md-input-container>
+                                        </div>
+                                        <div class="col-md-3" ng-if="planLoadType=='EMERGENCY' && userRole == 'Lead'">
+                                            <label>ByPass Peer Review</label></br>
+                                            <md-checkbox ng-click="vm.imp.peerReviewers==''" ng-model="vm.imp.bypassPeerReview" style="margin-top: 15px" aria-label="byPassPeerReviewers"></md-checkbox>
+                                        </div>
+                                        
+                                    </div>
+                                    <div class="row">
+
+                                        <div class="col-md-3">
+
+                                        </div>
+
+
+                                        <div class="col-md-3">
+                                            <!--<label>Peer Review <span-->
+                                            <!--class="requiredField">*</span></label>-->
+                                            <!--<md-input-container-->
+                                            <!--class="md-icon-float md-block">-->
+
+                                            <!--<md-radio-group name="peerReview"-->
+                                            <!--layout="row"-->
+                                            <!--ng-model="vm.imp.peerReview">-->
+                                            <!--<md-radio-button ng-value="prod"-->
+                                            <!--ng-repeat="prod in vm.prodList">-->
+                                            <!--{{prod}}-->
+                                            <!--</md-radio-button>-->
+                                            <!--</md-radio-group>-->
+
+                                            <!--</md-input-container>-->
+                                        </div>
+                                        <!-- <div class="col-md-3 leftBorderSplit">
+                                            <label>DBCR Cross-Reference(s)</label>
+                                            <md-input-container class="md-icon-float md-block ">
+                                                <input type="text" aria-label="dbcrref" name="dbcrRefs" data-ng-model="vm.imp.dbcrRef" class="form-control">
+                                            </md-input-container>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label>Production Verification </label>
+                                            <md-input-container class="md-icon-float md-block">
+
+                                                <md-radio-group name="prodVerify" layout="row" ng-model="vm.imp.prodVer">
+                                                    <md-radio-button ng-value="prod" ng-repeat="prod in vm.prodList">
+                                                        {{prod}}
+                                                    </md-radio-button>
+                                                </md-radio-group>
+                                            </md-input-container>
+                                        </div> -->
+                                    </div>
+                                    <div class="row">
+
+                                        <div class="col-md-6">
+                                            <div class="list-group">
+                                                <li class="list-group-item uploadHeader">
+                                                    Checkout Segments
+                                                    <div class="btn btn-group  pull-right" style="margin-top: -18px;margin-right: -18px;">
+                                                        <button ng-disabled="!vm.userAccess" ng-click="openSegments()" class="btn themeButton searchSegmentBtn " style="border: 0px;">
+                                                                <i class="fa fa-search"></i>
+                                                                &nbsp;
+                                                                Search
+                                                            </button>
+                                                    </div>
+                                                </li>
+                                                <div class="list-group-item">
+                                                    No segments in workspace
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="list-group">
+                                                <li class="list-group-item uploadHeader">
+                                                    Test Result Documents
+                                                    <button title='"txt", "bmp ", "jpg ", "jpeg ", "tiff", "msg", "xls ", "xlsx", "doc ", "docx", "xml", "rtflog", "ppt"' ngf-select="uploadFiles($files, $invalidFiles)" multiple ng-disabled="!vm.userAccess" name="file" ngf-max-size="1MB" class="btn themeButton searchSegmentBtn pull-right"
+                                                        style="margin-top: -8px;margin-right: -15px;border:0px;">
+                                                            <i class="fa fa-paperclip "></i>
+                                                            &nbsp;
+                                                            Choose Files
+                                                        </button>
+                                                </li>
+                                                <div class="list-group-item">
+                                                    No files uploaded
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!--<fieldset>-->
+                                    <!--<legend>Segments</legend>-->
+                                    <!--<div class="row">-->
+                                    <!--<div class="col-md-12">-->
+                                    <!--<div class="row">-->
+                                    <!--<div class="col-md-6">-->
+                                    <!--<div class="list-group">-->
+                                    <!--<li class="list-group-item active"-->
+                                    <!--style="background: #4CAF50 !important;border: 0px;">-->
+                                    <!--Selected-->
+                                    <!--&lt;!&ndash;segmentsList.length > 0&ndash;&gt;-->
+                                    <!--<div class="btn btn-group  pull-right"-->
+                                    <!--style="margin-top: -18px;margin-right: -18px;">-->
+                                    <!--<button ng-disabled="true"-->
+                                    <!--class="btn themeButton searchSegmentBtn"-->
+                                    <!--style="border: 0px;">-->
+                                    <!--<i class="fa fa-search"></i>-->
+                                    <!--&nbsp;-->
+                                    <!--Search-->
+                                    <!--</button>-->
+                                    <!--<button ng-disabled="true"-->
+                                    <!--class="btn themeButton searchSegmentBtn "-->
+                                    <!--style="border: 0px;"-->
+                                    <!--title="Add to workspace">-->
+                                    <!--<i class="fa fa-download"></i>-->
+                                    <!--&nbsp;-->
+                                    <!--Checkout-->
+                                    <!--</button>-->
+                                    <!--</div>-->
+                                    <!--</li>-->
+                                    <!--<div class="list-group-item">-->
+                                    <!--<span> No segments selected</span>-->
+                                    <!--</div>-->
+                                    <!--</div>-->
+                                    <!--</div>-->
+                                    <!--<div class="col-md-6">-->
+                                    <!--<div class="list-group">-->
+                                    <!--<li class="list-group-item active">-->
+                                    <!--Workspace-->
+                                    <!--</li>-->
+                                    <!--<div-->
+                                    <!--class="list-group-item">-->
+                                    <!--No segments in workspace-->
+                                    <!--</div>-->
+                                    <!--</div>-->
+                                    <!--</div>-->
+                                    <!--</div>-->
+                                    <!--</div>-->
+                                    <!--</div>-->
+                                    <!--</fieldset>-->
+                                    <div class="row spacingFour">
+                                        <div class="col-md-6">
+                                            <div class="btn-group">
+                                                <button ng-click="vm.submitImpForm(vm.imp)" style="margin-left:2px;" class="form-inline btn btn-success themeButton" aria-label="CreateImplementation" ng-disabled="http_loading">
+                                                        <span ng-if="vm.loader.createImp"><i class="fa fa-spinner fa-pulse" style="color:white"></i></span>
+                                                        Create
+                                                        Implementation
+                                                    </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <button type="submit" ng-click="cancel()" class="form-inline btn btn-default themeButton pull-right" aria-label="Cancel">
+                                                        Cancel
+                                                    </button>
+                                        </div>
+
+                                    </div>
+                                </fieldset>
+                                </fieldset>
+                            </md-content>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+
+    </div>
+
+</section>
+<!-- /.content -->

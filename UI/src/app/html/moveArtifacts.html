@@ -1,0 +1,655 @@
+<section class="content-header">
+
+</section>
+<!-- Main content -->
+<section class="content animated slideInLeft scrollingFunction" id="scroll_function">
+    <div class="col-md-12">
+        <div class="row">
+            <div class="well well-sm moveArtifactsHeight" style="background: #fff;" >
+                <!-- <button ng-click="openSegments()" class="form-inline btn btn-primary themeButton">Search</button> -->
+				<div style="position: relative;" id="segmentLoader">
+					<div style="padding:30px;width:100%;margin: 0px auto; background: rgb(69, 90, 100);" class="moveArtifactsInProgress">
+						<div style="width: 50%;position: absolute;top: 30%;left: 50%;margin-right: -50%;transform: translate(-50%, -50%);">
+							<span class="text-white" style="position:absolute;top:200px;left:35%;font-size:1.2em;">
+								<i class="fa fa-spinner fa-pulse"></i> Migration In-Progress</span>
+							<div class="text-white" style="width:50px;height:50px;float:left;margin-top:13px;">
+								<i class="fa fa-folder-open fa-4x"></i>
+								<span style="font-weight:bold;">Current Repository</span>
+							</div>
+							<div id="chkoutAnimate" class="aBox" style="width:50px;height:50px;float:left;margin-top:15px;">
+								<i class="fa fa-file fa-4x text-white"></i>
+							</div>
+
+							<div class="text-white" style="width:50px;height:50px;float:right;margin-top:10px;">
+								<i class="fa fa-folder fa-4x"></i>
+								<span style="font-weight:bold;">Target Repository</span>
+							</div>
+						</div>
+					</div>
+				</div>
+            </div>
+        </div>
+    </div>
+</section>
+<div id="segmentSearch" class="modal fade" tabindex="-1" role="dialog" style="overflow:hidden;">
+    <div class="modal-dialog modal-md" role="document" style="width:75%;">
+        <div class="modal-content">
+            <!--Modal Header-->
+            <div class="modal-header" style="padding: 10px;background: #3c8dbc;">
+                <h4 class="modal-title">
+                    <span class="searchSegments" ng-if="userRole=='DevManager'" style="color:#fff;">Move artifacts across Functional Area</span>
+                    <span class="searchSegments" ng-if="userRole!='DevManager'" style="color:#fff;">Move artifacts from OBS Functional Area</span>
+                    <form class="searchSegments pnpTabs" data-ng-submit="searchSegmentPNP(searchText)">
+                        <div class="row">
+                            <div class="col-md-9">
+                                <input id="srchtext" type="text" class="form-control" data-ng-model="searchText" style="width: 100%;" placeholder="Search Segments" aria-label="CheckoutSegmentSearch" autofocus>
+                            </div>
+                            <div class="col-md-3" style="padding-left:0px;">
+                                <button type="submit" style="width:100%;float:right;background: #eee;color: #333;" class="btn btn-primary themeButton modalSearchBtn" aria-label="Search Prod/Non-Prod">
+                                    <i class="fa fa-search"></i> Search
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    <!-- <form class="populateSCMArea" data-ng-submit="ibmVanillaList(vanillaSearchText)" style="display:none;">
+                        <div class="row">
+                            <div class="col-md-9" style="">
+                                <input type="text" class="form-control" data-ng-model="vanillaSearchText" style="width: 100%;" placeholder="Search Segments">
+                            </div>
+                            <div class="col-md-3" style="padding-left:0px;">
+                                <button type="submit" style="width:100%;float:right;background: #eee;color: #333;" class="btn btn-primary themeButton modalSearchBtn" aria-label="vanillaSearchText">
+                                    <i class="fa fa-search"></i> Search IBM Vanilla Files
+                                </button>
+                            </div>
+                        </div>
+                    </form> -->
+                    <span class="checkoutSegmentsTitle" style="display:none;color:#fff;">
+                        <span ng-if="userRole=='DevManager'">Selected artifacts to be moved across Functional Area</span>
+                        <span ng-if="userRole!='DevManager'">Selected artifacts to be moved from OBS Functional Area</span>
+                    <span class="pull-right">Total: {{segmentsList.length}}</span>
+                    </span>
+                    <span style="color:#fff;" class="checkoutReportTemplate">
+                        <span>Migration Report</span>
+                    <span class="pull-right">Total: {{vm.checkoutStatusList.length}}</span>
+                    </span>
+                    <!-- <span style="color:#fff;" class="populateReportTemplate">
+                        <span>Populate SCM and Checkout Report</span>
+                    <span class="pull-right">Total: {{vm.populatedVanillaFileList.length}}</span>
+                    </span> -->
+                </h4>
+            </div>
+            <!--Modal Body-->
+            <div class="modal-body chkModalBody" style="padding-top: 0px;background:#fff;">
+                <!--Search Result Display Area-->
+                <div class="searchSegments">
+                    <div class="row">
+                        <div class="col-md-12 pnpTabs">
+                            <!-- <ul class="nav nav-tabs chkoutTabs prodFlagTabs" style="border: 0px;background: #dbe6ed;">
+                                <li class="active" flag="PROD" style="margin-left: 20px;">
+                                    <a data-target="#prod" data-toggle="tab">Production
+                                        <span style="font-size:12px;">({{productionMetaData.totalCount}})</span>
+                                    </a>
+                                </li>
+                            </ul> -->
+                            <div class="tab-content" style="margin-top: 10px;">
+                                <div class="tab-pane active" id="prod">
+                                    <div class="row" style="margin:20px 0px;margin-top:0px;">
+                                        <div class="col-md-12">
+                                            <ul class="nav header pnpTableHeader">
+                                                    
+                                                <li class="col-md-4 textCenter">Segment Name
+                                                </li>
+                                                <!-- <li class="col-md-1 textCenter">Access
+                                                    </li> -->
+                                                <li class="col-md-2 textCenter">Target Systems
+                                                </li>
+                                                <li class="col-md-2 textCenter">Functional Area
+                                                </li>
+                                                <!-- <li class="col-md-2 textCenter statusHeader">Status</li> -->
+                                                <!-- <li class="col-md-2 textCenter">Load Date/Time
+                                                </li> -->
+                                                <li class="col-md-4 textCenter">Remarks
+                                                </li>
+                                            </ul>
+                                            <div class="searchList prod modalProgramListing" aria-label="ProdSegmentListing" style="border-bottom:1px solid #eee;">
+                                                    <ul class="nav class_PROD_{{individualSegmentObj.fileNameWithHash}} centerItems {{individualSegmentObj.branch[0].isCheckoutAllowed ? '' : 'checkoutDisable'}}" data-ng-click="selectSegmentPNP(individualSegmentObj)" ng-repeat="individualSegmentObj in productionMetaData.searchList" style="overflow:hidden;margin:3px 0px;border-bottom:1px solid #eee;">
+                                                    <li  class="col-md-4 textCenter word-wrap" style="font-weight:bold;outline:0px;">
+                                                        {{individualSegmentObj.fileName}}
+                                                    </li>
+                                                    <!-- <li  class="col-md-1 textCenter" ><label  class="label label-warning">{{individualSegmentObj.repoAccess}}</label></li>-->
+                                                    <li class="col-md-8">
+                                                        <div data-ng-repeat="branchObj in individualSegmentObj.branch">
+
+                                                            <div class="row pnpGrouping">
+                                                                <div class="col-md-3 textCenter leftBorderSplit">
+                                                                    <!-- <div class="row"> -->
+                                                                        <!-- <div class="col-md-2 padding-none" ng-init="branchObj.isBranchSelected=(branchObj.refStatus == 'Online' || (branchObj.refStatus == 'Fallback' && branchObj.isCheckedout));">
+                                                                            <md-checkbox ng-if="branchObj.isCheckoutAllowed" ng-show="individualSegmentObj.branch.length > 1" ng-disabled="branchObj.isCheckedout"
+                                                                                ng-model="branchObj.isBranchSelected" ng-change="divergenceWarning(individualSegmentObj,branchObj)" class="spacingTwo branchCheck" aria-label="branchObj.targetSystem" style="text-align:left;">
+                                                                            </md-checkbox>
+                                                                        </div> -->
+                                                                        <!-- <div class="col-md-5 padding-none"> -->
+                                                                            {{branchObj.targetSystem | systemFilter}}
+                                                                        <!-- </div> -->
+                                                                    <!-- </div> -->
+
+                                                                </div>
+                                                                <div class="col-md-3 textCenter leftBorderSplit" style="outline:0px;">
+                                                                    {{branchObj.funcArea}}
+                                                                    <!-- {{branchObj.trimmedFuncArea}}                                                                     -->
+                                                                </div>
+                                                                <!-- <div class="col-md-2 textCenter leftBorderSplit" ng-if="!branchObj.isCheckoutAllowed" data-ng-click="selectSegmentPNP(individualSegmentObj)" style="outline:0px;">
+                                                                    {{branchObj.funcArea | functionalFilter}}
+                                                                </div> -->
+                                                                <!-- <div class="col-md-3 textCenter leftBorderSplit" ng-if="branchObj.isCheckedout" style="outline:0px;">
+                                                                    <label ng-if="branchObj.refStatus.indexOf('Online') >= 0 && branchObj.refStatus.indexOf('Online-') < 0" class="label label-success">{{branchObj.refStatus}}</label>
+                                                                    <label ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</label>
+                                                                    <label ng-if="branchObj.refStatus.indexOf('Fallback') >= 0" class="label label-danger">{{branchObj.refStatus}}</label>
+                                                                </div>
+                                                                <div class="col-md-3 textCenter leftBorderSplit" ng-if="!branchObj.isCheckedout" data-ng-click="individualSegmentObj.enableCount > 0 && selectSegmentPNP(individualSegmentObj)" style="outline:0px;padding-left: 58px;">
+                                                                    <label ng-if="branchObj.refStatus == 'Online'" class="label label-success">{{branchObj.refStatus}}</label>
+                                                                    <label ng-if="branchObj.refStatus.indexOf('Online') >= 0 && branchObj.refStatus != 'Online'" class="label label-warning">{{branchObj.refStatus}}</label>
+                                                                    <label ng-if="branchObj.refStatus.indexOf('Fallback') >= 0" class="label label-danger">{{branchObj.refStatus}}</label>
+                                                                </div> -->
+                                                                <!-- <div class="col-md-4 textCenter leftBorderSplit" ng-if="branchObj.isCheckedout" style="outline:0px;">
+                                                                    {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                                                </div>
+                                                                <div class="col-md-4 textCenter leftBorderSplit" data-ng-click="individualSegmentObj.enableCount > 0 && selectSegmentPNP(individualSegmentObj)" ng-if="!branchObj.isCheckedout" style="outline:0px;">
+                                                                    {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                                                </div> -->
+                                                                <div class="col-md-6 textCenter leftBorderSplit word-wrap" ng-if="branchObj.remarks.length > 0" style="outline:0px;" ng-bind="branchObj.remarks.join()"></div>
+                                                                <div class="col-md-6 textCenter leftBorderSplit word-wrap" ng-if="!branchObj.remarks.length > 0" style="outline:0px;">-</div>
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                </ul>
+                                                <p ng-if="productionMetaData.searchList.length == 0 && !vm.showCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                                                    No segments found!
+                                                </p>
+                                                <div ng-show="vm.showCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                                                    <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+                                                </div>
+                                            </div>
+                                            <div class="pull-left searchSegments" style="font-size:12px;padding: 5px;width: 100%;background: #3695b8;color: white;" ng-if="productionMetaData.totalCount > 0">
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <span class="pull-left">
+                                                            Total:
+                                                            <b>{{productionMetaData.totalCount}} segments</b>
+                                                        </span>
+                                                    </div>
+                                                    <div class="col-md-6" ng-if="productionMetaData.selectedSegmentCount > 0">
+                                                        <span class="pull-right">
+                                                            Selected:
+                                                            <b>{{productionMetaData.selectedSegmentCount}} segments</b>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- <div class="tab-pane" id="nonprod">
+                                    <div class="row" style="margin:20px 0px;margin-top:0px;">
+                                        <div class="col-md-12">
+                                            <ul class="nav header pnpTableHeader">
+                                                <li class="col-md-2 textCenter">Segment Name
+                                                </li>
+                                                <li class="col-md-1 textCenter">Access
+                                                    </li>
+                                                <li class="col-md-2 textCenter">Implementation Plan ID
+                                                </li>
+                                                <li class="col-md-7 textCenter">
+                                                    <div class="col-md-4">Target Systems</div>
+                                                    <div class="col-md-4">Functional Area</div>
+                                                    <div class="col-md-4">Load Date/Time</div>
+                                                </li>
+                                            </ul>
+                                            <div class="searchList nonProd modalProgramListing" aria-label="NonProdSegmentListing" style="border-bottom:1px solid #eee;">
+                                                <ul class="nav class_NONPROD_{{individualSegmentObj.fileNameWithHash}}_{{individualSegmentObj.additionalInfo.planId}} centerItems" ng-repeat="individualSegmentObj in nonProductionMetaData.searchList"
+                                                    style="overflow:hidden;margin:3px 0px;border-bottom:1px solid #eee">
+                                                    <li class="col-md-2 textCenter" data-ng-click="selectSegmentNonProd(individualSegmentObj)">
+                                                        <label class="spacingTwo word-wrap" style="cursor: pointer;">
+                                                                {{individualSegmentObj.fileName}}
+                                                        </label>
+                                                    </li>
+                                                    <li class="col-md-1 textCenter" ><label  class="label label-warning">{{individualSegmentObj.repoAccess}}</label></li>
+                                                    <li ng-if="individualSegmentObj.repoAccess == 'R'" title='READ' class="col-md-1 textCenter" ><label  class="label label-warning">{{individualSegmentObj.repoAccess}}</label></li>        
+                                                    <li ng-if="individualSegmentObj.repoAccess == 'RWC'" title='READ_WRITE' class="col-md-1 textCenter" ><label  class="label label-warning">{{individualSegmentObj.repoAccess}}</label></li>
+                                                    <li class="col-md-2 textCenter leftBorderSplit" style="padding-bottom: 5px;" data-ng-click="selectSegmentNonProd(individualSegmentObj)">
+                                                        <div>
+                                                            <label class="spacingTwo">{{individualSegmentObj.additionalInfo.planId}}</label>
+                                                            <br/>
+                                                            <label ng-if="individualSegmentObj.additionalInfo.planStatus != null" class="label {{ (individualSegmentObj.additionalInfo.planStatus === 'In-Progress') ?
+                                                            'label-warning' : (individualSegmentObj.additionalInfo.planStatus === 'DONE') ? 'label-primary' : 'label-success' }} spacingTwo">
+                                                                <i class="fa fa-spinner fa-pulse" ng-if="individualSegmentObj.additionalInfo.planStatus === 'In-Progress'"></i>
+                                                                {{individualSegmentObj.additionalInfo.planStatus}}
+                                                            </label>
+                                                        </div>
+                                                    </li>
+                                                    <li class="col-md-7 textCenter">
+                                                        <div data-ng-repeat="branchObj in individualSegmentObj.branch">
+                                                            <div class="row {{individualSegmentObj.branch.length > 1 ? 'pnpGrouping' : ''}}">
+                                                                <div class="col-md-4 textCenter leftBorderSplit">
+                                                                    <div class="row">
+                                                                        <div class="col-md-4"></div>
+                                                                        <div class="col-md-2 padding-none" ng-init="branchObj.isBranchSelected=(branchObj.refStatus == 'Online' || (branchObj.refStatus == 'Fallback' && branchObj.isCheckedout));">
+                                                                            <md-checkbox ng-if="branchObj.isCheckoutAllowed" ng-model="branchObj.isBranchSelected" ng-change="divergenceWarning(individualSegmentObj,branchObj)" ng-show="individualSegmentObj.branch.length > 1" class="spacingTwo branchCheck" aria-label="branchObj.targetSystem" style="text-align:left;">
+                                                                            </md-checkbox>
+                                                                        </div>
+                                                                        <div class="col-md-2 padding-none">
+                                                                            {{branchObj.targetSystem | systemFilter}}
+                                                                        </div>
+                                                                        <div class="col-md-4">
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-md-4 textCenter leftBorderSplit" data-ng-click="selectSegmentNonProd(individualSegmentObj)">
+                                                                    {{branchObj.funcArea}}
+                                                                </div>
+                                                                <div class="col-md-4 textCenter leftBorderSplit" data-ng-click="selectSegmentNonProd(individualSegmentObj)">
+                                                                    <span ng-if="branchObj.loadDate != 'null'">
+                                                                        {{branchObj.loadDate | formattedDateTimeWithoutSeconds}}
+                                                                    </span>
+                                                                    <span style="color:#aaa;" ng-if="branchObj.loadDate == 'null'">
+                                                                        not updated
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                </ul>
+                                                <p ng-if="nonProductionMetaData.searchList.length == 0 && !vm.showCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                                                    No segments found!
+                                                </p>
+                                                <div ng-show="vm.showCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                                                    <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+                                                </div>
+                                            </div>
+                                            <div class="pull-left searchSegments" style="font-size:12px;padding: 5px;width: 100%;background: #3695b8;color: white;" ng-if="nonProductionMetaData.searchList.length > 0">
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <span class="pull-left">
+                                                            Total:
+                                                            <b>{{nonProductionMetaData.searchList.length}} segments</b>
+                                                        </span>
+                                                    </div>
+                                                    <div class="col-md-6" ng-if="nonProductionMetaData.selectedSegmentCount > 0">
+                                                        <span class="pull-right">
+                                                            Selected:
+                                                            <b>{{nonProductionMetaData.selectedSegmentCount}} segments</b>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div> -->
+                            </div>
+
+                        </div>
+                        <!-- <div style="display:none;" class="col-md-12 populateSCMArea">
+                            <div class="col-md-12" style="border: 0px;background: #dbe6ed;line-height: 40px;">
+                                <ul class="nav nav-tabs chkoutTabs prodFlagTabs" style="border: 0px;background: #dbe6ed;">
+                                    <li class="active" style="margin-left: 5px;">
+                                        <a data-toggle="tab">IBM Vanilla Files
+                                            <span style="font-size:12px;">
+                                                ({{ibmVanillaMetaData.searchList.length}})
+                                            </span>
+                                        </a>
+                                    </li>
+                                    <li class="pull-right" style="line-height: 35px;">
+                                        <button class="btn btn-primary btn-sm themeButton" ng-click="togglePopulateSCM()">
+                                            <i class="fa fa-database"></i> &nbsp; Prod/Non-Prod Search
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="col-md-12" style="margin-top:10px;">
+                                <ul class="nav header pnpTableHeader">
+                                    <li class="col-md-5 textCenter">Segment Name
+                                    </li>
+                                    <li class="col-md-7 textCenter">
+                                        Target Systems
+                                    </li>
+                                </ul>
+                                <div class="searchList ibmVanila modalProgramListing" style="border-bottom:1px solid #eee;">
+                                    <ul class="nav class_{{individualSegmentObj.fileNameWithHash}} centerItems" ng-repeat="individualSegmentObj in ibmVanillaMetaData.searchList" style="overflow:hidden;margin:3px 0px;border-bottom:1px solid #eee">
+                                        <li class="col-md-6 textCenter" ng-click="chooseVanillaSegments(individualSegmentObj)" style="outline: none;">
+                                            <div style="word-wrap:break-word; text-align: left">
+                                                <label class="spacingTwo word-wrap" style="cursor: pointer;">
+                                                    {{individualSegmentObj.fileName}}
+                                                </label>
+                                            </div>
+                                        </li>
+                                        <li class="col-md-6 textCenter">
+                                            <div layout="row" style="display:block;">
+                                                <md-checkbox style="margin-bottom:0px !important;" ng-change="chooseVanillaSystem(individualSegmentObj)" ng-value="targetSystem" ng-model="individualSegmentObj.selectedSystems[targetSystem]" ng-repeat="targetSystem in individualSegmentObj.targetSystems"
+                                                    aria-label="systems">{{targetSystem}}
+                                                </md-checkbox>
+                                            </div>
+                                        </li>
+                                    </ul>
+                                    <p ng-if="ibmVanillaMetaData.searchList.length == 0 && !vm.showCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                                        No segments found!
+                                    </p>
+                                    <div ng-show="vm.showCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                                        <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+                                    </div>
+                                </div>
+                                <div class="pull-left searchSegments" style="font-size:12px;padding: 5px;width: 100%;background: #3695b8;color: white;" ng-if="ibmVanillaMetaData.searchList.length > 0">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <span class="pull-left">
+                                                Total:
+                                                <b>{{ibmVanillaMetaData.searchList.length}} segments</b>
+                                            </span>
+                                        </div>
+                                        <div class="col-md-6" ng-if="vm.selectedVanillaSegments.length > 0">
+                                            <span class="pull-right">
+                                                Selected:
+                                                <b>{{vm.selectedVanillaSegments.length}} segments</b>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div> -->
+                    </div>
+                </div>
+                <!--Listing selected segments before Move-->
+                <div class="checkoutSegments" style="display:none;padding:10px;">
+                    <div class="row" style="margin-left: 10px;margin-right: 10px;">
+                        <ul class="nav header pnpTableHeader">
+                            <li class="col-md-3 textCenter">Segment Name</li>
+                            <!-- <li class="col-md-2 textCenter">Prod/Non-Prod -->
+                                <li class="col-md-2 textCenter">Target Systems</li>
+                                <!-- <li class="col-md-2 textCenter">Status</li> -->
+                                <li class="col-md-3 textCenter">Current Functional Area</li>
+                                <li class="col-md-3 textCenter">Target Functional Area</li>
+                                <li class="col-md-1 textCenter">Delete</li>
+                        </ul>
+                        <div class="modalProgramListing" ng-if='segmentsList.length!=0'>
+                            <ul class="nav centerItems" style="width:100%;border-bottom: 1px solid #eee;padding:5px;padding-bottom: 0px;padding-top: 0px;" ng-repeat="segment in segmentsList">
+                                <li class="col-md-3 textCenter boldLi word-wrap {{segment.blockMigrationDuetoFuncArea ? 'checkoutDisable' : ''}}">
+                                    {{segment.fileName}}
+                                </li>
+                                <!-- <li class="col-md-2 textCenter boldLi">
+                                    <span ng-if="segment.prodFlag === 'PROD'">PROD</span>
+                                    <span ng-if="segment.prodFlag !== 'PROD'">NONPROD</span>
+                                </li> -->
+                                <li class="col-md-5 textCenter rightBorderSplit {{segment.blockMigrationDuetoFuncArea ? 'checkoutDisable' : ''}}">
+                                    <div data-ng-repeat="bObj in segment.branch">
+                                        <div class="row {{segment.branch.length > 1 ? 'pnpGrouping' : ''}}">
+                                            <div class="col-md-6 textCenter leftBorderSplit">
+                                                {{bObj.targetSystem | systemFilter}}
+                                            </div>
+                                            <!-- <div class="col-md-6 textCenter leftBorderSplit">
+                                                <span ng-if="segment.prodFlag === 'PROD'">
+                                                    <label ng-if="bObj.refStatus.indexOf('Online') >= 0" class="label label-success">{{bObj.refStatus}}</label>
+                                                    <label ng-if="bObj.refStatus.indexOf('Fallback') >= 0" class="label label-danger">{{bObj.refStatus}}</label>
+                                                </span>
+                                                <span ng-if="segment.prodFlag !== 'PROD'">
+                                                    <label>{{segment.additionalInfo.planId}}</label>
+                                                    <label ng-if="segment.additionalInfo.planStatus != null" class="label {{ (segment.additionalInfo.planStatus === 'In-Progress') ?
+                                                            'label-warning' : (segment.additionalInfo.planStatus === 'DONE') ? 'label-primary' : 'label-success' }} spacingTwo">
+                                                        <i class="fa fa-spinner fa-pulse" ng-if="segment.additionalInfo.planStatus === 'In-Progress'"></i>
+                                                        {{segment.additionalInfo.planStatus}}
+                                                    </label>
+                                                </span>
+                                            </div> -->
+                                            <div class="col-md-6 textCenter leftBorderSplit">
+                                                {{bObj.funcArea}}
+                                                <!-- {{bObj.trimmedFuncArea}} -->
+                                            </div>                                                                                       
+                                        </div>
+                                    </div>
+                                </li>
+                                <li class="col-md-3 textCenter leftBorderSplit {{segment.blockMigrationDuetoFuncArea ? 'checkoutDisable' : ''}}">
+                                    <select ng-if="!segment.blockMigrationDuetoFuncArea" ng-model="segment.targetFuncArea" aria-label="newFunctionalArea_{{segment.fileName}}">
+                                        <option value="">Select</option>
+                                        <option ng-repeat="package in filterFunctionalArea(segment)" value="{{package}}" aria-label="{{package}}" title="{{package}}" >{{package  | limitTo : 10}}</option>
+                                    </select>
+                                    <p ng-if="segment.blockMigrationDuetoFuncArea" class="text-danger"><i class="fa fa-info"></i><b>  No common Funtional Packages found to Migrate</b> </p>
+                                </li>
+                                <li class="col-md-1 textCenter leftBorderSplit">
+                                    <label data-ng-click="removeSegment(segment)">
+                                        <i class="fa fa-trash"></i>
+                                    </label>
+                                </li>
+                            </ul>
+                        </div>
+                        <p ng-if="segmentsList.length==0" style="text-align:center;padding:50px 0px;color:#aaa;">
+                            No segments selected!
+                        </p>
+                    </div>
+                </div>
+                <!--Listing segments after Move-->
+                <div style="padding:10px;" class="checkoutReportTemplate">
+                    <div class="row" style="margin-left: 10px;margin-right: 10px;">
+                        <ul class="nav header pnpTableHeader">
+                            <li class="col-md-3 textCenter">Segment Name</li>
+                            <li class="col-md-2 textCenter">Target Systems</li>
+                            <li class="col-md-2 textCenter">Current Functional Area</li>
+                            <li class="col-md-2 textCenter">Target Functional Area</li>
+                            <li class="col-md-3 textCenter">Status</li>
+                        </ul>
+                        <!-- <ul class="nav header pnpTableHeader">
+                            <li class="col-md-3 textCenter">Segment Name</li>
+                                <li class="col-md-3 textCenter">Target Systems</li>
+                                <li class="col-md-4 textCenter">Status</li>
+                        </ul> -->
+                        <div class="modalProgramListing">
+                            <ul class="nav centerItems" style="width:100%;border-bottom: 1px solid #eee;padding:5px;padding-bottom: 0px;padding-top: 0px;" ng-repeat="segment in vm.checkoutStatusList">
+                                <li class="col-md-3 textCenter boldLi word-wrap">
+                                    {{segment.fileName}}
+                                </li>
+                                <li class="col-md-4 textCenter">
+                                    <div data-ng-repeat="bObj in segment.branch" class="boldLi">
+                                        <div class="row {{segment.branch.length > 1 ? 'pnpGrouping' : ''}}">
+                                            <div class="col-md-6 textCenter leftBorderSplit" ng-show="bObj.isCheckedout" style="background:#A5D6A7">
+                                                {{bObj.targetSystem | systemFilter}}
+                                            </div>
+                                            <div class="col-md-6 textCenter leftBorderSplit" ng-show="!bObj.isCheckedout" style="background:#EF9A9A">
+                                                {{bObj.targetSystem | systemFilter}}
+                                            </div>
+                                            <div class="col-md-6 textCenter leftBorderSplit" ng-show="bObj.isCheckedout" style="background:#A5D6A7">
+                                                {{bObj.funcArea}}
+                                            </div>
+                                            <div class="col-md-6 textCenter leftBorderSplit" ng-show="!bObj.isCheckedout" style="background:#EF9A9A">
+                                                {{bObj.funcArea}}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </li>
+                                <li class="col-md-2 textCenter boldLi" ng-if="segment.branch[0].isCheckedout" style="background:#A5D6A7">
+                                    {{segment.branch[0].targetFuncArea}}
+                                </li>
+                                <li class="col-md-2 textCenter leftBorderSplit boldLi" ng-if="!segment.branch[0].isCheckedout" style="background:#EF9A9A">
+                                    {{segment.branch[0].targetFuncArea}}
+                                </li>
+                                <li class="col-md-3 textCenter leftBorderSplit">
+                                    <div>
+                                        <span ng-if="segment.branch[0].isCheckedout" style="color: green;"><i class="fa fa-check"></i> Success </span> &nbsp;
+                                        <span ng-if="!segment.branch[0].isCheckedout" style="color: red;"><i class="fa fa-times"></i> Failed </span>
+                                    </div>
+                                </li>   
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <!-- <div style="padding:10px;" class="populateReportTemplate">
+                    <div class="row" style="margin-left: 10px;margin-right: 10px;">
+                        <ul class="nav header pnpTableHeader">
+                            <li class="col-md-6 textCenter">File Name</li>
+                            <li class="col-md-3 textCenter">Target Systems</li>
+                            <li class="col-md-3 textCenter">Status</li>
+                        </ul>
+                        <div class="modalProgramListing">
+                            <ul class="nav centerItems" style="width:100%;border-bottom: 1px solid #eee;padding:5px;padding-bottom: 0px;padding-top: 0px;" ng-repeat="segment in vm.populatedVanillaFileList">
+                                <li class="col-md-6 textCenter boldLi word-wrap">
+                                    {{segment.fileName}}
+                                </li>
+                                <li class="col-md-6">
+                                    <div data-ng-repeat="bObj in segment.branch" class="boldLi">
+                                        <div class="row {{segment.branch.length > 1 ? 'pnpGrouping' : ''}}">
+                                            <div class="col-md-6 textCenter leftBorderSplit">
+                                                {{bObj.targetSystem | systemFilter}}
+                                            </div>
+                                            <div class="col-md-6 leftBorderSplit" style="text-align:left;">
+                                                <span ng-if="bObj.status === 'Y'" aria-label="{{bObj.status}}">
+                                                    <i class="fa fa-check" style="color: green;"></i> &nbsp; Success
+                                                </span>
+                                                <span ng-if="bObj.status === 'N'" aria-label="{{bObj.status}}">
+                                                    <i class="fa fa-times" style="color: red;"></i> &nbsp; Failed
+                                                </span>
+                                                <span ng-if="bObj.status === 'W'" aria-label="{{bObj.status}}">
+                                                    <i class="fa fa-warning" style="color: orange;"></i> &nbsp; Already Populated
+                                                </span>
+                                                <span ng-if="bObj.additionalInfo.isMakFound === 'W'" aria-label="{{bObj.isMakFound}}">
+                                                    <i class="fa fa-warning" style="color: #bbb;"></i> &nbsp; .mak not found
+                                                    <br/>
+                                                    <span ng-if="(segment.fileName.length - segment.fileName.indexOf('.c')) == 2">
+                                                        create a new .mak file or associate it with an existing .mak file
+                                                    </span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div> -->
+                <div style="position: relative;top: 30%;display:none;" class="checkoutLoading">
+                    <div style="height:150px;padding:30px;width:50%;margin: 0px auto;">
+                        <div style="position:relative;">
+                            <span class="text-white" style="position:absolute;top:200px;left:35%;font-size:1.2em;">
+                                <i class="fa fa-spinner fa-pulse"></i> Migration In-Progress</span>
+                            <div class="text-white" style="width:50px;height:50px;float:left;margin-top:13px;">
+                                <i class="fa fa-folder-open fa-4x"></i>
+                                <span style="font-weight:bold;">Current Repository</span>
+                            </div>
+                            <div id="chkoutAnimate" class="aBox" style="width:50px;height:50px;float:left;margin-top:15px;">
+                                <i class="fa fa-file fa-4x text-white"></i>
+                            </div>
+
+                            <div class="text-white" style="width:50px;height:50px;float:right;margin-top:10px;">
+                                <i class="fa fa-folder fa-4x"></i>
+                                <span style="font-weight:bold;">Target Repository</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!--Modal Footer-->
+            <div class="modal-footer" style="padding:5px;background: rgba(11, 90, 137, 0.15);">
+                <a type="button" class="pull-left" data-dismiss="modal" aria-label="Close" style="padding:8px;">
+                    <span aria-hidden="true">
+                        <i class="fa fa-close"></i> Close</span>
+                </a>
+                <div class="btn-group pull-right">
+                    <button class="btn btn-primary themeButton chkSelected pnpTabs" data-ng-click="chooseSegment()">
+                        <i class="fa fa-check"></i> Select artifacts to be moved across Functional Area
+                        <span ng-if="(productionMetaData.selectedSegmentCount) >= 0">
+                            (<b>{{productionMetaData.selectedSegmentCount}}</b>)</span>
+                    </button>
+                    <!-- <button class="btn btn-primary themeButton populateSCMArea populateSCMBtn" ng-click="populateVanillaSCM()" style="display:none;">
+                        <i class="fa fa-forward"></i> &nbsp; Populate SCM and checkout
+                    </button> -->
+                    <a class="chkCheckout pull-left" data-ng-click="backToSelection()" style="display:none;padding: 8px;font-weight: bold;border: 1px solid;" aria-label="CheckOut_Back">
+                        <i class="fa fa-chevron-left"></i> Back
+                    </a>
+                    <button class="btn btn-success themeButton chkCheckout" aria-label="FinalCheckoutbutton" data-ng-click="checkoutSegments()" style="display:none;">
+                        <i class="fa fa-download"></i> Move
+                        <span ng-if="selectedSegmentCount >= 0">(
+                            <b>{{segmentsList.length}}</b>)</span>
+                    </button>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- <div id="warningModal" class="modal fade" style="z-index:9999;overflow:hidden;">
+    <div class="modal-dialog">
+        <div class="modal-content warningContent" style="width: 50%;margin: 50% auto;padding: 20px;background:#fff;">
+            <div class="warningModal-body">
+                <div class="row" style="text-align:center;">
+                    <h4 class="warningModal-content">
+                        Segment :
+                        <b>
+                            <span class= "word-wrap" id="warnFileName"></span>
+                        </b>
+                        <br/> System :
+                        <b>
+                            <span  class= "word-wrap" id="warnSystemName"></span>
+                        </b>
+                        <br/>
+                    </h4>
+                    <h4>
+                        <span>Will be diverged...</span>
+                    </h4>
+                </div>
+                <br/>
+                <div class="row" style="text-align:center;">
+                    <button type="button" class="btn btn-default themeDefaultButton warnCancel" data-dismiss="modal">
+                        Cancel
+                    </button>
+                    <button type="button" class="btn btn-primary themePrimaryButton warnProceed" data-dismiss="modal">
+                        Proceed
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> -->
+
+<!-- <div id="categoryPModal" class="modal fade" style="z-index:9999;overflow:hidden;">
+    <div class="modal-dialog">
+        <div class="modal-content confirmContent" style="width: 80%;margin: 60% auto;padding: 20px;background:#fff;">
+            <div class="confirmModal-body">
+                <div class="row" style="text-align:center;">
+                    <h4 class="confirmModal-content">
+                        Would like to check out selected segment from the Implementation Plan which is marked as
+                        <b>Planned Fallback?</b>
+                        Selected segment contains category <b>P</b>. <br/> Would you like to proceed ?
+                    </h4>
+                </div>
+                <br/>
+                <div class="row" style="text-align:center;">
+                    <button type="button" class="btn btn-default themeDefaultButton confirmCancel" data-dismiss="modal">
+                        Cancel
+                    </button>
+                    <button type="button" class="btn btn-primary themePrimaryButton confirmProceed" data-dismiss="modal">
+                        Proceed
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> -->
+
+<!-- <div id="warningConfirmationModal" class="modal fade" style="z-index:9999;overflow:hidden;">
+    <div class="modal-dialog">
+        <div class="modal-content confirmContent" style="width: 80%;margin: 60% auto;padding: 20px;background:#fff;">
+            <div class="confirmModal-body">
+                <div class="row" style="text-align:center;">
+                    <h4 class="confirmModal-content">
+                        Selected segment already checked out. Would you like to proceed anyway ?
+                        Selected segment contains category <b>P</b>. <br/> Would you like to proceed ?
+                    </h4>
+                </div>
+                <br/>
+                <div class="row" style="text-align:center;">
+                    <button type="button" class="btn btn-default themeDefaultButton warnSelectionCancel" data-dismiss="modal">
+                        Cancel
+                    </button>
+                    <button type="button" class="btn btn-primary themePrimaryButton confirmSelectionsProceed" data-dismiss="modal">
+                        Proceed
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> -->

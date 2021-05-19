@@ -1,0 +1,76 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164,SC2007
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpffilecheck                                              #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to find the file in workspace                                   #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation branch name with core                             #
+#      $2  - Source with path in production repostiory                        #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   01102019    GOWTHAM Created the script                                    #
+#   01102019    GOWTHAM Check the segment exists in workspace                 #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+RemoteBranchName="$1";                 #Read actual path of source
+SegmentList="$2";                      #Read list of files
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${RemoteBranchName} ${SegmentList} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  implId="${RemoteBranchName%_*}";
+  if [ -d "${USR_TPF_PROJ}/${implId}/${RemoteBranchName##*_}" ]; then
+    pushd "${USR_TPF_PROJ}/${implId}/${RemoteBranchName##*_}" &> /dev/null;
+      IFS=',' read -r -a sourceFiles <<< "${SegmentList[@]}";
+      for sFiles in "${sourceFiles[@]}"
+      do
+        sFind=( $(find . -type f | grep "${sFiles[@]}" | grep -v '.git') );
+        if [[ -n "${sFind[*]// /}" ]]; then
+          SegList+="${sFind#*./},"
+        fi
+      done
+      unset IFS
+      if [[ -n "${SegList[*]// /}" ]]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${RemoteBranchName##*_} - ${SegList} RC:$RC"
+        echo -e "${RemoteBranchName##*_} - ${SegList}";                #CONSOLE
+      fi
+    popd &> /dev/null;
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${RemoteBranchName} ${SegmentList} RC:$RC"
+exit "$RC";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

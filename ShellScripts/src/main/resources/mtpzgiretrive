@@ -1,0 +1,191 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpzgiretrive                                                #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to search and get segment commit list in git repository         #
+#      from remote git repository using SSH                                   #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Actual project path                                              #
+#      $2  - Core                                                             #
+#      $3  - Segment name                                                     #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   09182017    ARUL         Created script                                   #
+#   04112018    ARUL         Updated with new URL support                     #
+#   03202019    VINOTH       Support localmod for non devops proj             #
+#   03212019    VINOTH       Update ZI to stop not overlay                    #
+#   04252019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090,SC2164
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=4;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ProjectDir="$1";                       #Read project dir path from input
+SegmentUrl="$2";                       #Read file url from input
+SystemCore="$3";                       #Read system name from input
+FlagOverlay="$4";                      #Read to Overread segement.
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ProjectDir} ${SegmentUrl} ${SystemCore} ${FlagOverlay} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function retriveGitFile {
+  local _RC=0;
+  local _pathWithCommit;
+  local _pathWithFile;
+  local _dirString;
+  local _impPath;
+  local _impString;
+  local _impNumber;
+  _pathWithCommit="${SegmentUrl##*git/}"
+  _pathWithFile="${_pathWithCommit#*/}"
+  _dirString="${_pathWithFile%/*}"
+  _impPath="${ProjectDir%/*}"
+  _impString="${_impPath##*/}"
+  _impNumber="${_impString%_*}"
+  _gitString="${_impNumber}.git/${_pathWithCommit}"
+  if [[ "${SegmentUrl}" =~ ${_gitString} ]]; then
+    if [ -f "${_pathWithFile}" ]; then
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Selected version of Source artifact already present in current Implementation RC:${_RC}";
+      echo -e "ERROR: Selected version of Source artifact already present in current Implementation.";         #CONSOLE
+      _RC="$EC";
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Selected version of Source artifact not present in current Implementation RC:${_RC}";
+      echo -e "ERROR: Selected version of Source artifact not present in current Implementation.";             #CONSOLE
+      _RC="$EC";
+    fi
+  else
+    if [[ "${_dirString}" != +($DIR_TPF_APP|.*) ]]; then
+      # IBM segments
+      pushd "${ProjectDir}" &> /dev/null
+        if [ -d ".git" ]; then
+          if [ -f "${ProjectDir}/${_pathWithFile}" ] && [[ "${FlagOverlay}" == N ]] ; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Overlay ${ProjectDir}/${_pathWithFile} RC:${_RC}"
+            echo -e "ERROR: Overlay ${ProjectDir}/${_pathWithFile}"; _RC="$RC"; #CONSOLE
+          elif [ -f "${ProjectDir}/${_pathWithFile}" ] && [[ "${FlagOverlay}" == Y ]] ; then
+            wget -q -N --no-check-certificate "${SegmentUrl}" -P "${_dirString}" &> /dev/null; _RC=$?;
+            if [ -f "${_pathWithFile}" ]; then
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${ProjectDir}/${_pathWithFile} RC:${_RC}"
+              echo -e "INFO:${ProjectDir}/${_pathWithFile}";           #CONSOLE
+              _RC="$RC";
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git server busy, please try again RC:${_RC}";
+              echo -e "ERROR: Git server busy, please try again.";     #CONSOLE
+              _RC="$EC";
+            fi
+          elif [ ! -f "${ProjectDir}/${_pathWithFile}" ]; then
+            wget -q -N --no-check-certificate "${SegmentUrl}" -P "${_dirString}" &> /dev/null; _RC=$?;
+            if [ -f "${_pathWithFile}" ]; then
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${ProjectDir}/${_pathWithFile} RC:${_RC}";
+              echo -e "INFO:${ProjectDir}/${_pathWithFile}";             #CONSOLE
+              _RC="$RC";
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git server busy, please try again. RC:${_RC}";
+              echo -e "ERROR: Git server busy, please try again.";     #CONSOLE
+              _RC="$EC";
+            fi
+          fi
+        else
+          if [ -f "${ProjectDir}/${SystemCore}/local_mod/${_pathWithFile}" ] && [[ "${FlagOverlay}" == N ]] ; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Overlay ${ProjectDir}/${SystemCore}/local_mod/${_pathWithFile} RC:${_RC}";
+            echo -e "ERROR: Overlay ${ProjectDir}/${SystemCore}/local_mod/${_pathWithFile}"; _RC="$RC"; #CONSOLE
+          elif [ -f "${ProjectDir}/${SystemCore}/local_mod/${_pathWithFile}" ] && [[ "${FlagOverlay}" == Y ]] ; then
+            wget -q -N --no-check-certificate "${SegmentUrl}" -P "${SystemCore}/local_mod/${_dirString}" &> /dev/null; _RC=$?;
+            if [ -f "${SystemCore}/local_mod/${_pathWithFile}" ]; then
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${ProjectDir}/${SystemCore}/local_mod/${_pathWithFile} RC:${_RC}";
+              echo -e "INFO:${ProjectDir}/${SystemCore}/local_mod/${_pathWithFile}"; #CONSOLE
+              _RC="$RC";
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git server busy, please try again. RC:${EC}";
+              echo -e "ERROR: Git server busy, please try again.";     #CONSOLE
+              _RC="$EC";
+            fi
+          elif [ ! -f "${ProjectDir}/${SystemCore}/local_mod/${_pathWithFile}" ]; then
+            wget -q -N --no-check-certificate "${SegmentUrl}" -P "${SystemCore}/local_mod/${_dirString}" &> /dev/null; _RC=$?;
+            if [ -f "${ProjectDir}/${SystemCore}/local_mod/${_pathWithFile}" ]; then
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${ProjectDir}/${SystemCore}/local_mod/${_pathWithFile} RC:${_RC}";
+              echo -e "INFO:${ProjectDir}/${SystemCore}/local_mod/${_pathWithFile}"; #CONSOLE
+              _RC="$RC";
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git server busy, please try again. RC:${EC}";
+              echo -e "ERROR: Git server busy, please try again.";     #CONSOLE
+              _RC="$EC";
+            fi
+          fi
+        fi
+      popd &> /dev/null
+    else
+      if [ -f "${ProjectDir}/${_pathWithFile}" ] && [[ "${FlagOverlay}" == N ]] ; then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Overlay ${ProjectDir}/${_pathWithFile} RC:$RC";
+        echo -e "ERROR: Overlay ${ProjectDir}/${_pathWithFile}"; _RC="$RC"; #CONSOLE
+      elif [ -f "${ProjectDir}/${_pathWithFile}" ] && [[ "${FlagOverlay}" == Y ]] ; then
+        wget -q -N --no-check-certificate "${SegmentUrl}" -P "${_dirString}" &> /dev/null; _RC=$?;
+        if [ -f "${_pathWithFile}" ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${ProjectDir}/${_pathWithFile} RC:${_RC}";
+          echo -e "INFO:${ProjectDir}/${_pathWithFile}";               #CONSOLE
+          _RC="$RC";
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git server busy, please try again. RC:${EC}";
+          echo -e "ERROR: Git server busy, please try again.";         #CONSOLE
+          _RC="$EC";
+        fi
+      elif [ ! -f "${ProjectDir}/${_pathWithFile}" ]; then
+        wget -q -N --no-check-certificate "${SegmentUrl}" -P "${_dirString}" &> /dev/null; _RC=$?;
+        if [ -f "${_pathWithFile}" ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${ProjectDir}/${_pathWithFile} RC:${_RC}";
+          echo -e "INFO:${ProjectDir}/${_pathWithFile}";               #CONSOLE
+          _RC="$RC";
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git server busy, please try again. RC:${EC}";
+          echo -e "ERROR: Git server busy, please try again.";         #CONSOLE
+          _RC="$EC";
+        fi
+      fi
+    fi
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+#
+if [ "$RC" -eq 0 ]; then
+  if [ -d "$ProjectDir" ]; then
+    #shellcheck disable=2164
+    pushd "$ProjectDir" &> /dev/null
+      retriveGitFile; RC=$?;
+    #shellcheck disable=2164
+    popd &> /dev/null
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$ProjectDir - Not found. RC:$EC";
+    echo -e "Error: $ProjectDir - Not found.";                         #CONSOLE
+    RC="$EC";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ProjectDir} ${SegmentUrl} ${SystemCore} ${FlagOverlay} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

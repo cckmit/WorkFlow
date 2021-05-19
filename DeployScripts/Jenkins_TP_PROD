@@ -1,0 +1,109 @@
+#!/usr/bin/env groovy
+node {
+    
+    def COMPANY = "TP"
+    def ENVIRONMENT = "PROD"
+    def BUILD_PROFILE = "${COMPANY}_${ENVIRONMENT}"
+
+    def ORIGIN_TAG = "Release_R1_2018_TRAVELPORT"
+    def GIT_URL = "https://vhldvztdt001.tvlport.net:8443/gitblit/r/dev/WorkFlow.git"
+
+    def POM_VERSION
+    def BUILD_PATH = "/opt/delivery/release/WF/${ENVIRONMENT}/${COMPANY}"
+
+    properties([buildDiscarder(logRotator(artifactDaysToKeepStr: '', artifactNumToKeepStr: '', numToKeepStr: '10')), disableConcurrentBuilds(), pipelineTriggers([])])
+
+    stage ('Checkout') {
+        deleteDir()
+        checkout scm: [$class: 'GitSCM', userRemoteConfigs: [[url: (GIT_URL), credentialsId: '80b50f11-b5d5-4093-b4f9-70ee5fe0e88a']], branches: [[name: (ORIGIN_TAG)]]],poll:false
+        def pom = readMavenPom file: 'pom.xml'
+        POM_VERSION = pom.version
+    }
+
+    stage ('Clean') {
+        sh "JAVA_HOME=/usr/java/default; /opt/apache-maven-3.3.9/bin/mvn clean"
+    }
+
+    stage ('Install') {
+        sh "JAVA_HOME=/usr/java/default; /opt/apache-maven-3.3.9/bin/mvn install:install-file -Dfile=Derived/TOSIBM/TOSApi_1.2.6.jar -DgroupId=com.ibm.tpf -DartifactId=TOSApi -Dversion=1.2.06 -Dpackaging=jar"
+    }
+
+    stage ('Compile and Testing') {
+        sh "JAVA_HOME=/usr/java/default; /opt/apache-maven-3.3.9/bin/mvn -P${BUILD_PROFILE} -Dbuild.number=${BUILD_NUMBER} -DskipTests=true compile install -fn"
+    }
+
+    stage ('Bundle') {
+        sh "mkdir -p ${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/"
+
+        sh "cp TOSAutomation/target/TOSAutomation*dependencies.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/TOSAutomation.jar'"
+        sh "cp UI/target/WorkFlowUI*.war '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/WorkFlow.war'"
+        sh "cp JGITAPI/target/JGITAPI*.war '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/JGitAPI.war'"
+        sh "cp API/target/WorkFlowAPI*.war '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/WorkFlowAPI.war'"
+        sh "cp ShellScripts/target/ShellScripts*.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/ShellScripts.jar'"
+        sh "cp Jenkins/target/Jenkins*.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/Jenkins.jar'"   
+        sh "cp BPM/target/WorkFlow*.bar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/'"
+        sh "cp ConfigGenerator/target/ConfigGenerator*dependencies.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/ConfigGenerator.jar'"
+        sh "cp RepoReconsile/target/RepoReconsile*dependencies.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/RepoReconsile.jar'"
+        sh "cp GBLDAPAuthenticator/target/GBLDAPAuthenticator*dependencies.jar '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/tp-gitblit.jar'"
+        sh "cp Derived/GITCFG/${BUILD_PROFILE}/*.properties '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/'"
+        sh "cp pom.xml '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/pom.xml'"
+        sh "cp DeployScripts/install.sh '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/'"
+        sh "cp DeployScripts/config.sh '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/'"
+    }
+
+    stage ("Build Verification") {
+        sh "unzip -p '${BUILD_PATH}/${POM_VERSION}_${BUILD_NUMBER}/WorkFlow.war' js/config.js | grep apiBase"
+    }
+
+    stage ('Tagging') {
+        withCredentials([
+        usernamePassword(credentialsId: '80b50f11-b5d5-4093-b4f9-70ee5fe0e88a', passwordVariable: 'SRV_PASS', usernameVariable: 'SRV_USER')]) 
+        {
+            def branch = env.BRANCH_NAME
+            def gitUrl = sh(returnStdout: true, script: 'git config remote.origin.url').trim()
+            def SRV_PWD = pwd()
+            sh """
+sshpass -p $SRV_PASS ssh -o StrictHostKeyChecking=no -l $SRV_USER vhldvztdt001.tvlport.net << EOF
+git clone -b $branch --single-branch $gitUrl /tmp/${BUILD_PROFILE}/tmp_Workflow;
+pushd /tmp/${BUILD_PROFILE}/tmp_Workflow;
+git pull --tags
+echo -e "Deployment Content for the ${ENVIRONMENT} build v${POM_VERSION}_${BUILD_NUMBER} (Diff from Last Build)\n\nCommit ID\tJira #\tDescription & Committer\n\n" > dmail.txt
+echo -e "Release Content for the ${ENVIRONMENT} build v${POM_VERSION}_${BUILD_NUMBER} (Diff from Last Production)\n\nCommit ID\tJira #\tDescription & Committer\n\n" > rmail.txt
+git log --oneline --no-merges --pretty=format:'%+h %s by %cn' Snapshot_${BUILD_PROFILE}..${ORIGIN_TAG}  &>> dmail.txt
+git log --oneline --merges --pretty=format:'%+h %s by %cn' Snapshot_${BUILD_PROFILE}..${ORIGIN_TAG} | grep Merged  &>> rmail.txt
+cat dmail.txt | mail -s "${BUILD_PROFILE}_BUILD: v${POM_VERSION}_${BUILD_NUMBER}" tsi.devops@tpfsoftware.com 
+cat rmail.txt |mail -s "${BUILD_PROFILE}_RELEASE: v${POM_VERSION}_${BUILD_NUMBER}" tsi.devops@tpfsoftware.com
+git tag -d Snapshot_${BUILD_PROFILE};
+git push origin :refs/tags/Snapshot_${BUILD_PROFILE};
+git tag -a Snapshot_${BUILD_PROFILE} -m ZTPFM-0000-DeployedIn${BUILD_PROFILE};
+git tag -a v${POM_VERSION}_${BUILD_NUMBER}_${BUILD_PROFILE} -m ZTPFM-0000-DeployedIn${BUILD_PROFILE};
+git push --tags;
+popd
+rm /tmp/${BUILD_PROFILE}/tmp_Workflow -Rf;
+EOF
+            """
+        }
+    }
+ 
+    stage ("Ticket Creation") {
+        withCredentials([usernamePassword(credentialsId: 'a9982aea-412d-430d-87c9-470c8c89b345', passwordVariable: 'wf_service_password', usernameVariable: 'wf_service_user')]) {
+            def userInput = input(
+                id: 'userInput', message: 'Deployment Schedule', parameters: [
+                    [$class: 'TextParameterDefinition', name: 'Requestor Name', description: 'User id of the Deployment Requestor', defaultValue:'arul.dhandapani'],
+                    [$class: 'com.michelin.cio.hudson.plugins.passwordparam.PasswordParameterDefinition', name: 'Requestor Password', description: 'Password of the Deployment Requestor'],
+                    [$class: 'TextParameterDefinition', name: 'Requestor Phone', description: 'Contact number of the Deployment Requestor', defaultValue:'+91 99625 32797'],
+                    [$class: 'TextParameterDefinition', name: 'CSR Number', description: 'CSR Number for the depolyment'],
+                    [$class: 'DateParameterDefinition', dateFormat:'MMM d, yyyy h:mm:ss a', defaultValue:'LocalDate.now().plusDays(7)', name: 'Load Start date time', description: 'Start Date Time of the Deployment'],
+                    [$class: 'DateParameterDefinition', dateFormat:'MMM d, yyyy h:mm:ss a', defaultValue:'LocalDate.now().plusDays(7).plusHours(1)', name: 'Load End date time', description: 'End Date Time of the Deployment'],
+                    [$class: 'TextParameterDefinition', name: 'Deployment Purpose', description: 'Description/Reason for the Deployment', defaultValue:'Deployment of New Release of Workflow'],
+                    [$class: 'TextParameterDefinition', name: 'Comments', description: 'Any Comments to Note', defaultValue:'None'],
+                    [$class: 'TextParameterDefinition', name: 'Assigned QA Name', description: 'User id of the QA for this Deployment', defaultValue:'suganthi.manonmani'],
+                    [$class: 'TextParameterDefinition', name: 'Assigned Manager Name', description: 'User id of the Manager for this Deployment', defaultValue:'Arun.vishnoi'],
+                    [$class: 'TextParameterDefinition', name: 'Fallback Build Id', description: 'Fallback build Id for this Deployment', defaultValue:'1.20_1']
+                ]
+            )
+
+            sh "java -jar -Dapp.mks.comments='${userInput['Comments']}' -Dapp.mks.company=${COMPANY_NAME} -Dapp.mks.csr.number='${userInput['CSR Number']}' -Dapp.mks.job.name=${JOB_NAME} -Dapp.mks.load.end.date='${userInput['Load End date time']}' -Dapp.mks.load.start.date='${userInput['Load Start date time']}' -Dapp.mks.manager.name='${userInput['Assigned Manager Name']}' -Dapp.mks.product.version='${POM_VERSION}'_'${BUILD_NUMBER}' -Dapp.mks.product.fallback.version='${userInput['Fallback Build Id']}' -Dapp.mks.purpose='${userInput['Deployment Purpose']}' -Dapp.mks.qa.name='${userInput['Assigned QA Name']}' -Dapp.mks.requestor.name='${userInput['Requestor Name']}' -Dapp.mks.requestor.password='${userInput['Requestor Password']}' -Dapp.mks.requestor.phone='${userInput['Requestor Phone']}' -Dapp.mks.preprod.linux.servers=${PRE_PROFILES} -Dapp.mks.preprod.f5.servers=${PRE_F5ADDRESS} -Dapp.mks.preprod.tos.servers=${PRE_TOS_SERVER} -Dapp.mks.preprod.zlinux.servers=${PRE_ZTPF_TD} -Dapp.mks.prod.linux.servers=${PROD_PROFILES} -Dapp.mks.prod.f5.servers=${PROD_F5ADDRESS} -Dapp.mks.prod.tos.servers=${PROD_TOS_SERVER} -Dapp.mks.prod.zlinux.servers=${PROD_ZTPF_TD} IMAPI/target/IMAPI-${POM_VERSION}-jar-with-dependencies.jar"
+        }
+    }
+}

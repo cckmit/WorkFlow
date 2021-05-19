@@ -1,0 +1,219 @@
+<div class="row">
+        <div class="well" style="background: #fff;min-height:400px;">
+            <div ng-if="vm.reviewTasksList.length == 0" style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                <b>No tasks found</b>
+            </div>
+            <div class="row" ng-if="vm.reviewTasksList.length != 0">
+                <div class="col-md-12 leadTotalCount">
+                    <span > Total number of items: <span class="templateCountSize"> {{vm.totalNumberOfItem}}</span> </span>
+                </div>
+            </div>
+             <div class="row" style="margin: 10px 0px;">
+                    <div class="col-md-12">
+                        <div ng-if="vm.reviewTasksList.length !== 0" class="row">
+                            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                <span style="padding: 10px;">Show</span>
+                                <select class="form-control" style="padding:10px;width: 40%;" ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}"  ng-selected="{{psVal==tableConfig.pageSize}}" ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                <span style="padding:10px">entries</span>
+                            </div>
+                            <div class="col-md-3"></div>
+                            <div class="col-md-6">
+                                <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination"></dir-pagination-controls>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <div ng-if="vm.reviewTasksList.length != 0">
+                <div class="row textCenter divTableHeader">
+                    <div class="col-md-1"></div>
+                    <div class="col-md-2">
+                        <span class="noClickProp" ng-click="sort('id')">
+                                     Implementation ID
+                                </span>
+                        <span class="pull-right">
+                                    <i class="fa fa-long-arrow-down {{sortColumn['id'].asc ? '' : 'sortDisabled'}}"></i>
+                                    <i class="fa fa-long-arrow-up {{sortColumn['id'].desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                    </div>
+                    <div class="col-md-2">Status</div>
+                    <div class="col-md-2">Developer</div>
+                    <div class="col-md-3">Ticket Number</div>
+                    <div class="col-md-2">Ticket Url</div>
+                </div>
+                <div dir-paginate="rObj in vm.reviewTasksList | filter: q | itemsPerPage: tableConfig.pageSize" total-items="tableConfig.totalItems" current-page="tableConfig.currentPage" pagination-id="tablePagination">
+                    <div class="row divTableBody textCenter hoverCurrentRow">
+                        <div class="col-md-1">
+                            <a ng-if="rObj.expanded" ng-click="rObj.expanded = false;" aria-label="{{rObj.id}}">
+                                <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+                            </a>
+                            <a ng-if="!rObj.expanded" ng-click="rObj.expanded = true;loadSystemsAndSegmentsList(rObj);" aria-label="{{rObj.id}}">
+                                <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+                            </a>
+                        </div>
+                        <div ng-class="rObj.planId.loadType === 'STANDARD' ? '' : 'exceptionRowColor'" ng-class="rObj.planId.loadType === 'STANDARD' ? 'stdRow' : 'exceptionRow'" class="col-md-2">{{rObj.id}}</div>
+                        <div class="col-md-2">
+                            <span imp-status-label="{{rObj.impStatus}}">{{rObj.impStatus | stateformat}}</span>
+                        </div>
+                        <div class="col-md-2">{{rObj.devName}}</div>
+                        <div class="col-md-3">{{rObj.tktNum}}</div>
+                        <div class="col-md-2">
+                            <a href="{{rObj.tktUrl | trimStr}}" aria-label="{{rObj.tktUrl}}_TicketNum_{{rObj.tktNum}}" target="_blank">URL</a>
+                            <!-- <button ng-if="!vm.hideAction" class="btn btn-xs btn-default themeButton markCompleteBtn" style="font-weight: bold;text-shadow: none;"
+                                ng-click="submitReview(rObj.id)" aria-label="markComplete_{{rObj.id}}">
+                                            <i class="fa fa-check"></i> Mark as complete
+                                    </button>
+                            <label ng-if="vm.hideAction" class="label label-success">Completed</label> -->
+                        </div>
+                    </div>
+                    <div class="row animated fadeIn labelFix" style="margin:0px;" ng-if="rObj.expanded">
+                        <div class="well row" style="margin: 0px;padding: 0px;padding-bottom: 15px;">
+                            <div class="col-md-6" style="margin-top: 20px;">
+                                <div class="list-group">
+                                    <li class="list-group-item uploadHeader">
+                                        <div class="row" style="padding:0px 10px 0px 10px;">
+                                            <div class="col-md-4 padding-none">
+                                                Segments
+                                            </div>
+                                            <div class="col-md-8 padding-none">
+                                                <div ng-if="showAccess" class="pull-right">
+                                                    <div class="btn-group">
+                                                        <button ng-disabled="!checkReviewCompleted(rObj.segments)" ng-click="reviewCompleted(rObj,rObj.id)" class="btn btn-primary btn-primary-t white-btn bold btn-xs " aria-label="reviewcompleted_{{rObj.id}}">
+                                                                    <i class="fa fa-check-square-o" ></i>&nbsp;  
+                                                                    Review Completed
+                                                                </button>
+                                                    </div>
+                                                    <!-- ng-disabled="checkmarkascomplete(rObj.segments)" -->
+                                                    <button  ng-click="submitReview(rObj.id)"  ng-disabled="reviewCompletedDisable[rObj.id]"  class="btn btn-primary btn-primary-t white-btn bold btn-xs" aria-label="markascomplete_{{rObj.id}}">
+                                                                    <i class="fa fa-check"></i>
+                                                                    &nbsp;
+                                                                    Mark as Complete
+                                                                </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </li>
+                                    <li ng-if='rObj.segments.length == 0' class="list-group-item">
+                                        No segments checked out
+                                    </li>
+                                    <li ng-if='rObj.segments.length != 0' style="list-style:none;">
+                                        <ul class="nav header" style="background: rgba(44, 150, 133, 0.4);">
+                                            <li class="col-md-1 flex-self-center">
+                                                <md-checkbox ng-if="checkmarkascomplete(rObj.segments) && showAccess" ng-model="rObj.selectAll" ng-change="selectAllChange(rObj.selectAll,rObj.id)" class="margin-none checkoutarea" aria-label="selectall_{{rObj.id}}"></md-checkbox>
+                                            </li>
+                                            <li class="col-md-3 ">Segment Name
+                                            </li>
+                                            <li class="col-md-3 " title="">
+                                                Target Systems
+                                            </li>
+                                            <li class="col-md-3 " title="">
+                                                Functional Area
+                                            </li>
+                                            <li class="col-md-2 " title="">
+                                                    Source
+                                                </li>
+                                        </ul>
+                                        <div style="padding:0px;max-height: 150px;" class="list-group-item maxFileList col-md-12">
+                                            <div style="overflow:hidden;">
+                                                <div class="nav" ng-repeat="workspace in rObj.segments" style="border-bottom: 1px solid #ddd;display: flex;align-items: center;">
+                                                    <div class="col-md-1">
+                                                        <md-checkbox ng-if="workspace.additionalInfo.reviewStatus != 'true' && showAccess" ng-model="workspace.additionalInfo.reviewStatus" ng-change="selectChange(rObj.segments,rObj)" class="checkoutarea" style="margin-bottom: 0px;margin-left:-1px;" aria-label="{{workspace.fileName}}"></md-checkbox>
+                                                    </div>
+                                                    <div class="col-md-4 word-wrap">
+                                                        {{workspace.fileName}}
+                                                    </div>
+                                                    <div class="col-md-8">
+                                                        <div class="row" ng-repeat="branch in workspace.branch">
+                                                            <div class="col-md-5 no-padding">
+                                                                {{branch.targetSystem}}
+                                                            </div>
+                                                            <div class="col-md-5 no-padding">
+                                                                {{branch.funcArea}}
+                                                            </div>
+                                                            <div class="col-md-2 no-padding">
+                                                                    <a href="{{branch.gitSourceURL}}" aria-label="{{branch.segmentSourceURL}}_TicketNum_{{rObj.tktNum}}" target="_blank">URL</a>
+                                                                </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </li>
+                                </div>
+                            </div>
+                            <div class="col-md-6" style="margin-top: 20px;">
+                                <div class="list-group">
+                                    <li class="list-group-item uploadHeader">
+                                        Test Result Documents
+                                    </li>
+                                    <li ng-if='rObj.uploadedFiles.length!=0' class="list-group-item" style="background:#aad5ce;padding:0px;font-weight:bold;">
+                                        <span style="margin-left:10px;">Filename</span>
+                                    </li>
+                                    <div ng-if='rObj.uploadedFiles.length==0' class="list-group-item">
+                                        No files uploaded
+                                    </div>
+                                    <div ng-if='rObj.uploadedFiles.length!=0' class="maxFileList">
+                                        <li ng-repeat="file in rObj.uploadedFiles" class="list-group-item" style="font:smaller;padding:5px;border-bottom: 0px;">
+                                            <a ng-click='downloadTestCaseImpl(file,rObj)' style="color:#2c9685;">
+                                                {{file}} </a>
+                                        </li>
+                                    </div>
+                                </div>
+                                <div class="row" style="border: 1px solid #ddd;padding: 5px;">
+                                    <div class="col-md-5">
+                                        <div class="underLine">Load Date/Time</div>
+                                        <div ng-repeat="sLoad in rObj.systemLoadList">
+                                            <span style="font-weight:bold;">
+                                                {{sLoad.systemLoad.systemId.name}} - {{sLoad.systemLoad.loadDateTime | formattedDateTimeWithoutSeconds}}
+                                            </span>
+                                        </div>
+    
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="underLine">Project Number</div>
+                                        <span style="font-weight:bold;">{{rObj.planId.projectId.projectNumber}}</span>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <div class="underLine">Project</div>
+                                        <span style="font-weight:bold;">{{rObj.planId.projectId.projectName}}</span>
+                                    </div>
+                                    <div class="col-md-12" style="display: inline-flex;padding: 0px">
+                                        <div class="col-md-4  underLine">Description of Change : </div>
+                                        <div class="col-md-8">
+                                        <span style="font-weight:bold;word-wrap: break-word"> {{rObj.impDesc}}</span>
+                                        </div>
+                                    </div>
+                                    <div ng-if="rObj.prTktNum" class="col-md-12" style="display: inline-flex;word-wrap: break-word;padding: 0px">
+                                        <div class="col-md-4  underLine">Problem Ticket# : </div>
+                                        <div class="col-md-8">
+                                        <span style="font-weight:bold;word-wrap: break-word"> {{rObj.prTktNum}}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row" style="margin: 10px 0px;">
+                    <div class="col-md-12">
+                        <div ng-if="vm.reviewTasksList.length !== 0" class="row">
+                            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                            <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                <span style="padding: 10px;">Show</span>
+                                <select class="form-control" style="padding:10px;width: 40%;" ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}"  ng-selected="{{psVal==tableConfig.pageSize}}" ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                <span style="padding:10px">entries</span>
+                            </div>
+                            <div class="col-md-3"></div>
+                            <div class="col-md-6">
+                                <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination"></dir-pagination-controls>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>

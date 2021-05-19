@@ -1,0 +1,854 @@
+#!/bin/bash
+# shellcheck disable=SC2207,SC1117,SC2034,SC2179,SC2002,SC2128,SC2178,SC2164,SC2086
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitautoupdate                                             #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to Automate where legacy impl updated as a pending will update  #
+#      As per New update MCF file which provided by REXX team                 #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Source Core                                                      #
+#      $2  - McfInput (File with new timestamp#wsp_update_20180621_113256.txt #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull code migration.                               #
+#      exit with 8, error message                                             #
+#                                                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   04072018    VINOTH       Created the script                               #
+#   10162018    VINOTH       Fallback legacy plan against devops plan from STG#
+#   12012018    VINOTH       GIT optimization                                 #
+#   04152019    VINOTH       Removed wait time from 0.3 to 0.0                #
+#   04292019    GOWTHAM      Updated with logger support                      #
+#   03022020    VINOTH       Fix Date of legacy impl if the load date mismatch#
+#   03042020    VINOTH       New file issue and 5 char issue                  #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+SourceCore="$1";                       #Read core data as input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${SourceCore} RC:$RC"
+#
+#--------------------------LEGACYPLAN USED .SO--------------------------------#
+function legacyPlan {
+  local _legacyImpl=$1;
+  local _planNameLoad;
+  local _planName;
+  pushd ${STG_TPF_LOD} &>/dev/null
+    _DevopsPlan=($(find . -type f -name '*.load' -exec grep -l "${_legacyImpl}" {} \;))
+    _DevopsImpl='';
+    if [ -n "${_DevopsPlan[0]// /}" ]; then
+      for ((j=0; j<${#_DevopsPlan[@]}; j++));
+      do
+        _planNameLoad=${_DevopsPlan[j]##./};     #cut ./ from the find result.
+        _planName=${_planNameLoad%%/*}           #get plan name from loadset.
+        _DevopsImpl="${_planName},${_DevopsImpl}"
+      done
+    else
+      _DevopsImpl="NULL"
+    fi
+  popd &> /dev/null
+}
+#--------------------------JSON UPDATE----------------------------------------#
+function jsonUpdate {
+  arr=()
+  # shellcheck disable=SC2162
+  while read x y z w v u;
+  do
+    # shellcheck disable=SC2206
+    arr=("${arr[@]}" $x $y $z $w $v $u)
+  done  <<< "${status_up[@]}"
+  # shellcheck disable=SC2206
+  vars=(${arr[@]})
+  len=${#arr[@]}
+  printf "[\n"
+  for (( i=0; i<len; i+=6 ))
+  do
+    # shellcheck disable=SC2059
+    printf "{ \"loadDateTime\":\"${vars[i]}\",\"planId\":\"${vars[i+1]}\",\"programName\":\"${vars[i+2]}\",\"targetSystem\":\"${vars[i+3]}\",\"funcArea\":\"${vars[i+4]}\",\"devopsPlan\":\"${vars[i+5]}\" }"
+    if [ $i -lt $((len-6)) ] ; then
+      printf ",\n"
+    fi
+  done
+  printf "\n"
+  printf "]\n"
+}
+#--------------------------DELTA_UPDATE---------------------------------------#
+function deltaUpdate {
+  local tag_folder;
+  local McfInput;
+  local source_repo;
+  local functional_pack;
+  local derived_repo;
+  local Update_Ind;
+  local McfInput;
+  local McfInputfile;
+  local _AC;
+  tag_folder="/home/mtpservice/TAGCLONE/dl/${SourceCore}"
+  if [ ! -d "${tag_folder}" ]; then
+    mkdir -p "${tag_folder}";
+  fi
+  pushd "${tag_folder}" &> /dev/null
+    if [ -d "/ztpfsys/${SourceCore}/tools" ]; then
+      pushd "/ztpfsys/${SourceCore}/tools" &> /dev/null
+        McfInputfile=($(find . -maxdepth 1 -type f -iname "${SourceCore}_update_*"))
+        McfInput=${McfInputfile#*./};
+      popd &> /dev/null
+      if [ -f "/ztpfsys/${SourceCore}/tools/${McfInput}" ]; then
+        functional_pack=($(cat "/ztpfsys/${SourceCore}/tools/${McfInput}" | grep -v "\..FIELD" | grep -v '???' | grep -v '?'| cut -c 19-23|sort|uniq))
+        cat "/ztpfsys/${SourceCore}/tools/${McfInput}" | grep -v "\..FIELD" | grep -v '???' | grep -v '?' > "/ztpfsys/${SourceCore}/tools/${SourceCore}_inprogress_update"
+        if [ -n "${functional_pack[0]// /}" ]; then
+          for((i=0; i<${#functional_pack[@]}; i++));
+          do
+            source_repo="${DEV_SRC_RURL_SUSR}/tpf/dl/nonibm/nonibm_${functional_pack[i],,}.git";
+            derived_repo="${DEV_BIN_RURL_SUSR}/gitblit/r/tpf/dl/nonibm/derived_${functional_pack[i],,}.git";
+            GIT_SSL_NO_VERIFY=true git clone -b "master_${SourceCore}" "${source_repo}" "nonibm_${functional_pack[i],,}" &> /dev/null ; _RC=$?;
+            GIT_SSL_NO_VERIFY=true git clone -b "master_${SourceCore}" "${derived_repo}" "derived_${functional_pack[i],,}"&> /dev/null ; _FC=$?;
+            if [ "${_RC}" -eq 0 ] && [ "${_FC}" -eq 0 ]; then
+              while IFS= read -r mcfLine
+              do
+                # shellcheck disable=SC2116
+                line=$(echo "${mcfLine}")                  #Convert line data to array
+                Update_Ind="${line:316:1}"                 #Replace indicator
+                Status_Ind="${line:23:1}"                  #legacy impl latest update
+                MemName="${line:0:8}"                      #Segment Name
+                MemName1="$(echo ${MemName}| tr -d ' ')"   #Segment name without space
+                FileType="${line:12:3}"                    #Filetype
+                FileType1="$(echo ${FileType}| tr -d ' ')" #Filetype alone
+                Impl_Nbr="${line:43:14}"                   #Imple plan number
+                Impl_Nbr1="$(echo ${Impl_Nbr}| tr -d ' ')" #Imple plan without space
+                Date_Impl="${line:25:8}"                   #Load date
+                Func_Pack="${line:18:5}"                   #Func Pack with space
+                Func_Pack1="$(echo ${Func_Pack}| tr -d ' ')"
+                Date_ImplDevOps="${Date_Impl}120000"
+                unset tag_Del_Source                         #reset source as null
+                unset tag_Del_Derived                        #reset source as null
+                if [ -n "${Impl_Nbr1// /}" ] && [[ "${Func_Pack1}" == "${functional_pack[i]^^}" ]]; then
+                  if [ -n "${Update_Ind// /}" ] && [ -n "${Status_Ind// /}" ]; then
+                    #Source repository handling
+                    if [ -d "${tag_folder}/nonibm_${functional_pack[i],,}" ]; then
+                      pushd "${tag_folder}/nonibm_${functional_pack[i],,}" &> /dev/null
+                        #tag_Del="";
+                        tag_Del_All=($(git tag | grep "pending-${Impl_Nbr1}"))
+                        if [ -n "${tag_Del_All[0]// /}" ]; then
+                          for branchchk in "${tag_Del_All[@]}"
+                          do
+                            branch_cmt=${branchchk##*-};
+                            git branch --contains ${branch_cmt} | grep "master_${SourceCore}" &>/dev/null; _AC=$?;
+                            if [ "${_AC}" -eq 0 ]; then
+                              tag_Del_Source+=("${branchchk}")
+                            fi
+                          done
+                          if [ -n "${tag_Del_Source[0]// /}" ]; then
+                            for oldTag in "${tag_Del_Source[@]}"
+                            do
+                              commit_id=${oldTag##*-};
+                              legacyDateNum=$(git show -s --format=%B "${commit_id}"| awk '{print $1}'|tr 'Date:' ' '|tr ',' ' '| tr -d ' ')                      # Legacy date fix if required.
+                              # Delete file from production repositroy if the date is mismatch.
+                              if [ -n "${legacyDateNum// /}" ] && [ -n "${Date_ImplDevOps// /}" ]; then
+                                if [ "${legacyDateNum}" != "${Date_ImplDevOps}" ]; then
+                                  sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}: Date of Legacy Impl plan in MCF against Date of Legacy Impl plan in GIT is mismatched RC:$RC"
+                                  fileName="${MemName1}.${FileType1}";
+                                  fileNamepath=$(find . -type f -name "${fileName}" | sed "s|^\./||")
+                                  if [ -n "${fileNamepath// /}" ]; then
+                                    seg_Commit=( $(git log --remove-empty --pretty=format:"%h %s" -- "${fileNamepath}"| sort -k 2 | awk '{print $1}'|tr '\n' ' ' ) );
+                                    latest_Version=$(git log --remove-empty --pretty=format:"%h %s" -- "${fileNamepath}" | awk '{print $1}' | head -1)
+                                    if [ -f "${fileNamepath}" ]; then
+                                      planid="${Impl_Nbr1,,}";
+                                      planName=${planid};
+                                      commit_Mes=$(git show -s --format=%B "${commit_id}") # commit message
+                                      #oldLoaddate=$(echo "${commit_Mes}"| awk -F ',' '{print$1}'|awk -F':' '{print$2}')
+                                      rm -f "${fileNamepath}";
+                                      git commit -am "${commit_Mes}" &>/dev/null
+                                      #git tag -d ${oldTag};
+                                      #git push origin :refs/tags/${oldTag};
+                                      #git tag -a "deleted-${planid}-${commit_id}" -m "deleted-${planid}-${commit_id}" ${commit_id} &>/dev/null
+                                      git tag -a "deleted-${planid}-$(git log -1 --pretty=%h)" -m "deleted-${planid}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                                      getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${planName}" "${legacyDateNum}" "false" ; RC=$?;
+                                      if [ ${RC} -eq 0 ]; then
+                                        sendGitData "${SourceCore}" "false"; RC=$?
+                                      fi
+                                      for j in {0..2}            #Retry if it's failed
+                                        do
+                                        GIT_SSL_NO_VERIFY=true git push origin "master_${SourceCore}" --tags &>/dev/null; RC=$?;
+                                        if [ ${RC} -eq 0 ]; then
+                                          break;
+                                          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} success RC:$RC"
+                                        elif [ "${RC}" -eq 128 ]; then
+                                          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$RC"
+                                          echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                          sleep 3;
+                                          RC="$EC";
+                                        else
+                                          RC="$EC";
+                                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$_RC"
+                                        fi
+                                      done
+                                    fi
+                                    for ((k=0; k<${#seg_Commit[@]}; k++));
+                                    do
+                                      if [ "${seg_Commit[k]}" != "${latest_Version}" ]; then
+                                        git checkout "${seg_Commit[k]}" "${fileNamepath}" &>/dev/null; RC=$?;
+                                        commit_Mes=$(git show -s --format=%B "${seg_Commit[k]}")
+                                        git add "${fileNamepath}" &>/dev/null
+                                        git commit -am "${commit_Mes}" &>/dev/null;
+                                        tag_Commit=$(git tag | grep "${seg_Commit[k]}")
+                                        tag_PlanStatus="${tag_Commit%-*}";
+                                        oldHisPlan="${tag_PlanStatus#*-}"
+                                        plan_Date=$(git show -s --format=%B "${seg_Commit[k]}"| awk '{print $1}'|tr 'Date:' ' '|tr ',' ' '| tr -d ' ')
+                                        git tag -a "${tag_PlanStatus}-$(git log -1 --pretty=%h)" -m "${tag_PlanStatus}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                                        getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${oldHisPlan}" "${plan_Date}" "false" ; RC=$?;
+                                        if [ ${RC} -eq 0 ]; then
+                                          sendGitData "${SourceCore}" "false"; RC=$?
+                                        fi
+                                        for j in {0..2}        #Retry if it's failed
+                                        do
+                                          GIT_SSL_NO_VERIFY=true git push origin "master_${SourceCore}" --tags &>/dev/null; RC=$?;
+                                          if [ ${RC} -eq 0 ]; then
+                                            break;
+                                            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} success RC:$RC"
+                                          elif [ "${RC}" -eq 128 ]; then
+                                            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$_RC"
+                                            #echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                            sleep 3;
+                                            RC="$EC";
+                                          else
+                                            RC="$EC";
+                                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$_RC"
+                                          fi
+                                        done
+                                      elif [ "${seg_Commit[k]}" == "${latest_Version}" ]; then
+                                        git checkout "${seg_Commit[k]}" "${fileNamepath}" &>/dev/null; RC=$?;
+                                        commit_Mes=$(git show -s --format=%B "${seg_Commit[k]}")
+                                        updateCommit=$(echo ${commit_Mes/$legacyDateNum/$Date_ImplDevOps})
+                                        git add "${fileNamepath}" &>/dev/null
+                                        git commit -am "${updateCommit}" &>/dev/null;
+                                        tag_Commit=$(git tag | grep "${seg_Commit[k]}")
+                                        tag_PlanStatus="${tag_Commit%-*}";           #online-z072513.lbww
+                                        planoldStatus=${tag_PlanStatus%%-*};         #pending
+                                        planoldNumber=${planoldStatus#*-};           #plan number
+                                        git tag -a "${tag_PlanStatus}-$(git log -1 --pretty=%h)" -m "${tag_PlanStatus}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                                        getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${planoldNumber}" "${Date_ImplDevOps}" "false" ; RC=$?;
+                                        if [ ${RC} -eq 0 ]; then
+                                          sendGitData "${SourceCore}" "false"; RC=$?
+                                        fi
+                                        for j in {0..2}        #Retry if it's failed
+                                        do
+                                          GIT_SSL_NO_VERIFY=true git push origin "master_${SourceCore}" --tags &>/dev/null; RC=$?;
+                                          if [ ${RC} -eq 0 ]; then
+                                            break;
+                                            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} success RC:$RC"
+                                          elif [ "${RC}" -eq 128 ]; then
+                                            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$_RC"
+                                            #echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                            sleep 3;
+                                            RC="$EC";
+                                          else
+                                            RC="$EC";
+                                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$_RC"
+                                          fi
+                                        done
+                                        oldTag="${tag_PlanStatus}-$(git log -1 --pretty=%h)"
+                                        commit_id="$(git log -1 --pretty=%h)"
+                                      fi
+                                    done
+                                  else
+                                    sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}: Ignore ${fileNamepath} due to file is not present in system to repopulate - $j RC:$_RC"
+                                  fi
+                                fi
+                              fi
+                              #Online with Replace tag handling
+                              if [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == O ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a "online-${Impl_Nbr1}-${commit_id}" -m "online-${Impl_Nbr1}-${commit_id}" "${commit_id}";
+                                  getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${Impl_Nbr1}" "${Date_Impl}120000" "true" ; _RC=$?;
+                                  if [ ${_RC} -eq 0 ]; then
+                                    sendGitData "${SourceCore}" "true"; RC=$?
+                                  fi
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null;
+                                fi
+                              #Fallback with Replace tag handling
+                              elif [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == F ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a fallback-"${Impl_Nbr1}-${commit_id}" -m fallback-"${Impl_Nbr1}-${commit_id}" "${commit_id}";
+                                  getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${Impl_Nbr1}" "${Date_Impl}120000" "true" ; _RC=$?;
+                                  if [ ${_RC} -eq 0 ]; then
+                                    sendGitData "${SourceCore}" "true"; RC=$?
+                                  fi
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null;
+                                  legacyPlan ${Impl_Nbr1};
+                                  status_up+="${Date_Impl} ${Impl_Nbr1} ${MemName1}.${FileType1} ${SourceCore} ${Func_Pack1} ${_DevopsImpl} "
+                                fi
+                              #Reject with Replace tag handling
+                              elif  [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == R ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a rejected-"${Impl_Nbr1}"-"${commit_id}" -m rejected-"${Impl_Nbr1}"-"${commit_id}" "${commit_id}";
+                                  getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${Impl_Nbr1}" "${Date_Impl}120000" "true" ; _RC=$?;
+                                  if [ ${_RC} -eq 0 ]; then
+                                    sendGitData "${SourceCore}" "true"; RC=$?
+                                  fi
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null;
+                                  legacyPlan ${Impl_Nbr1};
+                                  status_up+="${Date_Impl} ${Impl_Nbr1} ${MemName1}.${FileType1} ${SourceCore} ${Func_Pack1} ${_DevopsImpl} "
+                                fi
+                              fi
+                            done
+                          elif [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == F ]; then
+                            check_Plan=($(git tag | grep "${Impl_Nbr1}"))
+                            if [ -n "${check_Plan[0]// /}" ]; then
+                              legacyPlan ${Impl_Nbr1};
+                              status_up+="${Date_Impl} ${Impl_Nbr1} ${MemName1}.${FileType1} ${SourceCore} ${Func_Pack1} ${_DevopsImpl} "
+                            fi
+                          elif [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == R ]; then
+                            check_Plan=($(git tag | grep "${Impl_Nbr1}"))
+                            if [ -n "${check_Plan[0]// /}" ]; then
+                              legacyPlan ${Impl_Nbr1};
+                              status_up+="${Date_Impl} ${Impl_Nbr1} ${MemName1}.${FileType1} ${SourceCore} ${Func_Pack1} ${_DevopsImpl} "
+                            fi
+                          fi
+                          #Delete tag handling with irrespective of plan status
+                          if [ "${Update_Ind}" == D ]; then
+                            change_Tag=($(git tag | grep "${Impl_Nbr1}"))
+                            if [ -n "${change_Tag[0]// /}" ]; then
+                              for del_Tag in "${change_Tag[@]}"
+                              do
+                                delcommit_tag="${del_Tag##*-}"
+                                git tag -d "${del_Tag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${del_Tag}" &> /dev/null; RC=$?;
+                                if [ "${RC}" -eq 0 ]; then
+                                  git tag -a deleted-"${Impl_Nbr1}"-"${delcommit_tag}" -m deleted-"${Impl_Nbr1}"-"${delcommit_tag}" "${delcommit_tag}"
+                                  getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${Impl_Nbr1}" "${Date_Impl}120000" "true" ; _RC=$?;
+                                  if [ ${_RC} -eq 0 ]; then
+                                    sendGitData "${SourceCore}" "true"; RC=$?
+                                  fi
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null;
+                                  legacyPlan ${Impl_Nbr1};
+                                  status_up+="${Date_Impl} ${Impl_Nbr1} ${MemName1}.${FileType1} ${SourceCore} ${Func_Pack1} ${_DevopsImpl} "
+                                fi
+                              done
+                            fi
+                          fi
+                        fi
+                      popd &> /dev/null
+                    fi
+                    #Derived repository handling
+                    if [ -d "${tag_folder}/derived_${functional_pack[i],,}" ]; then
+                      pushd "${tag_folder}/derived_${functional_pack[i],,}" &> /dev/null;
+                        #tag_Del="";
+                        tag_Del_All=($(git tag | grep "pending-${Impl_Nbr1}"))
+                        if [ -n "${tag_Del_All[0]// /}" ]; then
+                          for branchchk in "${tag_Del_All[@]}"
+                          do
+                            branch_cmt=${branchchk##*-};
+                            git branch --contains ${branch_cmt} | grep "master_${SourceCore}" &>/dev/null; _AC=$?;
+                            if [ "${_AC}" -eq 0 ]; then
+                              tag_Del_Derived+=("${branchchk}")
+                            fi
+                          done
+                          #tag_Del=($(git tag | grep "pending-${Impl_Nbr1}"))
+                          if [ -n "${tag_Del_Derived[0]// /}" ]; then
+                            for oldTag in "${tag_Del_Derived[@]}"
+                            do
+                              commit_id=${oldTag##*-};
+                              #Online with Replace tag handling
+                              if [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == O ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a online-"${Impl_Nbr1}"-"${commit_id}" -m online-"${Impl_Nbr1}"-"${commit_id}" "${commit_id}";
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null;
+                                fi
+                              #Fallback with Replace tag handling
+                              elif [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == F ]; then
+                                git tag -d "${oldTag}" &> /dev/null ;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a fallback-"${Impl_Nbr1}"-"${commit_id}" -m fallback-"${Impl_Nbr1}"-"${commit_id}" "${commit_id}";
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null;
+                                fi
+                              #Reject with Replace tag handling
+                              elif  [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == R ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a rejected-"${Impl_Nbr1}"-"${commit_id}" -m rejected-"${Impl_Nbr1}"-"${commit_id}" "${commit_id}";
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null
+                                fi
+                              fi
+                            done
+                          fi
+                          #Delete tag handling with irrespective of plan status
+                          if [ "${Update_Ind}" == D ]; then
+                            change_Tag=($(git tag | grep "${Impl_Nbr1}"))
+                            if [ -n "${change_Tag// /}" ]; then
+                              for del_Tag in "${change_Tag[@]}"
+                              do
+                                delcommit_tag="${del_Tag##*-}"
+                                git tag -d "${del_Tag}"&> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${del_Tag}"; RC=$?;
+                                if [ "${RC}" -eq 0 ]; then
+                                  git tag -a deleted-"${Impl_Nbr1}"-"${delcommit_tag}" -m deleted-"${Impl_Nbr1}"-"${delcommit_tag}" "${delcommit_tag}"
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null
+                                fi
+                              done
+                            fi
+                          fi
+                        fi
+                      popd &> /dev/null
+                    fi
+                  else
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Null value from the MCF file for Update or Status indicator RC:$EC"
+                    #echo -e "ERROR:Null value from the MCF file for Update or Status indicator";
+                  fi
+                fi
+              done < "/ztpfsys/${SourceCore}/tools/${SourceCore}_inprogress_update"
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Source or derived failed to clone for ${SourceCore} functional area RC:$EC"
+              #echo -e "ERROR: Source or derived failed to clone for ${SourceCore} functional area"
+            fi
+          done
+        fi
+      fi
+    fi
+  popd &> /dev/null
+  if [ "${RC}" -eq 0 ]; then
+    if [ ! -d "/ztpfsys/${SourceCore}/tools/processed" ]; then
+      mkdir -p "/ztpfsys/${SourceCore}/tools/processed";
+    fi
+    if [ -f "/ztpfsys/${SourceCore}/tools/${McfInput}" ]; then
+      mv "/ztpfsys/${SourceCore}/tools/${McfInput}" "/ztpfsys/${SourceCore}/tools/processed"
+    fi
+    if [ -f "/ztpfsys/${SourceCore}/tools/${SourceCore}_inprogress_update" ]; then
+      rm -f "/ztpfsys/${SourceCore}/tools/${SourceCore}_inprogress_update"
+    fi
+    if [ -d "${tag_folder}" ]; then
+      rm -rf "${tag_folder}";
+    fi
+  fi
+  if [ -n "${status_up// /}" ]; then
+    jsonUpdate                         #JSON function to display value
+  fi
+  return "${RC}"
+}
+#--------------------------TRAVELPORT_UPDATE----------------------------------#
+function travelportUpdate {
+  local tag_folder;
+  local McfInput;
+  local source_repo;
+  local functional_pack;
+  local derived_repo;
+  local Update_Ind;
+  local McfInput;
+  local McfInputfile;
+  local _AC;
+  tag_folder="/home/mtpservice/TAGCLONE/tp/${SourceCore}"
+  if [ ! -d "${tag_folder}" ]; then
+    mkdir -p "${tag_folder}";
+  fi
+  pushd "${tag_folder}" &> /dev/null
+    if [ -d "/ztpfsys/${SourceCore}/tools" ]; then
+      pushd "/ztpfsys/${SourceCore}/tools" &> /dev/null
+        McfInputfile=($(find . -maxdepth 1 -type f -iname "${SourceCore}_update_*"))
+        McfInput=${McfInputfile#*./};
+      popd &> /dev/null
+      if [ -f "/ztpfsys/${SourceCore}/tools/${McfInput}" ]; then
+        functional_pack=($(cat "/ztpfsys/${SourceCore}/tools/${McfInput}" | grep -v "\..FIELD" | grep -v '???' | grep -v '?'| cut -c 19-23|sort|uniq))
+        cat "/ztpfsys/${SourceCore}/tools/${McfInput}" | grep -v "\..FIELD" | grep -v '???' | grep -v '?' > "/ztpfsys/${SourceCore}/tools/${SourceCore}_inprogress_update"
+        if [ -n "${functional_pack// /}" ]; then
+          for((i=0; i<${#functional_pack[@]}; i++));
+          do
+            source_repo="${DEV_SRC_RURL_SUSR}/tpf/tp/nonibm/nonibm_${functional_pack[i],,}.git";             # source repo
+            derived_repo="${DEV_BIN_RURL_SUSR}/gitblit/r/tpf/tp/nonibm/derived_${functional_pack[i],,}.git"; # derived repo
+            git clone -b "master_${SourceCore}" "${source_repo}" "nonibm_${functional_pack[i],,}" &> /dev/null ; _RC=$?;
+            GIT_SSL_NO_VERIFY=true git clone -b "master_${SourceCore}" "${derived_repo}" "derived_${functional_pack[i],,}" &> /dev/null ; _FC=$?;
+            if [ "${_RC}" -eq 0 ] && [ "${_FC}" -eq 0 ]; then
+              while IFS= read -r mcfLine
+              do
+                # shellcheck disable=2116
+                line=$(echo "${mcfLine}")                            #Convert line data to array
+                Update_Ind="${line:316:1}"                           #Replace indicator
+                Status_Ind="${line:23:1}"                            #legacy impl latest update
+                Impl_Nbr="${line:43:14}"                             #Imple plan number
+                Impl_Nbr1="$(echo "${Impl_Nbr}" | tr -d ' ')"        #Imple plan without space
+                MemName="${line:0:8}"                                #Segment Name
+                MemName1="$(echo ${MemName}| tr -d ' ')"             #Segment name without space
+                FileType="${line:12:3}"                              #Filetype
+                FileType1="$(echo ${FileType}| tr -d ' ')"           #Filetype alone
+                Date_Impl="${line:25:8}"                             #Load date
+                Func_Pack="${line:18:5}"                             #Func Pack with space
+                Func_Pack1="$(echo ${Func_Pack}| tr -d ' ')"
+                Date_ImplDevOps="${Date_Impl}120000"
+                unset tag_Del_Source                                   #reset source as null
+                unset tag_Del_Derived                                  #reset source as null
+                if [ -n "${Impl_Nbr1// /}" ] && [[ "${Func_Pack1}" == "${functional_pack[i]^^}" ]]; then
+                  if [ -n "${Update_Ind// /}" ] && [ -n "${Status_Ind// /}" ]; then
+                    if [ -d "${tag_folder}/nonibm_${functional_pack[i],,}" ]; then
+                      pushd "${tag_folder}/nonibm_${functional_pack[i],,}" &> /dev/null
+                        #tag_Del=($(git tag | grep "pending-${Impl_Nbr1}"))
+                        tag_Del_All=($(git tag | grep "pending-${Impl_Nbr1}"))
+                        if [ -n "${tag_Del_All[0]// /}" ]; then
+                          for branchchk in "${tag_Del_All[@]}"
+                          do
+                            branch_cmt=${branchchk##*-};
+                            git branch --contains ${branch_cmt} | grep "master_${SourceCore}" &>/dev/null; _AC=$?;
+                            if [ "${_AC}" -eq 0 ]; then
+                              tag_Del_Source+=("${branchchk}")
+                            fi
+                          done
+                          if [ -n "${tag_Del_Source[0]// /}" ]; then
+                            for oldTag in "${tag_Del_Source[@]}"
+                            do
+                              commit_id=${oldTag##*-};
+                              legacyDateNum=$(git show -s --format=%B "${commit_id}"| awk '{print $1}'|tr 'Date:' ' '|tr ',' ' '| tr -d ' ')                      # Legacy date fix if required.
+                              # Delete file from production repositroy if the date is mismatch.
+                              if [ -n "${legacyDateNum// /}" ] && [ -n "${Date_ImplDevOps// /}" ]; then
+                                if [ "${legacyDateNum}" != "${Date_ImplDevOps}" ]; then
+                                  sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}: Date of Legacy Impl plan in MCF against Date of Legacy Impl plan in GIT is mismatched RC:$RC"
+                                  fileName="${MemName1}.${FileType1}";
+                                  fileNamepath=$(find . -type f -name "${fileName}" | sed "s|^\./||")
+                                  if [ -n "${fileNamepath// /}" ]; then
+                                    seg_Commit=( $(git log --remove-empty --pretty=format:"%h %s" -- "${fileNamepath}"| sort -k 2 | awk '{print $1}'|tr '\n' ' ' ) );
+                                    latest_Version=$(git log --remove-empty --pretty=format:"%h %s" -- "${fileNamepath}" | awk '{print $1}' | head -1)
+                                    if [ -f "${fileNamepath}" ]; then
+                                      planid="${Impl_Nbr1,,}";
+                                      planName=${planid};
+                                      commit_Mes=$(git show -s --format=%B "${commit_id}") # commit message
+                                      #oldLoaddate=$(echo "${commit_Mes}"| awk -F ',' '{print$1}'|awk -F':' '{print$2}')
+                                      rm -f "${fileNamepath}";
+                                      git commit -am "${commit_Mes}" &>/dev/null
+                                      #git tag -d ${oldTag};
+                                      #git push origin :refs/tags/${oldTag};
+                                      #git tag -a "deleted-${planid}-${commit_id}" -m "deleted-${planid}-${commit_id}" ${commit_id} &>/dev/null
+                                      git tag -a "deleted-${planid}-$(git log -1 --pretty=%h)" -m "deleted-${planid}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                                      getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${planName}" "${legacyDateNum}" "false" ; RC=$?;
+                                      if [ ${RC} -eq 0 ]; then
+                                        sendGitData "${SourceCore}" "false"; RC=$?
+                                      fi
+                                      for j in {0..2}            #Retry if it's failed
+                                        do
+                                        GIT_SSL_NO_VERIFY=true git push origin "master_${SourceCore}" --tags &>/dev/null; RC=$?;
+                                        if [ ${RC} -eq 0 ]; then
+                                          break;
+                                          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} success RC:$RC"
+                                        elif [ "${RC}" -eq 128 ]; then
+                                          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$RC"
+                                          echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                          sleep 3;
+                                          RC="$EC";
+                                        else
+                                          RC="$EC";
+                                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$_RC"
+                                        fi
+                                      done
+                                    fi
+                                    for ((k=0; k<${#seg_Commit[@]}; k++));
+                                    do
+                                      if [ "${seg_Commit[k]}" != "${latest_Version}" ]; then
+                                        git checkout "${seg_Commit[k]}" "${fileNamepath}" &>/dev/null; RC=$?;
+                                        commit_Mes=$(git show -s --format=%B "${seg_Commit[k]}")
+                                        git add "${fileNamepath}" &>/dev/null
+                                        git commit -am "${commit_Mes}" &>/dev/null;
+                                        tag_Commit=$(git tag | grep "${seg_Commit[k]}")
+                                        tag_PlanStatus="${tag_Commit%-*}";
+                                        oldHisPlan="${tag_PlanStatus#*-}"
+                                        plan_Date=$(git show -s --format=%B "${seg_Commit[k]}"| awk '{print $1}'|tr 'Date:' ' '|tr ',' ' '| tr -d ' ')
+                                        git tag -a "${tag_PlanStatus}-$(git log -1 --pretty=%h)" -m "${tag_PlanStatus}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                                        getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${oldHisPlan}" "${plan_Date}" "false" ; RC=$?;
+                                        if [ ${RC} -eq 0 ]; then
+                                          sendGitData "${SourceCore}" "false"; RC=$?
+                                        fi
+                                        for j in {0..2}        #Retry if it's failed
+                                        do
+                                          GIT_SSL_NO_VERIFY=true git push origin "master_${SourceCore}" --tags &>/dev/null; RC=$?;
+                                          if [ ${RC} -eq 0 ]; then
+                                            break;
+                                            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} success RC:$RC"
+                                          elif [ "${RC}" -eq 128 ]; then
+                                            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$_RC"
+                                            #echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                            sleep 3;
+                                            RC="$EC";
+                                          else
+                                            RC="$EC";
+                                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$_RC"
+                                          fi
+                                        done
+                                      elif [ "${seg_Commit[k]}" == "${latest_Version}" ]; then
+                                        git checkout "${seg_Commit[k]}" "${fileNamepath}" &>/dev/null; RC=$?;
+                                        commit_Mes=$(git show -s --format=%B "${seg_Commit[k]}")
+                                        updateCommit=$(echo ${commit_Mes/$legacyDateNum/$Date_ImplDevOps})
+                                        git add "${fileNamepath}" &>/dev/null
+                                        git commit -am "${updateCommit}" &>/dev/null;
+                                        tag_Commit=$(git tag | grep "${seg_Commit[k]}")
+                                        tag_PlanStatus="${tag_Commit%-*}";           #online-z072513.lbww
+                                        planoldStatus=${tag_PlanStatus%%-*};         #pending
+                                        planoldNumber=${planoldStatus#*-};           #plan number
+                                        git tag -a "${tag_PlanStatus}-$(git log -1 --pretty=%h)" -m "${tag_PlanStatus}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                                        getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${planoldNumber}" "${Date_ImplDevOps}" "false" ; RC=$?;
+                                        if [ ${RC} -eq 0 ]; then
+                                          sendGitData "${SourceCore}" "false"; RC=$?
+                                        fi
+                                        for j in {0..2}        #Retry if it's failed
+                                        do
+                                          GIT_SSL_NO_VERIFY=true git push origin "master_${SourceCore}" --tags &>/dev/null; RC=$?;
+                                          if [ ${RC} -eq 0 ]; then
+                                            break;
+                                            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} success RC:$RC"
+                                          elif [ "${RC}" -eq 128 ]; then
+                                            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$_RC"
+                                            #echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                            sleep 3;
+                                            RC="$EC";
+                                          else
+                                            RC="$EC";
+                                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${SourceCore} to remote re-try - $j RC:$_RC"
+                                          fi
+                                        done
+                                        oldTag="${tag_PlanStatus}-$(git log -1 --pretty=%h)"
+                                        commit_id="$(git log -1 --pretty=%h)"
+                                      fi
+                                    done
+                                  else
+                                    sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}: Ignore ${fileNamepath} due to file is not present in system to repopulate - $j RC:$_RC"
+                                  fi
+                                fi
+                              fi
+                              #Online with replace tag handling
+                              if [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == O ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a online-"${Impl_Nbr1}"-"${commit_id}" -m online-"${Impl_Nbr1}"-"${commit_id}" "${commit_id}";
+                                  getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${Impl_Nbr1}" "${Date_Impl}120000" "true" ; _RC=$?;
+                                  if [ ${_RC} -eq 0 ]; then
+                                    sendGitData "${SourceCore}" "true"; RC=$?
+                                  fi
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags  &> /dev/null;
+                                fi
+                              #Fallback with replace tag handling
+                              elif [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == F ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a fallback-"${Impl_Nbr1}"-"${commit_id}" -m fallback-"${Impl_Nbr1}"-"${commit_id}" "${commit_id}";
+                                  getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${Impl_Nbr1}" "${Date_Impl}120000" "true" ; _RC=$?;
+                                  if [ ${_RC} -eq 0 ]; then
+                                    sendGitData "${SourceCore}" "true"; RC=$?
+                                  fi
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null;
+                                  legacyPlan ${Impl_Nbr1};
+                                  status_up+="${Date_Impl} ${Impl_Nbr1} ${MemName1}.${FileType1} ${SourceCore} ${Func_Pack1} ${_DevopsImpl} "
+                                fi
+                              #Reject with replace tag handling
+                              elif  [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == R ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a rejected-"${Impl_Nbr1}"-"${commit_id}" -m rejected-"${Impl_Nbr1}"-"${commit_id}" "${commit_id}";
+                                  getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${Impl_Nbr1}" "${Date_Impl}120000" "true" ; _RC=$?;
+                                  if [ ${_RC} -eq 0 ]; then
+                                    sendGitData "${SourceCore}" "true"; RC=$?
+                                  fi
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags  &> /dev/null;
+                                  legacyPlan ${Impl_Nbr1};
+                                  status_up+="${Date_Impl} ${Impl_Nbr1} ${MemName1}.${FileType1} ${SourceCore} ${Func_Pack1} ${_DevopsImpl} "
+                                fi
+                              fi
+                            done
+                          elif [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == F ]; then
+                            check_Plan=($(git tag | grep "${Impl_Nbr1}"))
+                            if [ -n "${check_Plan[0]// /}" ]; then
+                              legacyPlan ${Impl_Nbr1};
+                              status_up+="${Date_Impl} ${Impl_Nbr1} ${MemName1}.${FileType1} ${SourceCore} ${Func_Pack1} ${_DevopsImpl} "
+                            fi
+                          elif [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == R ]; then
+                            check_Plan=($(git tag | grep "${Impl_Nbr1}"))
+                            if [ -n "${check_Plan[0]// /}" ]; then
+                              legacyPlan ${Impl_Nbr1};
+                              status_up+="${Date_Impl} ${Impl_Nbr1} ${MemName1}.${FileType1} ${SourceCore} ${Func_Pack1} ${_DevopsImpl} "
+                            fi
+                          fi
+                          #Delete with any tag handling
+                          if [ "${Update_Ind}" == D ]; then
+                            change_Tag=($(git tag | grep "${Impl_Nbr1}"))
+                            if [ -n "${change_Tag// /}" ] && [[ ${change_Tag} =~ "online" ]] || [[ ${change_Tag} =~ "fallback" ]] || [[ ${change_Tag} =~ "pending" ]]; then
+                              for del_Tag in "${change_Tag[@]}"
+                              do
+                                delcommit_tag="${del_Tag##*-}"
+                                git tag -d "${del_Tag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${del_Tag}" &> /dev/null; RC=$?;
+                                if [ "${RC}" -eq 0 ]; then
+                                  git tag -a deleted-"${Impl_Nbr1}"-"${delcommit_tag}" -m deleted-"${Impl_Nbr1}"-"${delcommit_tag}" "${delcommit_tag}"
+                                  getGitData "SRC" "${tag_folder}/nonibm_${functional_pack[i],,}" "${Impl_Nbr1}" "${Date_Impl}120000" "true" ; _RC=$?;
+                                  if [ ${_RC} -eq 0 ]; then
+                                    sendGitData "${SourceCore}" "true"; RC=$?
+                                  fi
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null;
+                                  legacyPlan ${Impl_Nbr1};
+                                  status_up+="${Date_Impl} ${Impl_Nbr1} ${MemName1}.${FileType1} ${SourceCore} ${Func_Pack1} ${_DevopsImpl} "
+                                fi
+                              done
+                            fi
+                          fi
+                        fi
+                      popd &> /dev/null
+                    fi
+                    if [ -d "${tag_folder}/derived_${functional_pack[i],,}" ]; then
+                      pushd "${tag_folder}/derived_${functional_pack[i],,}" &> /dev/null
+                        #tag_Del=($(git tag | grep "pending-${Impl_Nbr1}"))
+                        #tag_Del="";
+                        tag_Del_All=($(git tag | grep "pending-${Impl_Nbr1}"))
+                        if [ -n "${tag_Del_All[0]// /}" ]; then
+                          for branchchk in "${tag_Del_All[@]}"
+                          do
+                            branch_cmt=${branchchk##*-};
+                            git branch --contains ${branch_cmt} | grep "master_${SourceCore}" &>/dev/null; _AC=$?;
+                            if [ "${_AC}" -eq 0 ]; then
+                              tag_Del_Derived+=("${branchchk}")
+                            fi
+                          done
+                          if [ -n "${tag_Del_Derived// /}" ]; then
+                            for oldTag in "${tag_Del_Derived[@]}"
+                            do
+                              commit_id=${oldTag##*-};
+                              if [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == O ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null;_RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a online-"${Impl_Nbr1}"-"${commit_id}" -m online-"${Impl_Nbr1}"-"${commit_id}" "${commit_id}";
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null;
+                                fi
+                              elif [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == F ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null;_RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a fallback-"${Impl_Nbr1}"-"${commit_id}" -m fallback-"${Impl_Nbr1}"-"${commit_id}" "${commit_id}";
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags  &> /dev/null;
+                                fi
+                              elif  [ "${Update_Ind}" == R ] && [ "${Status_Ind}" == R ]; then
+                                git tag -d "${oldTag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${oldTag}" &> /dev/null; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  git tag -a rejected-"${Impl_Nbr1}"-"${commit_id}" -m rejected-"${Impl_Nbr1}"-"${commit_id}" "${commit_id}"
+                                fi
+                              fi
+                            done
+                          fi
+                          if [ "${Update_Ind}" == D ]; then
+                            change_Tag=($(git tag | grep "${Impl_Nbr1}"))
+                            if [ -n "${change_Tag// /}" ] && [[ ${change_Tag} =~ "online" ]] || [[ ${change_Tag} =~ "fallback" ]] || [[ ${change_Tag} =~ "pending" ]]; then
+                              for del_Tag in "${change_Tag[@]}"
+                              do
+                                delcommit_tag="${del_Tag##*-}"
+                                git tag -d "${del_Tag}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"${del_Tag}" &> /dev/null; RC=$?;
+                                if [ "${RC}" -eq 0 ]; then
+                                  git tag -a deleted-"${Impl_Nbr1}"-"${delcommit_tag}" -m deleted-"${Impl_Nbr1}"-"${delcommit_tag}" "${delcommit_tag}"
+                                  GIT_SSL_NO_VERIFY=true git push origin --tags &> /dev/null;
+                                fi
+                              done
+                            fi
+                          fi
+                        fi
+                      popd &> /dev/null
+                    fi
+                  else
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Null value from the MCF file for Update or Status indicator RC:$EC"
+                    #echo -e "ERROR:Null value from the MCF file for Update or Status indicator";
+                  fi
+                fi
+              done < "/ztpfsys/${SourceCore}/tools/${SourceCore}_inprogress_update"
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Source or derived failed to clone for ${SourceCore} functional area RC:$EC"
+              #echo -e "ERROR:Source or derived failed to clone for ${SourceCore} functional area"
+            fi
+          done
+        fi
+      fi
+    fi
+  popd &> /dev/null
+  if [ "${RC}" -eq 0 ]; then
+    if [ ! -d "/ztpfsys/${SourceCore}/tools/processed" ]; then
+      mkdir -p "/ztpfsys/${SourceCore}/tools/processed";
+    fi
+    if [ -f "/ztpfsys/${SourceCore}/tools/${McfInput}" ]; then
+      mv "/ztpfsys/${SourceCore}/tools/${McfInput}" "/ztpfsys/${SourceCore}/tools/processed"
+    fi
+    if [ -d "${tag_folder}" ]; then
+      rm -rf "${tag_folder}";
+    fi
+    if [ -f "/ztpfsys/${SourceCore}/tools/${SourceCore}_inprogress_update" ]; then
+      rm -f "/ztpfsys/${SourceCore}/tools/${SourceCore}_inprogress_update"
+    fi
+  fi
+  if [ -n "${status_up// /}" ]; then
+    jsonUpdate                         #JSON function to display value
+  fi
+  return "${RC}"
+}
+#------------------------------MAIN PROGRAM------------------------------------
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  if [ ! -f "/tmp/tagmigration_${SourceCore}.lock" ]; then
+    touch "/tmp/tagmigration_${SourceCore}.lock"
+    PROD_MRG_SCRP=""                   #key for hooks utility check mtplibrary for more
+    case "${SourceCore}" in
+      apo)
+        travelportUpdate; RC=$?;
+      ;;
+      pgr)
+        travelportUpdate; RC=$?;
+      ;;
+      pre)
+        travelportUpdate; RC=$?;
+      ;;
+      wsp)
+        travelportUpdate; RC=$?;
+      ;;
+      air)
+        deltaUpdate; RC=$?;
+      ;;
+      res)
+        deltaUpdate; RC=$?;
+      ;;
+      oss)
+        deltaUpdate; RC=$?;
+    esac
+    rm -f "/tmp/tagmigration_${SourceCore}.lock"
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Lock File is present in /tmp/tagmigration.lock RC:$EC"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${SourceCore} RC:$RC"
+exit "${RC}"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

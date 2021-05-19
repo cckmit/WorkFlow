@@ -1,0 +1,288 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164,SC2236
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdsycommit                                            #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to perform the commit in Local workspace with commit message    #
+#      as well as auto-sync common segment changes between core               #
+#                                                                             #
+#   COMMANDS  :                                                               #
+#     ./mtpgitcmdsycommit "t1700058_001_pgr" "src/one.asm,src/two.asm"        #
+#                          "commit message"                                   #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation id with core reference                            #
+#      $2  - Source List                                                      #
+#      $3  - Commit message                                                   #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   12072016    Thilak  Created the script                                    #
+#   17082017    Uvais   Code refactor as per new SCM structure                #
+#   08092017    ARUL    Workflow tool integration                             #
+#   01022018    VINOTH  GitConflict check added                               #
+#   13052019    VINOTH  Auto-merge conflict resolve message changed.          #
+#   04292019    GOWTHAM Updated with logger support                           #
+#   08282019    ARUL    Update to support auto comment in .mak file with impl #
+#   09062019    VINOTH  Restore error message is not good improving           #
+#   12202019    VINOTH  avoiding taking all make while doing autocommit       #
+#   23012020    ARUL    Removed trialing space in the modify code             #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ImplementationID="$1";                 #Read impl id with core from input
+SegmentList="$2";                      #Read segment list
+CommitMSG="$3";                        #Read Commit Message from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplementationID} ${SegmentList} ${CommitMSG} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function doCommit {
+  local _RC=0;
+  #local _ListSRC;
+  local segments;
+  if [ "$_RC" -eq 0 ]; then
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Commit common file sync success RC:$_RC"
+    echo -e "INFO: Commit common file sync success";
+    git status | grep conflicts &> /dev/null; _RC=$? #Check auto-merge exit
+    if [ "$_RC" -eq 0 ]; then
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Auto merge failed - fix conflicts by manual RC:$EC"
+      echo -e "\\nERROR: Auto merge failed - fix conflicts by manual";
+      _RC="$EC";
+    else
+      _RC="$RC";
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Commit file sync fail RC:$EC"
+    echo -e "\\nERROR: Commit file sync fail."; _RC="$EC";
+  fi
+  if [ "$_RC" -eq 0 ]; then
+    segments=( ${SegmentList//,/ } )
+    #File Auto-comment with planrestore line from prod checkout
+    for SrcPath in "${segments[@]}"
+    do
+      if [[ "${SrcPath}" =~ \.asm|\.c ]] && [[ "${SrcPath%%/*}" =~ src ]]; then
+        validSrc=$(grep -hw "${SrcPath##*/}" src/*.mak | grep -v '^#')
+        if [[ ! "${validSrc:61:9}" == "\#${USR_IMPL_PLAN}" ]]; then
+          SAVE_IFS=$IFS
+          IFS=$'\n'
+          makRestore=( $(grep -HvnP '^(?|#)' src/*.mak | grep -Fw "${SrcPath##*/}") )
+          if [ ! -z "${makRestore[*]}" ]; then
+            for resData in "${makRestore[@]}"
+            do
+              if [[ "${resData}" =~ \.asm ]]; then
+                tstData="ASM${resData##*ASM}"
+                tstData="${tstData:62:8}"
+              elif [[ "${resData}" =~ \.cpp ]]; then
+                tstData="CXX${resData##*CXX}"
+                tstData="${tstData:62:8}"
+              elif [[ "${resData}" =~ \.c ]]; then
+                tstData="C${resData##*C}"
+                tstData="${tstData:62:8}"
+              fi
+              if [[ ! "${tstData}" == "${USR_IMPL_PLAN}" ]]; then
+                makAutoComment "${resData[*]}";    #Auto-comment Restore for .mak
+              fi
+            done
+          fi
+          IFS=$SAVE_IFS
+        fi
+      fi
+    done
+    unset IFS
+    if [ "${#segments[@]}" -le 1 ]; then
+      #makChk=$(find ./src -type f -iname "*.mak" -not -path "./.git*")
+      makChk=$(git ls-files | grep "\.mak")
+      git add "${segments[*]}" .gitref/*; _RC=$?;
+      if [ "${_RC}" -ne 0 ]; then
+        git add "${segments[*]}"
+        if [ ! -z "${makChk[*]}" ]; then
+          #shellcheck disable=SC2046   #DO NOT DOUBLE QUOTE GIT-LS-FILES COMMAND
+          git commit -m "${ImplementationID} - ${CommitMSG}" "${segments[*]}" $(git ls-files | grep "\.mak" | tr '\n' ' ' | awk '{$1=$1};1') &> /dev/null; _RC=$?;
+        else
+          git commit -m "${ImplementationID} - ${CommitMSG}" "${segments[*]}" &> /dev/null; _RC=$?;
+        fi
+      else
+        if [ ! -z "${makChk[*]}" ]; then
+          #shellcheck disable=SC2046   #DO NOT DOUBLE QUOTE GIT-LS-FILES AND GIT STATUS -S COMMAND
+          git commit -m "${ImplementationID} - ${CommitMSG}" "${segments[*]}"  $(git ls-files | grep "\.mak" | tr '\n' ' ' | awk '{$1=$1};1') $(git status -s -- .gitref/ | awk '{print $2}' | tr '\n' ' ' | awk '{$1=$1};1' ) &> /dev/null; _RC=$?;
+        else
+          git commit -m "${ImplementationID} - ${CommitMSG}" "${segments[*]}" &> /dev/null; _RC=$?;
+        fi
+      fi
+      if [ "$_RC" -eq 0 ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Change commit success - ${segments[*]} RC:$RC"
+        echo -e "INFO: Change commit success - ${segments[*]}";
+      else
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Nothing to commit skipped request - ${segments[*]} RC:$RC"
+        echo -e "INFO: Nothing to commit skipped request - ${segments[*]}"; _RC="$RC";
+      fi
+    else
+      git commit -am "${ImplementationID} - ${CommitMSG}" &> /dev/null; _RC=$?;
+      if [ "$_RC" -eq 0 ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Change commit success - ${segments[*]} RC:$RC"
+        echo -e "INFO: Change commit success - ${segments[*]}";
+      else
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Nothing to commit skipped request - ${segments[*]} RC:$RC"
+        echo -e "INFO: Nothing to commit skipped request - ${segments[*]}"; _RC="$RC";
+      fi
+    fi
+  fi
+  if [ "$_RC" -eq 0 ]; then
+    git push origin "${USR_ACT_BRANCH}" &> /dev/null; _RC=$?;          #NOTE: ! [remote rejected] for tags (failed to lock) when ll'y action
+    if [ "$_RC" -eq 0 ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Update ${USR_ACT_BRANCH} remote branch success - ${segments[*]} RC:$RC"
+      echo -e "INFO: Update ${USR_ACT_BRANCH} remote branch success - ${segments[*]}";
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Update ${USR_ACT_BRANCH} remote branch failed - ${segments[*]} RC:$EC"
+      echo -e "ERROR: Update ${USR_ACT_BRANCH} remote branch failed - ${segments[*]}";
+      _RC="$EC";
+    fi
+  fi
+  return "$_RC";
+}
+#
+#-----------------------------------------------------------------------------#
+function sabreInclude {
+  local _sabreInc;
+  local _lengInc;
+  local _RC=0;
+  local _inc;
+  local _len;
+  _sabreInc=( $(find . -maxdepth 2 -type f -name "*.inc*") )
+  if [ -n "${_sabreInc[0]// /}" ]; then
+    for _inc in "${_sabreInc[@]}"
+    do
+      _lengInc=($(awk '{ print length($0); }' "${_inc}"))
+      for _len in "${_lengInc[@]}"
+      do
+        if [ "${_len}" -gt 80 ]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Sabretak include ${_inc} must have a max record length of 80 characters RC:$EC"
+          echo -e "ERROR: Sabretak include ${_inc} must have a max record length of 80 characters"
+          _RC=${EC};
+          break;
+        fi
+      done
+    done
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+function ConflictChk {
+  local _ConflictLst;
+  local _Confloc;
+  IFS=',' read -r -a _ConflictLst <<< "$SegmentList"          #Read source as array
+  for _Confloc in "${_ConflictLst[@]}"
+  do
+    #shellcheck disable=SC2143
+    if [ -f .gitconflict ] && [[ $( grep -F "<<<<<<<" "$_Confloc" | awk '{print $1}' | grep -x "<<<<<<<" ) ]] && [[ $( grep -F "=======" "$_Confloc" | awk '{print $1}' | grep -x "=======" ) ]] && [[ $( grep -F ">>>>>>>" "$_Confloc" | awk '{print $1}' | grep -x '>>>>>>>' ) ]]; then
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Please remove conflict resolution markers >>>> <<<< ====== and then commit - ${_Confloc} RC:$EC"
+      echo -e "ERROR: Please remove conflict resolution markers >>>> <<<< ====== and then commit - ${_Confloc} "; _RC="$EC";
+      break
+    else
+      _RC="$RC";
+    fi
+  done
+  unset IFS
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+function checkFile {
+  local _RC=0;
+  local _fileList;
+  local _fileOutSync;
+  local _fileNotPresent;
+  IFS=',' read -r -a _fileList <<< "${SegmentList[@]}";
+  for ((i=0; i<${#_fileList[@]}; i++));
+  do
+    if [ -f "${_fileList[i]}" ]; then
+      git ls-files | grep "${_fileList[i]}" &> /dev/null; _RC=$?
+      if [ "${_RC}" -ne 0 ]; then
+        _fileOutSync+="${_fileList[i]} "
+      fi
+    else
+      _fileNotPresent+="${_fileList[i]} "
+    fi
+  done
+  if [ -n "${_fileOutSync[0]// /}" ]; then
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File got out of sync from GIT - ${_fileOutSync}. Please use Restore action from the implementation summary line to revert the changes to an earlier point. RC:$EC"
+    echo "ERROR: File got out of sync from GIT - ${_fileOutSync}. Please use Restore action from the implementation summary line to revert the changes to an earlier point."
+    _RC="${EC}";
+  elif [ -n "${_fileNotPresent[0]// /}" ]; then
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File is not present ${USR_IMPL_CWRK} - ${_fileNotPresent}. Please use Restore action from the implementation summary line to revert the changes to an earlier point.RC:$EC"
+    echo "ERROR: File is not present ${USR_IMPL_CWRK} - ${_fileNotPresent}. Please use Restore action from the implementation summary line to revert the changes to an earlier point."
+    _RC="${EC}";
+  fi
+  unset IFS
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  getParmFromBranch "${ImplementationID}" "USR"; RC=$?; #Extract parm from input
+  if [ "${RC}" -eq 0 ]; then
+    pushd "${USR_IMPL_CWRK}" &> /dev/null; #Change from origin to project dir
+      getGitStatus; RC=$?;             #Validate git project status
+      if [ "${RC}" -eq 0 ]; then
+        getActiveBranch; RC=$?;        #Get active branch from project dir
+        if [ "${USR_ACT_BRANCH}" == "${ImplementationID}" ]; then
+          checkFile; RC=$?;
+          if [ "${RC}" -eq 0 ]; then
+            sabreInclude; RC=$?;
+            if [ "${RC}" -eq 0 ]; then
+              if [ -f .gitconflict ]; then
+                ConflictChk; RC=$?;    #Get Conflict cleared info
+                if [ "$RC" -eq 0 ]; then
+                  #makAutoComment;
+                  doCommit; RC=$?;     #If Conflict not found then do commit
+                fi
+              else
+                #makAutoComment;
+                doCommit; RC=$?;       #Dedect remote repo and do git pull
+              fi
+            fi
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_ACT_BRANCH} - branch detached | Git local repository actions interrupted possibly due to unintended user action on source artifacts. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:${EC}"
+          echo -e "ERROR: Git local repository actions interrupted possibly due to unintended user action on source artifacts. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^})."
+          RC="${EC}";
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_IMPL_CWRK} - Not a valid git project | Git local repository deleted possibly due to unintended user action on the .git folder. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:${EC}"
+        echo -e "ERROR: Git local repository deleted possibly due to unintended user action on the .git folder. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^})."
+      fi
+    popd &> /dev/null;                 #Return to origin
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_IMPL_CWRK} - Not a valid git project | Git local repository deleted possibly due to unintended user action on the ${USR_IMPL_CWRK} folder. Please use Restore action from the implementation summary line, if still presists contact zTPF DevOps tool support. (${USR_IMPL_CORE^^}) RC:${EC}"
+    echo -e "ERROR: Git local repository deleted possibly due to unintended user action on the ${USR_IMPL_CWRK} folder. Please use Restore action from the implementation summary line, if still presists contact zTPF DevOps tool support. (${USR_IMPL_CORE^^})."
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:${RC}"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplementationID} ${SegmentList} ${CommitMSG} RC:${RC}"
+exit "${RC}"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

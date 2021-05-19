@@ -1,0 +1,117 @@
+#!/bin/bash
+#shellcheck disable=SC2115,SC2164,SC2207,SC2143
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitimportworkspace                                        #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to import workspace with travelport development structure       #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Remote implementation plan repo name                             #
+#      $2  - Remote implementation branch list                                #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   25072018   VINOTH   Import script to delete the already existing workspace#
+#   22012019   GOWTHAM  Added submodules Update on import workspace           #
+#   04252019   GOWTHAM   Updated with logger support                          #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+RemoteRepoName="$1";                   #Read repo name from input
+RemoteBranchList="$2";                 #Read branch name from input
+#
+IFS=', ' read -ra BranchList <<< "$RemoteBranchList";
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${RemoteRepoName} ${RemoteBranchList} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function importWorkspace {
+  local _impl;                         #Implementation branch reference
+  local _core;                         #Core informarion from the branch
+  local _fail;                         #Counter if clone fail that not exist
+  local _RC;
+  _fail=0;
+  for i in ${!BranchList[*]}; do
+    _impl="${BranchList[$i]%_*}"       #Get implementation name
+    _core="${BranchList[$i]##*_}"      #Get core name of the implementation
+    if [ -d "${USR_TPF_PROJ}/${_impl}/${_core}" ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Workspace ${BranchList[$i]} exist RC:'$?'"
+      echo -e "STATUS: Workspace ${BranchList[$i]} exist."; _RC=$?;    #CONSOLE
+      rm -rf "${USR_TPF_PROJ}/${_impl}/${_core}";
+    fi
+      if [ ! -d "${USR_TPF_PROJ}/${_impl}" ]; then
+        mkdir -p "${USR_TPF_PROJ}/${_impl}" #Create impl.directory if not exist
+      fi
+      #shellcheck disable=SC2164
+      pushd "${USR_TPF_PROJ}/${_impl}" &> /dev/null #Switch working dir to impl for clone
+        git clone -b "${BranchList[$i]}" "${DEV_SRC_RURL}$1.git" "${_core}" &>/dev/null; _RC=$?;
+        pushd "${_core}" &> /dev/null
+          git submodule update --init &> /dev/null;
+          List=( $(git submodule | grep '.git' | awk '{print $2}') );
+          if [ -n "${List[*]// /}" ]; then
+            for mList in "${List[@]}";
+            do
+              modList=${mList##*/};
+              if [ -z "$(git remote -v| grep "${modList}")" ]; then
+                 git remote add "${modList}" --mirror=fetch "${mList}" &> /dev/null
+              fi
+            done
+          fi
+        popd &> /dev/null;
+        if [ "$_RC" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Workspace ${BranchList[$i]} created RC:$_RC"
+          echo -e "STATUS: Workspace ${BranchList[$i]} created.";      #CONSOLE
+        else
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Workspace ${BranchList[$i]} failed RC:$EC"
+          echo -e "STATUS: Workspace ${BranchList[$i]} failed.";       #CONSOLE
+          _fail="$((_fail+1))";
+        fi
+      #shellcheck disable=SC2164
+      popd &> /dev/null
+  done
+  if [ "${_fail}" -eq "${#BranchList[@]}" ]; then
+    _RC="$EC";                         #Return error code if all impl fail
+    rm -rf "${USR_TPF_PROJ:?}/${_impl}"
+  elif [ "${_fail}" -gt 0 ]; then
+     _RC="$RC";
+  fi
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  mkdir -p "${USR_TPF_PROJ}";
+  repoUrlValidation "$RemoteRepoName"; RC=$?;    #Given repo validation
+  if [ "$RC" -eq 0 ]; then
+    importWorkspace "$RemoteRepoName"; RC=$?;    #Let's create workspace
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${RemoteRepoName} ${RemoteBranchList} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

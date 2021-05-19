@@ -1,0 +1,94 @@
+#!/bin/bash
+# shellcheck disable=SC1117
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitdeleteimpl                                             #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to Delete Impl plan from IBM and NON-IBM path at DVL and STG    #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - implementation number (Ex.t1800025_apo_201805091800000000)       #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull code migration.                               #
+#      exit with 8, error message                                             #
+#                                                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   03052018    VINOTH  Created the script                                    #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ImplementationPlan="$1";               #Implementation number
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplementationPlan} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+ImplPlan=${ImplementationPlan%%_*};
+if [ "$RC" -eq 0 ]; then
+  # DEVL Workspace deletion
+  getParmFromBranch "${ImplPlan}" "DVL"; #Get workspace parm
+  if [ -d "${APP_DVL_IMPL_WRK}" ]; then
+    echo -e "\nINFO: Cleaning up NONIBM Dvl workspace due to plan deletion";                                           #CONSOLE
+    rm -rf "${APP_DVL_IMPL_WRK}"
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Cleaning up NONIBM DVL workspace ${APP_DVL_IMPL_WRK} RC:$?"
+  fi
+  if [ -d "${SYS_DVL_IMPL_WRK}" ]; then
+    echo -e "\nINFO: Cleaning up IBM Dvl workspace  due to plan deletion";                                           #CONSOLE
+    rm -rf "${SYS_DVL_IMPL_WRK}"
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Cleaning up IBM DVL workspace ${SYS_DVL_IMPL_WRK} RC:$?"
+  fi
+  if [ -d "${DVL_TPF_LOD}/${USR_IMPL_PLAN}" ]; then
+    echo -e "\nINFO: Cleaning up Dvl loaderspace due to plan deletion";                                           #CONSOLE
+    #shellcheck disable=SC2115
+    rm -rf "${DVL_TPF_LOD}/${USR_IMPL_PLAN}/"
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Cleaning up DVL loaderspace ${DVL_TPF_LOD}/${USR_IMPL_PLAN}/ RC:$?"
+  fi
+  # STAGING Workspace deletion
+  getParmFromBranch "${ImplPlan}" "STG"; #Get workspace parm
+  if [ -d "${APP_STG_IMPL_WRK}" ]; then
+    echo -e "\nINFO: Cleaning up NONIBM Stg workspace due to plan deletion";                                    #CONSOLE
+    rm -rf "${APP_STG_IMPL_WRK}"
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Cleaning up NONIBM STG workspace ${APP_STG_IMPL_WRK} RC:$?"
+  fi
+  if [ -d "${SYS_STG_IMPL_WRK}" ]; then
+    echo -e "\nINFO: Cleaning up IBM Stg workspace due to plan deletion";                                           #CONSOLE
+    rm -rf "${SYS_STG_IMPL_WRK}"
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Cleaning up IBM STG workspace ${SYS_STG_IMPL_WRK} RC:$?"
+  fi
+  if [ -d "${STG_TPF_LOD}/${USR_IMPL_PLAN}" ]; then
+    echo -e "\nINFO: Cleaning up Stg loaderspace due to plan deletion" #CONSOLE
+    #shellcheck disable=SC2115
+    rm -rf "${STG_TPF_LOD}/${USR_IMPL_PLAN}/"
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Cleaning up STG loaderspace ${STG_TPF_LOD}/${USR_IMPL_PLAN}/ RC:$?"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplementationPlan} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

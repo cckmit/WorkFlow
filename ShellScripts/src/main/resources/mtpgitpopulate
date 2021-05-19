@@ -1,0 +1,176 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164,SC2007
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitpopulate                                               #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to populate the source from Linux to Git SCM Repository         #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Source with actual path                                          #
+#      $2  - Destination git repo path                                        #
+#      $3  - Branch name                                                      #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   05122017    ARUL    Created the script                                    #
+#   05122017    ARUL    Created the script                                    #
+#   11162017    ARUL    Updated with random dir                               #
+#   04122017    VINOTH  Changed Commit message                                #
+#   04122017    ARUL    Updated with online tag ref                           #
+#   05212018    ARUL    Re-try added to git operations                        #
+#   11302018    VINOTH  GIT optimization                                      #
+#   04252019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=4;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+SrcSeg="$1";                           #Read actual path of source
+DesGit="$2";                           #Read git repo path
+Branch="$3";                           #Read branch name with core
+CurrentDate="$4"                       #Date of IBM segment populate
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${SrcSeg} ${DesGit} ${Branch} ${CurrentDate} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function populateSegment {
+  local _RC=0;
+  local i;
+  #Check remote repository accessible or not
+  i="";
+  for i in {0..2}                      #Retry if it's failed
+  do
+    git clone --depth=1 -b "${Branch}" "${ProdSrcURL}" "${GitDir}" &> /dev/null; _RC=$?;
+    if [ "${_RC}" -eq 0 ]; then
+      break;
+    elif [ "${_RC}" -eq 128 ]; then
+      sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:git remote re-try - $i RC:$_RC"
+      echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+      rm -rf "${GitDir}";
+      sleep 3;
+      _RC="$EC";
+    else
+      _RC="$EC";
+    fi
+  done
+  #
+  if [ "${_RC}" -eq 0 ]; then
+    if [ ! -f "${GitDir}/$SrcSeg" ]; then
+      SrcSeg1="${SrcSeg/templates\//}";
+      pushd "${PRD_TPF_IBM}" &> /dev/null;
+        if echo "${SrcSeg}" | grep -q "/templates/"; then
+          mkdir -p "${GitDir}/base/tpf-fdes";
+          cp -Rf --preserve=all "${SrcSeg}" "${GitDir}/base/tpf-fdes/"; _RC=$?;
+        else
+          cp --parent --preserve=all "${SrcSeg}" "${GitDir}/"; _RC=$?;
+        fi
+        if [ "${_RC}" -eq 0 ]; then
+          pushd "${GitDir}" &> /dev/null;
+            git add "${SrcSeg1}" &> /dev/null;
+            git commit -m "Date:${CurrentDate}, Type:Populate, PlanID:${GitRepo}, PlanOwner:${USER}, SourceRef:xxxxxxx, Status:online"  &> /dev/null;
+            git tag -a "online-${GitRepo}-$(git log -1 --pretty=%h)" -m "online-${GitRepo}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)";
+            i="";
+            for i in {0..2}              #Retry if it's failed
+            do
+              git push origin "${Branch}" --tags &> /dev/null; _RC=$?;
+              if [ "${_RC}" -eq 0 ]; then
+                break;
+              elif [ "${_RC}" -eq 128 ]; then
+                sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:git remote re-try - $i RC:$_RC"
+                echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                sleep 3;
+                _RC="$EC";
+              else
+                _RC="$EC";
+              fi
+            done
+            if [ "${_RC}" -eq 0 ]; then
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Push to remote branch ${Branch} success RC:$_RC"
+              echo -e "INFO: Push to remote branch ${Branch} success."; #CONSOLE
+              getGitData "SRC" "${GitDir}" "${GitRepo}" "${CurrentDate}" "false"; _RC=$?;
+              if [ "${_RC}" -eq 0 ]; then
+                sendGitData "${Branch##*_}" "false"; _RC=$?
+                if [ "${_RC}" -ne 0 ]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to update Jgit database using curl. RC:$_RC";
+                  echo -e "ERROR: Failed to update Jgit database using curl."; #CONSOLE
+                  _RC="$EC";
+                fi
+              else
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to get git details for Jgit database. RC:$EC";
+                echo -e "ERROR: Unable to get git details for Jgit database."; #CONSOLE
+                _RC="$EC";
+              fi
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Push to remote branch ${Branch} failed. RC:$EC";
+              echo -e "ERROR: Push to remote branch ${Branch} failed."; #CONSOLE
+              _RC="$EC";
+            fi
+          popd &> /dev/null;
+        else
+         sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File copy from ${SrcSeg1} to ${GitDir} failed. RC:$EC";
+          echo -e "ERROR: File copy from ${SrcSeg1} to ${GitDir} failed."; #CONSOLE
+          _RC="$EC";
+        fi
+      popd &> /dev/null
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File already found at ${SrcSeg} location. RC:$EC";
+      echo -e "ERROR: File already found at ${SrcSeg} location.";      #CONSOLE
+      _RC="$EC";
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Remote repository not accessible. RC:$EC";
+    echo -e "ERROR: Remote repository not accessible.";                #CONSOLE
+    _RC="$EC";
+  fi
+  [ -d "${GitDir}" ] && rm -rf "${GitDir}";
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  tmpStr1="${DesGit##*_}";             #Get suffix data after '_'
+  GitRepo="${tmpStr1%.*}";             #Get prefix data before '.'
+  GitDir="${HOME}/pop_$RANDOM";        #Set temp dir name for data population
+  SrcSeg="${SrcSeg##*"$GitRepo/"}";    #Get suffix data after $GitRepo data
+  #CurrentDate="$(date +%Y%m%d%H%M%S)"
+  if [ -f "${PRD_TPF_IBM}/${SrcSeg}" ]; then
+    ProdSrcURL="${DEV_SRC_RURL}/${DesGit}";  #Assemble Git repo URL with user
+    getRepoUrlStatus "${ProdSrcURL}"; RC=$?; #Get requested repo url status
+    if [ "$RC" -eq 0 ]; then
+      populateSegment; RC=$?;
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${DesGit} is not a valid git repository. RC:$EC";
+      echo -e "ERROR: ${DesGit} is not a valid git repository."; RC="$EC"; #CONSOLE
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Source not found - ${SrcSeg}. RC:$EC";
+    echo -e "ERROR: Source not found - ${SrcSeg} ."; RC="$EC";         #CONSOLE
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC";
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${SrcSeg} ${DesGit} ${Branch} ${CurrentDate} RC:$RC"
+exit "$RC";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

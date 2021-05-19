@@ -1,0 +1,765 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitmigtatenonibm                                          #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to create production system branch in repositories and          #
+#      to migrate the source code from non-ibm path to SCM GIT repository     #
+#   INPUT:                                                                    #
+#      $1  - Source Core                                                      #
+#      $2  - GIT URL                                                          #
+#      $3  - package name SYS or FLS                                          #             
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull code migration.                               #
+#      exit with 8, error message                                             #
+#                                                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   25102017    NARASHIMAN   created the script                               #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+SourceCore="$1";                       #Read core data as input
+#
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+#
+#-----------------------------------------------------------------------------#
+#
+
+#Start main execution validation success
+if [ "$RC" -eq 0 ]; then
+  echo -e "INFO: MCF analysis started."
+  case "${SourceCore}" in
+  apo)
+  zLockDate=20140308;
+  SourcePath="/ztpfrepos/tpfgi/cc/gal" 
+  ;;
+  pgr)
+  zLockDate=20120229;
+  SourcePath="/ztpfrepos/tpfgi/cc/gal" 
+  ;;
+  pre)
+  zLockDate=20130706;
+  SourcePath="/ztpfrepos/tpfgi/cc/gal" 
+  ;;
+  wsp)
+  zLockDate=20140818;
+  SourcePath="/ztpfrepos/tpfps/cc/gds"
+  ;;
+  air)
+  zLockDate=20160408;
+  SourcePath="/ztpfrepos/tpfdl/cc/${SourceCore,,}"
+  ;;
+  res)
+  zLockDate=20150220;
+  SourcePath="/ztpfrepos/tpfdl/cc/${SourceCore,,}"
+  ;;
+  oss)
+  zLockDate=20150417;
+  SourcePath="/ztpfrepos/tpfdl/cc/${SourceCore,,}"
+  esac
+  cd /ztpfsys/${SourceCore}/tools/
+  [ -f .${SourceCore}_BaseCopy ] && rm ".${SourceCore}_BaseCopy"
+  [ -f .${SourceCore}_DateSorted ] && rm ".${SourceCore}_DateSorted"
+  [ -f .${SourceCore}_Beforedate ] && rm ".${SourceCore}_Beforedate"
+  [ -f .${SourceCore}_Beforedate3 ] && rm ".${SourceCore}_Beforedate3"
+  [ -f .${SourceCore}_Beforedate2 ] && rm ".${SourceCore}_Beforedate2"
+  [ -f .${SourceCore}_Beforedate1 ] && rm ".${SourceCore}_Beforedate1"
+  [ -f .${SourceCore}_Afterdate ] && rm ".${SourceCore}_Afterdate"
+  [ -f ${SourceCore,,}_BZMigPathFile.txt ] && rm "${SourceCore,,}_BZMigPathFile.txt"
+  [ -f ${SourceCore,,}_AZMigPathFile.txt ] && rm "${SourceCore,,}_AZMigPathFile.txt"
+#  [ -f ${SourceCore,,}_AZMigPathFile_final.txt ] && rm "${SourceCore,,}_AZMigPathFile_final.txt"
+#  [ -f ${SourceCore,,}_BZMigPathFile_final.txt ] && rm "${SourceCore,,}_BZMigPathFile_final.txt"
+#  [ -f ${SourceCore,,}_MigPathFile.txt ] && rm "${SourceCore,,}_MigPathFile.txt"
+  [ -f ${SourceCore,,}_migrate_scm.txt ] && rm "${SourceCore,,}_migrate_scm.txt"
+  [ -f ${SourceCore,,}_migrate_scm.txt ] && rm "${SourceCore,,}_migrate_scm_new.txt"
+
+#  sed -n 11,\$p ${SourceCore}_migrate.txt > .${SourceCore}_BaseCopy
+  grep -v "..FIELD" ${SourceCore}_migrate.txt > .${SourceCore}_BaseCopy
+  sort -k1.25,1.33 .${SourceCore}_BaseCopy > .${SourceCore}_DateSorted
+  DateList=($(sort -k1.25,1.33 .${SourceCore}_DateSorted | cut -c 25-33))
+  for((i=1; i<${#DateList[@]}; i++));
+  do
+    if [ "$zLockDate" -eq "${DateList[i]}" ] || [ "${DateList[i]}" -gt "$zLockDate" ]; then
+      sed -n "$i",\$p .${SourceCore}_DateSorted > .${SourceCore}_Afterdate
+	  i=$((i-1));
+#      sed -n 1,"$i"p .${SourceCore}_DateSorted > .${SourceCore}_Beforedate
+      sed -n 1,"$i"p .${SourceCore}_DateSorted > .${SourceCore}_Beforedate3
+      break;
+    fi
+  done
+  count=0;
+  while read -r line
+  do 
+	count=$((count+1));
+	  sed "${count}s/\r\?$/OK/" -i ".${SourceCore}_Afterdate"
+  done < .${SourceCore,,}_Afterdate
+  sort -r -k1.1,1.8 .${SourceCore}_Beforedate3 > .${SourceCore}_Beforedate2
+  count=0;
+  Previous_seg=""
+  while read -r line
+  do 
+      segment=${line:0:8}
+      filetype=${line:12:3}
+	  filetype1="$(echo "$filetype" | tr -d ' ')"
+	  count=$((count+1));
+	  if [[ "$filetype1" != "h" ]] && [[ "$filetype1" != "mac" ]] && [[ "$filetype1" != "mak" ]]; then
+	  if [ "$Previous_seg" == "$segment" ]; then
+	    sed "${count}s/\r\?$/NK/" -i ".${SourceCore}_Beforedate2"
+	  else
+	    sed "${count}s/\r\?$/OK/" -i ".${SourceCore}_Beforedate2"
+		Previous_seg="$segment"
+	  fi
+	  fi
+  done < .${SourceCore}_Beforedate2 
+  sort -k1.1,1.8 .${SourceCore}_Beforedate2 > .${SourceCore}_Beforedate1
+  sort -k1.25,1.33 .${SourceCore}_Beforedate1 > .${SourceCore}_Beforedate
+#
+  if [ -f /ztpfsys/${SourceCore,,}/tools/.${SourceCore,,}_Beforedate ]; then
+    count=0;
+    bFuncPackages=""
+    while read -r line
+    do      
+      segment=${line:0:8}
+	  segment1="$(echo "$segment" | tr -d ' ')"
+	  version=${line:8:2}
+	  version1="$(echo "$version" | tr -d ' ')"
+      filetype=${line:12:3}
+	  filetype1="$(echo "$filetype" | tr -d ' ')"
+      component=${line:16:1}
+	  FuncArea=${line:18:4}
+	  FuncArea1="$(echo "$FuncArea" | tr -d ' ')"
+	  status=${line:23:1}
+	  Date=${line:25:8}
+	  Userid=${line:34:8}
+	  Userid1="$(echo "$Userid" | tr -d ' ')"
+	  if [ "$Userid1" == '' ]; then
+		Userid="_NOUSER_"
+	  fi
+#	  Userid="$(echo "$Userid" | tr -d ' ')"
+      LoadPath=${line:43:14}
+	  LoadPath1="$(echo "$LoadPath" | tr -d ' ')"
+	  if [ "$LoadPath1" == '' ]; then
+		LoadPath="_NO_PLAN_NAME_"
+	  fi
+#	  Recentload=${line:118:2}
+      if echo "$line" | grep -q " OK"; then
+	    Recentload="OK"
+	  else
+	    Recentload="NK"
+	  fi
+#	  LoadPath1="$(echo "$LoadPath" | tr -d ' ')"
+      count=$((count+1));
+      if [[ "$filetype1" != "h" ]] && [[ "$filetype1" != "mac" ]] && [[ "$filetype1" != "bsc" ]] && [[ "$filetype1" != "mak" ]]; then
+        if [ -d $SourcePath/ ]; then
+          if [ -f $SourcePath/prod/${segment1:0:1}/${segment1}${version1}.${filetype1} ] || [ -f $SourcePath/bkup/${segment1:0:1}/${segment1}${version1}.${filetype1} ] || [ -f $SourcePath/arch/${segment1:0:1}/${segment1}${version1}.${filetype1} ]; then
+            if [ -f $SourcePath/prod/${segment1:0:1}/${segment1}${version1}.${filetype1} ]; then
+              src="$SourcePath/prod/${segment1:0:1}/${segment1}${version1}.${filetype1}"
+            elif [ -f $SourcePath/bkup/${segment1:0:1}/${segment1}${version1}.${filetype1} ]; then
+              src="$SourcePath/bkup/${segment1:0:1}/${segment1}${version1}.${filetype1}"
+            elif [ -f $SourcePath/arch/${segment1:0:1}/${segment1}${version1}.${filetype1} ]; then
+              src="$SourcePath/arch/${segment1:0:1}/${segment1}${version1}.${filetype1}"
+            fi
+            if [ -f /ztpfrepos/${SourceCore,,}/obj/${segment1}.o ] && [ "$Recentload" == OK ]; then
+              obj="/ztpfrepos/${SourceCore,,}/obj/${segment1}.o"
+              if [ -f /ztpfrepos/${SourceCore,,}/lst/${segment1}.lst ]; then
+                lst="/ztpfrepos/${SourceCore,,}/lst/${segment1}.lst"
+                if [ -f /ztpfrepos/${SourceCore,,}/lst/${segment1^^}.map ]; then
+                  if [ "$component" == "N" ]; then
+                    map="/ztpfrepos/${SourceCore,,}/lst/${segment1^^}.map"
+				  else
+				    map=""
+                  fi
+                  if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+                    sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj $lst $map" "${SourceCore,,}_BZMigPathFile.txt"
+					segment1=${segment1:0:4}
+                    ztpfgivi=( $(find /ztpfrepos/${SourceCore,,}/lst/ -type f -name ${segment1}.ztpfgivi) )
+                    if [ "$ztpfgivi" != '' ]; then
+                      ztpfgivi="${ztpfgivi//\//\/}";
+                      sed "${count}s/$/ $ztpfgivi/" -i "${SourceCore,,}_BZMigPathFile.txt"
+                    fi
+                    if [ "$component" == "N" ]; then
+                      SO=( $(find /ztpfrepos/${SourceCore,,}/load/ -type f -name ${segment1^^}.so) )
+                      if [ "$SO" != '' ]; then
+                        SO="${SO//\//\/}";
+                        sed "${count}s/$/ $SO/" -i "${SourceCore,,}_BZMigPathFile.txt"
+                      fi
+                      libSO=( $(find /ztpfrepos/${SourceCore,,}/lib/ -type f -name lib${segment1^^}.so) )
+                      if [ "$libSO" != '' ]; then
+                        libSO="${libSO//\//\/}";
+                        sed "${count}s/$/ $libSO/" -i "${SourceCore,,}_BZMigPathFile.txt"
+                      fi
+                    fi
+                    sbtasm=( $(find /ztpfrepos/${SourceCore,,}/sbtasm/ -type f -name ${segment1}.asm) )
+                    if [ "$sbtasm" != '' ]; then
+                      sbtasm="${sbtasm//\//\/}";
+                      sed "${count}s/$/ $sbtasm/" -i "${SourceCore,,}_BZMigPathFile.txt"
+                    fi
+                    sbtlst=( $(find /ztpfrepos/${SourceCore,,}/lst/ -type f -name *${segment1}.sbtlst) )
+                    if [ "$sbtlst" != '' ]; then
+                      sbtlst="${sbtlst//\//\/}";
+                      sed "${count}s/$/ $sbtlst/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                    fi
+                    tpfarc=( $(find /ztpfrepos/${SourceCore,,}/tpfarc -type f -name ${segment1}.c) )    
+                    if [ "$tpfarc" != '' ]; then
+                      tpfarc="${tpfarc//\//\/}";
+                      sed "${count}s/$/ $tpfarc/" -i "${SourceCore,,}_BZMigPathFile.txt"
+                    fi    
+                  else
+                    touch ${SourceCore,,}_BZMigPathFile.txt
+                    echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj $lst $map" > ${SourceCore,,}_BZMigPathFile.txt
+					segment1=${segment1:0:4}
+                    ztpfgivi=( $(find /ztpfrepos/${SourceCore,,}/lst/ -type f -name ${segment1}.ztpfgivi) )
+                    if [ "$ztpfgivi" != '' ]; then
+                      ztpfgivi="${ztpfgivi//\//\/}";
+                      sed "${count}s/$/ $ztpfgivi/" -i "${SourceCore,,}_BZMigPathFile.txt"
+                    fi
+                    if [ "$component" == "N" ]; then
+                      SO=( $(find /ztpfrepos/${SourceCore,,}/load/ -type f -name ${segment1^^}.so) )
+                      if [ "$SO" != '' ]; then
+                        SO="${SO//\//\/}";
+                        sed "${count}s/$/ $SO/" -i "${SourceCore,,}_BZMigPathFile.txt"
+                      fi
+                      libSO=( $(find /ztpfrepos/${SourceCore,,}/lib/ -type f -name lib${segment1^^}.so) )
+                      if [ "$libSO" != '' ]; then
+                        libSO="${libSO//\//\/}";
+                        sed "${count}s/$/ $libSO/" -i "${SourceCore,,}_BZMigPathFile.txt"
+					  fi
+                    fi
+                    sbtasm=( $(find /ztpfrepos/${SourceCore,,}/sbtasm/ -type f -name ${segment1}.asm) )
+                    if [ "$sbtasm" != '' ]; then
+                      sbtasm="${sbtasm//\//\/}";
+                      sed "${count}s/$/ $sbtasm/" -i "${SourceCore,,}_BZMigPathFile.txt"
+                    fi
+                    sbtlst=( $(find /ztpfrepos/${SourceCore,,}/lst/ -type f -name *${segment1}.sbtlst) )
+                    if [ "$sbtlst" != '' ]; then
+                      sbtlst="${sbtlst//\//\/}";
+                      sed "${count}s/$/ $sbtlst/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                    fi
+                    tpfarc=( $(find /ztpfrepos/${SourceCore,,}/tpfarc -type f -name ${segment1}.c) )    
+                    if [ "$tpfarc" != '' ]; then
+                      tpfarc="${tpfarc//\//\/}";
+                      sed "${count}s/$/ $tpfarc/" -i "${SourceCore,,}_BZMigPathFile.txt"
+                    fi
+                  fi
+                else
+                  if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+                    #sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj $lst" "${SourceCore,,}_BZMigPathFile.txt"
+                    sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj $lst" "${SourceCore,,}_BZMigPathFile.txt"
+                  else
+                    touch ${SourceCore,,}_BZMigPathFile.txt
+                    #echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj $lst" > ${SourceCore,,}_BZMigPathFile.txt
+                    echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj $lst" > ${SourceCore,,}_BZMigPathFile.txt
+                  fi
+                fi
+              else
+                if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+                  #sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj" "${SourceCore,,}_BZMigPathFile.txt"
+                  sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj" "${SourceCore,,}_BZMigPathFile.txt"
+                else
+                  touch ${SourceCore,,}_BZMigPathFile.txt
+                  #echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj" > ${SourceCore,,}_BZMigPathFile.txt
+                  echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj" > ${SourceCore,,}_BZMigPathFile.txt
+                fi
+              fi
+            else
+              if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+                sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src" "${SourceCore,,}_BZMigPathFile.txt"
+              else
+                touch ${SourceCore,,}_BZMigPathFile.txt
+                echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src" > ${SourceCore,,}_BZMigPathFile.txt
+              fi
+            fi
+          else
+            if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+              sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_BZMigPathFile.txt"
+            else
+              touch ${SourceCore,,}_BZMigPathFile.txt
+              echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_BZMigPathFile.txt
+            fi            
+          fi
+        else
+          if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+            sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_BZMigPathFile.txt"
+          else
+            touch ${SourceCore,,}_BZMigPathFile.txt
+            echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_BZMigPathFile.txt
+          fi
+        fi
+      elif [ "$filetype1" == "h" ] || [ "$filetype1" == "mac" ]; then
+	        if [ -d $SourcePath/ ]; then
+		     if [ -f $SourcePath/prod/${segment1:0:1}/${segment1}${version1}.${filetype1} ] || [ -f $SourcePath/bkup/${segment1:0:1}/${segment1}${version1}.${filetype1} ] || [ -f $SourcePath/arch/${segment1:0:1}/${segment1}${version1}.${filetype1} ]; then
+		       if [ -f $SourcePath/prod/${segment1:0:1}/${segment1}${version1}.${filetype1} ]; then
+			     include="$SourcePath/prod/${segment1:0:1}/${segment1}${version1}.${filetype1}"
+			   elif [ -f $SourcePath/bkup/${segment1:0:1}/${segment1}${version1}.${filetype1} ]; then
+			     include="$SourcePath/bkup/${segment1:0:1}/${segment1}${version1}.${filetype1}"
+			   elif [ -f $SourcePath/arch/${segment1:0:1}/${segment1}${version1}.${filetype1} ]; then
+			     include="$SourcePath/arch/${segment1:0:1}/${segment1}${version1}.${filetype1}"
+			   fi
+	           if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+		         sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $include" "${SourceCore,,}_BZMigPathFile.txt"
+		       else
+		         touch ${SourceCore,,}_BZMigPathFile.txt
+			     echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $include" > ${SourceCore,,}_BZMigPathFile.txt
+		       fi
+		     else
+	          if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+		        sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_BZMigPathFile.txt"
+		      else
+		        touch ${SourceCore,,}_BZMigPathFile.txt
+			    echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_BZMigPathFile.txt
+		      fi
+			 fi
+			else
+	          if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+		        sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_BZMigPathFile.txt"
+		      else
+		        touch ${SourceCore,,}_BZMigPathFile.txt
+			    echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_BZMigPathFile.txt
+		      fi			
+			fi
+      elif [ "$filetype1" == "bsc" ]; then
+	     segment1=${segment1:0:4}
+		 if [ -f /ztpfrepos/${SourceCore,,}/src/${segment1:0:1}/${segment1}.mak ] && [ "$Recentload" == OK ]; then		   
+		   bsc="/ztpfrepos/${SourceCore,,}/src/${segment1:0:1}/${segment1}.mak"
+		   if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+		      sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $bsc" "${SourceCore,,}_BZMigPathFile.txt"
+			  SO=( $(find /ztpfrepos/${SourceCore,,}/load/ -type f -name ${segment1^^}.so) )
+              if [ "$SO" != '' ]; then
+                SO="${SO//\//\/}";
+                sed "${count}s/$/ $SO/" -i "${SourceCore,,}_BZMigPathFile.txt"
+              fi
+              libSO=( $(find /ztpfrepos/${SourceCore,,}/lib/ -type f -name lib${segment1^^}.so) )
+              if [ "$libSO" != '' ]; then
+                 libSO="${libSO//\//\/}";
+                 sed "${count}s/$/ $libSO/" -i "${SourceCore,,}_BZMigPathFile.txt"
+			  fi
+			  if [ -f /ztpfrepos/${SourceCore,,}/lst/${segment1^^}.map ]; then
+			    map="/ztpfrepos/${SourceCore,,}/lst/${segment1^^}.map"
+				map="${map//\//\/}";
+				sed "${count}s/$/ $map/" -i "${SourceCore,,}_BZMigPathFile.txt"
+			  fi
+		   else
+		      touch ${SourceCore,,}_BZMigPathFile.txt
+		      echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_BZMigPathFile.txt
+			  SO=( $(find /ztpfrepos/${SourceCore,,}/load/ -type f -name ${segment1^^}.so) )
+              if [ "$SO" != '' ]; then
+                SO="${SO//\//\/}";
+                sed "${count}s/$/ $SO/" -i "${SourceCore,,}_BZMigPathFile.txt"
+              fi
+              libSO=( $(find /ztpfrepos/${SourceCore,,}/lib/ -type f -name lib${segment1^^}.so) )
+              if [ "$libSO" != '' ]; then
+                 libSO="${libSO//\//\/}";
+                 sed "${count}s/$/ $libSO/" -i "${SourceCore,,}_BZMigPathFile.txt"
+			  fi
+			  if [ -f /ztpfrepos/${SourceCore,,}/lst/${segment1^^}.map ]; then
+			    map="/ztpfrepos/${SourceCore,,}/lst/${segment1^^}.map"
+				map="${map//\//\/}";
+				sed "${count}s/$/ $map/" -i "${SourceCore,,}_BZMigPathFile.txt"
+			  fi
+		   fi
+		 else 
+	          if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+		        sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_BZMigPathFile.txt"
+		      else
+		        touch ${SourceCore,,}_BZMigPathFile.txt
+			    echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_BZMigPathFile.txt
+		      fi		   
+		 fi
+	  else
+	          if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+		        sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_BZMigPathFile.txt"
+		      else
+		        touch ${SourceCore,,}_BZMigPathFile.txt
+			    echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_BZMigPathFile.txt
+		      fi	  
+	  fi
+      if [[ "$FuncArea" == "$bFuncPackages" ]] || [[ "$bFuncPackages" == "" ]]; then
+        bFuncPackages="$bFuncPackages $FuncArea "
+      fi
+    done < .${SourceCore,,}_Beforedate
+  fi
+  if [ -f /ztpfsys/${SourceCore,,}/tools/.${SourceCore,,}_Afterdate ]; then
+    count1=0;
+    aFuncPackages=""
+    while read -r line
+    do
+      segment=${line:0:8}
+	  segment1="$(echo "$segment" | tr -d ' ')"
+	  version=${line:8:2}
+	  version1="$(echo "$version" | tr -d ' ')"
+      filetype=${line:12:3}
+	  filetype1="$(echo "$filetype" | tr -d ' ')"
+      component=${line:16:1}
+	  FuncArea=${line:18:4}
+	  FuncArea1="$(echo "$FuncArea" | tr -d ' ')"
+	  status=${line:23:1}
+	  Date=${line:25:8}
+	  Userid=${line:34:8}
+	  if [ "$Userid" == '' ]; then
+		Userid="_NOUSER_"
+	  fi
+#	  Userid="$(echo "$Userid" | tr -d ' ')"
+      LoadPath=${line:43:14}
+	  LoadPath1="$(echo "$LoadPath" | tr -d ' ')"
+      count1=$((count1+1));
+       if [[ "$filetype1" == "h" ]] || [[ "$filetype1" == "mac" ]] || [[ "$filetype1" == "bsc" ]] || [[ "$filetype1" == "mak" ]]; then
+         if [ "$LoadPath1" != '' ]; then
+           if [ "$filetype1" == "mac" ]; then
+             if [ -d /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} ]; then
+               if [ -f /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/macro/${segment1}.${filetype1} ]; then
+                 mac="/ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/macro/${segment1}.${filetype1}"
+                 if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                   sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $mac" "${SourceCore,,}_AZMigPathFile.txt"
+                 else
+                   touch ${SourceCore,,}_AZMigPathFile.txt
+                   echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $mac" > ${SourceCore,,}_AZMigPathFile.txt
+                 fi
+               else
+                if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                  sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_AZMigPathFile.txt"
+                else
+                  touch ${SourceCore,,}_AZMigPathFile.txt
+                  echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_AZMigPathFile.txt
+                 fi                 
+               fi
+             else
+               if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_AZMigPathFile.txt"
+               else
+                touch ${SourceCore,,}_AZMigPathFile.txt
+                echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_AZMigPathFile.txt
+               fi             
+             fi
+           elif [[ "$filetype1" == "h" ]]; then
+             if [ -d /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} ]; then
+               if [ -f /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/include/${segment1}.${filetype1} ]; then
+                 header="/ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/marco/${segment1}.${filetype1}"
+                 if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                   sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $header" "${SourceCore,,}_AZMigPathFile.txt"
+                 else
+                   touch ${SourceCore,,}_AZMigPathFile.txt
+                   echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $header" > ${SourceCore,,}_AZMigPathFile.txt
+                 fi
+               else
+                if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                  sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_AZMigPathFile.txt"
+                else
+                  touch ${SourceCore,,}_AZMigPathFile.txt
+                  echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_AZMigPathFile.txt
+                 fi
+               fi
+             else
+               if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_AZMigPathFile.txt"
+               else
+                touch ${SourceCore,,}_AZMigPathFile.txt
+                echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_AZMigPathFile.txt
+               fi             
+             fi
+           elif [[ "$filetype1" == "mak" ]] || [[ "$filetype1" == "bsc" ]]; then
+             if [ -d /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} ]; then
+               if [ -f /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/src/${segment1:0:1}/${segment1:0:4}.mak ]; then
+                  mak="/ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/src/${segment1:0:1}/${segment1:0:4}.mak"
+                  if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                    sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $mak" "${SourceCore,,}_AZMigPathFile.txt"
+					segment1=${segment1:0:4}
+					out=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.out) )
+					if [ "$out" != '' ]; then
+					  out="${out//\//\/}";
+					  sed "${count1}s/$/ $out/" -i "${SourceCore,,}_AZMigPathFile.txt"
+					fi
+					err=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.err) )
+					if [ "$err" != '' ]; then
+					  err="${err//\//\/}";
+					  sed "${count1}s/$/ $err/" -i "${SourceCore,,}_AZMigPathFile.txt"
+					fi
+					SO=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.so) )
+					if [ "$SO" != '' ]; then
+					  SO="${SO//\//\/}";
+					  sed "${count1}s/$/ $SO/" -i "${SourceCore,,}_AZMigPathFile.txt"
+					fi
+					libSO=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name lib${segment1^^}.so) )
+					if [ "$libSO" != '' ]; then
+					  libSO="${libSO//\//\/}";
+					  sed "${count1}s/$/ $libSO/" -i "${SourceCore,,}_AZMigPathFile.txt"
+					fi
+					if [ -f /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/lst/${segment1^^}.map ]; then
+					  
+					  map="/ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/lst/${segment1^^}.map"
+					  map="${map//\//\/}";
+					  sed "${count1}s/$/ $map/" -i "${SourceCore,,}_AZMigPathFile.txt"
+					fi
+                  else
+                    touch ${SourceCore,,}_AZMigPathFile.txt
+                    echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $mak" > ${SourceCore,,}_AZMigPathFile.txt  
+					segment1=${segment1:0:4}
+					out=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.out) )
+					if [ "$out" != '' ]; then
+					  out="${out//\//\/}";
+					  sed "${count1}s/$/ $out/" -i "${SourceCore,,}_AZMigPathFile.txt"
+					fi
+					err=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.err) )
+					if [ "$err" != '' ]; then
+					  err="${err//\//\/}";
+					  sed "${count1}s/$/ $err/" -i "${SourceCore,,}_AZMigPathFile.txt"
+					fi
+					SO=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.so) )
+					if [ "$SO" != '' ]; then
+					  SO="${SO//\//\/}";
+					  sed "${count1}s/$/ $SO/" -i "${SourceCore,,}_AZMigPathFile.txt"
+					fi
+					libSO=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name lib${segment1^^}.so) )
+					if [ "$libSO" != '' ]; then
+					  libSO="${libSO//\//\/}";
+					  sed "${count1}s/$/ $libSO/" -i "${SourceCore,,}_AZMigPathFile.txt"
+					fi
+					if [ -f /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/lst/${segment1^^}.map ]; then
+					  map="/ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/lst/${segment1^^}.map"
+					  map="${map//\//\/}";
+					  sed "${count1}s/$/ $map/" -i "${SourceCore,,}_AZMigPathFile.txt"
+					fi					
+                  fi                    
+               else
+                 if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+				   sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $mak" "${SourceCore,,}_AZMigPathFile.txt"
+				 else
+                   touch ${SourceCore,,}_AZMigPathFile.txt
+                   echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $mak" > ${SourceCore,,}_AZMigPathFile.txt
+				 fi
+               fi
+             else    
+               if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_AZMigPathFile.txt"
+               else
+                touch ${SourceCore,,}_AZMigPathFile.txt
+                echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_AZMigPathFile.txt
+               fi             
+             fi
+		   else
+			 if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+               sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_AZMigPathFile.txt"
+             else
+               touch ${SourceCore,,}_AZMigPathFile.txt
+               echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_AZMigPathFile.txt
+             fi		    
+           fi
+		 else 
+			 if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+               sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_AZMigPathFile.txt"
+             else
+               touch ${SourceCore,,}_AZMigPathFile.txt
+               echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_AZMigPathFile.txt
+             fi
+         fi         
+       elif [ "$LoadPath1" != '' ]; then
+          if [ -d /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} ]; then 
+             if [ -f /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/src/${segment1:0:1}/${segment1}.${filetype1} ]; then
+               src="/ztpfrepos/loads/${LoadPath1}/${SourceCore}/src/${segment1:0:1}/${segment1}.${filetype1}"
+                 if [ -f /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/obj/${segment1}.o ]; then
+                   obj="/ztpfrepos/loads/${LoadPath1}/${SourceCore}/obj/${segment1}.o"
+                   if [ -f /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/lst/${segment1}.lst ]; then
+                     lst="/ztpfrepos/loads/${LoadPath1}/${SourceCore}/lst/${segment1}.lst"
+                      if [ -f /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/lst/${segment1^^}.map ]; then
+                       if [ "$component" == "N" ]; then
+                        map="/ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/lst/${segment1^^}.map"
+					   else
+					    map=""
+                       fi
+                        if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                          sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj $lst $map" "${SourceCore,,}_AZMigPathFile.txt"
+                            segment1=${segment1:0:4}
+                            ztpfgivi=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1}.ztpfgivi) )
+                            if [ "$ztpfgivi" != '' ]; then
+                              ztpfgivi="${ztpfgivi//\//\/}";
+                              sed "${count1}s/$/ $ztpfgivi/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                           if [ "$component" == "N" ]; then
+                            out=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.out) )
+                            if [ "$out" != '' ]; then
+                              out="${out//\//\/}";
+                              sed "${count1}s/$/ $out/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                            err=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.err) )
+                            if [ "$err" != '' ]; then
+                              err="${err//\//\/}";
+                              sed "${count1}s/$/ $err/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                            SO=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.so) )
+                            if [ "$SO" != '' ]; then
+                              SO="${SO//\//\/}";
+                              sed "${count1}s/$/ $SO/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                            libSO=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name lib${segment1^^}.so) )
+                            if [ "$libSO" != '' ]; then
+                              libSO="${libSO//\//\/}";
+                              sed "${count1}s/$/ $libSO/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                           fi
+                            sbtasm=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/sbtasm/ -type f -name ${segment1}.asm) )
+                            if [ "$sbtasm" != '' ]; then
+                              sbtasm="${sbtasm//\//\/}";
+                              sed "${count1}s/$/ $sbtasm/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                            sbtlst=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name *${segment1}.sbtlst) )
+                            if [ "$sbtlst" != '' ]; then
+                              sbtlst="${sbtlst//\//\/}";
+                              sed "${count1}s/$/ $sbtlst/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                          
+                            tpfarlst=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name *${segment1}.tpfarlst) )
+                            if [ "$tpfarlst" != '' ]; then
+                              tpfarlst="${tpfarlst//\//\/}";
+                              sed "${count1}s/$/ $tpfarlst/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                            tpfarc=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/tpfarc -type f -name ${segment1}.c) )    
+                            if [ "$tpfarc" != '' ]; then
+                              tpfarc="${tpfarc//\//\/}";
+                              sed "${count1}s/$/ $tpfarc/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi                        
+                        else
+                          touch ${SourceCore,,}_AZMigPathFile.txt
+                          echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj $lst $map" > ${SourceCore,,}_AZMigPathFile.txt
+                            segment1=${segment1:0:4}
+                            ztpfgivi=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1}.ztpfgivi) )
+                            if [ "$ztpfgivi" != '' ]; then
+                              ztpfgivi="${ztpfgivi//\//\/}";
+                              sed "${count1}s/$/ $ztpfgivi/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                          if [ "$component" == "N" ]; then
+                            out=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.out) )
+                            if [ "$out" != '' ]; then
+                              out="${out//\//\/}";
+                              sed "${count1}s/$/ $out/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                            err=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.err) )
+                            if [ "$err" != '' ]; then
+                              err="${err//\//\/}";
+                              sed "${count1}s/$/ $err/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                            SO=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name ${segment1^^}.so) )
+                            if [ "$SO" != '' ]; then
+                              SO="${SO//\//\/}";
+                              sed "${count1}s/$/ $SO/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                            libSO=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name lib${segment1^^}.so) )
+                            if [ "$libSO" != '' ]; then
+                              libSO="${libSO//\//\/}";
+                              sed "${count1}s/$/ $libSO/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                           fi
+                            sbtasm=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/sbtasm/ -type f -name ${segment1}.asm) )
+                            if [ "$sbtasm" != '' ]; then
+                              sbtasm="${sbtasm//\//\/}";
+                              sed "${count1}s/$/ $sbtasm/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                            sbtlst=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name *${segment1}.sbtlst) )
+                            if [ "$sbtlst" != '' ]; then
+                              sbtlst="${sbtlst//\//\/}";
+                              sed "${count1}s/$/ $sbtlst/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                          
+                            tpfarlst=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,} -type f -name *${segment1}.tpfarlst) )
+                            if [ "$tpfarlst" != '' ]; then
+                              tpfarlst="${tpfarlst//\//\/}";
+                              sed "${count1}s/$/ $tpfarlst/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                            tpfarc=( $(find /ztpfrepos/loads/${LoadPath1}/${SourceCore,,}/tpfarc -type f -name ${segment1}.c) )    
+                            if [ "$tpfarc" != '' ]; then    
+                              tpfarc="${tpfarc//\//\/}";
+                              sed "${count1}s/$/ $tpfarc/" -i "${SourceCore,,}_AZMigPathFile.txt"
+                            fi
+                        fi
+                      else
+                        if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                          sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj $lst" "${SourceCore,,}_AZMigPathFile.txt"
+                        else
+                          touch ${SourceCore,,}_AZMigPathFile.txt
+                          echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj $lst" > ${SourceCore,,}_AZMigPathFile.txt
+                        fi
+                      fi
+                   else
+                     if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                      sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj" "${SourceCore,,}_AZMigPathFile.txt"
+                     else
+                       touch ${SourceCore,,}_AZMigPathFile.txt
+                       echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src $obj" > ${SourceCore,,}_AZMigPathFile.txt
+                     fi
+                   fi
+                 else 
+                    if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                     sed -i -e "$ a OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src" "${SourceCore,,}_AZMigPathFile.txt"
+                   else
+                     touch ${SourceCore,,}_AZMigPathFile.txt
+                     echo "OK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid $src" > ${SourceCore,,}_AZMigPathFile.txt
+                   fi
+                 fi
+             else
+               if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+                 sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_AZMigPathFile.txt"
+               else
+                 touch ${SourceCore,,}_AZMigPathFile.txt
+                 echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_AZMigPathFile.txt
+               fi
+             fi
+          else 
+            if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+              sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_AZMigPathFile.txt"
+            else
+              touch ${SourceCore,,}_AZMigPathFile.txt
+              echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_AZMigPathFile.txt
+            fi
+          fi
+       else
+          if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+              sed -i -e "$ a NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" "${SourceCore,,}_AZMigPathFile.txt"
+          else
+              touch ${SourceCore,,}_AZMigPathFile.txt
+              echo "NK $status $FuncArea $Date $LoadPath $segment $version $filetype $Userid" > ${SourceCore,,}_AZMigPathFile.txt
+          fi
+       fi
+      if [[ "$FuncArea" == "$aFuncPackages" ]] || [[ "$aFuncPackages" == "" ]]; then
+        aFuncPackages="$bFuncPackages $FuncArea "
+      fi
+    done < .${SourceCore,,}_Afterdate
+  fi
+  echo -e "INFO: MCF analysis completed."
+  if [ -f ${SourceCore,,}_BZMigPathFile.txt ]; then
+    echo -e "INFO: Git migraiton input script path for before cut-over date - ${zLockDate}"
+#    column -t ${SourceCore,,}_BZMigPathFile.txt > ${SourceCore,,}_BZMigPathFile_final.txt
+#	cat ${SourceCore,,}_BZMigPathFile_final.txt > ${SourceCore,,}_migrate_scm.
+    cat ${SourceCore,,}_BZMigPathFile.txt > ${SourceCore,,}_migrate_scm.txt
+    echo -e "INFO PACKAGES FOUND - $bFuncPackages"
+#    echo -e "INFO: INPUT PATH - /ztpfsys/${SourceCore}/tools/${SourceCore,,}_BZMigPathFile_final.txt"
+  fi
+  if [ -f ${SourceCore,,}_AZMigPathFile.txt ]; then
+    echo -e "INFO: Git migraiton input script path for after cut-over date - ${zLockDate}"
+#    column -t ${SourceCore,,}_AZMigPathFile.txt > ${SourceCore,,}_AZMigPathFile_final.txt
+#	cat ${SourceCore,,}_AZMigPathFile_final.txt >> ${SourceCore,,}_migrate_scm.txt
+    cat ${SourceCore,,}_AZMigPathFile.txt >> ${SourceCore,,}_migrate_scm.txt
+#	column -t ${SourceCore,,}_MigPathFile.txt > ${SourceCore,,}_migrate_scm.txt
+    echo -e "INFO PACKAGES FOUND - $aFuncPackages"
+    echo -e "INFO: INPUT PATH - /ztpfsys/${SourceCore}/tools/${SourceCore,,}_migrate_scm.txt"
+  fi
+  if [ -f ${SourceCore,,}_migrate_scm.txt ]; then
+    sort -k1.11,1.18 ${SourceCore,,}_migrate_scm.txt > ${SourceCore,,}_migrate_scm_new.txt
+	mv ${SourceCore,,}_migrate_scm_new.txt ${SourceCore,,}_migrate_scm.txt
+  fi
+fi
+#-----------------------------------------------------------------------------#
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

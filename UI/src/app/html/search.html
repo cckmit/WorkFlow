@@ -1,0 +1,1476 @@
+<style>
+    td.details-control {
+        width: 50px;
+    }
+
+    .lightGreen {
+        background-color: lightgreen;
+    }
+</style>
+<!-- Content Header (Page header) -->
+<section class="content-header">
+    <div class="col-md-12 animated slideInLeft padding-none">
+        <div class="well well-sm" style="background: #fff;margin-bottom: 10px;">
+            <span class="text-danger" ng-if="vm.searchType=='Advanced Search'"
+                style="position:absolute;top:0px;right:0px;">*<b>Advanced Search Data will be lost if
+                    navigated</b></span>
+            <span class="text-danger" ng-if="vm.searchType=='Deployment Activity'"
+                style="position:absolute;top:0px;right:0px;">*<b>Deployment Activity Search Data will be lost if
+                    navigated</b></span>
+            <form name="serachForm"
+                ng-init="vm.soSearchData;vm.advSearchData; vm.deploymentActivityData;vm.sourceArtifactSearchData;">
+                <div class="row advSearchLoadDate">
+                    <div class="col-md-3">
+                        <label>Search Type
+                            <span class="requiredField">*</span>
+                        </label>
+                        <select class="form-control" id="searchType" ng-model="vm.searchType"
+                            ng-options="item for item in vm.searchTypeList" ng-change="searchKeyClickedOnScreen=false">
+                            <option value="">Search Type</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 padding-left-none"
+                        ng-if="vm.searchType=='Implementation Plan' || vm.searchType=='Implementation'">
+                        <label>Search Text
+                            <span class="requiredField">*</span>
+                        </label>
+                        <input type="text" class="form-control " ng-model="vm.filterData" placeholder="Search Text" />
+                    </div>
+                    <div class="col-md-2" ng-if="vm.searchType=='Advanced Search'">
+                        <label>Show Exact Segment
+                        </label>
+                        <md-input-container class="md-icon-float md-block">
+                            <div layout="row">
+                                <md-checkbox ng-model="vm.exactSegement">
+
+
+                                </md-checkbox>
+                            </div>
+                        </md-input-container>
+                    </div>
+                    <div class="col-md-1">
+                        <label></label>
+                        <button type="submit" class="btn btn-warning"
+                            style="background: #3c8dbc;border: 0px;margin-top:5px;" ng-click="searchFilter()"
+                            aria-label="commonSearchButton">
+                            <i class="fa fa-search"></i> Search
+                        </button>
+                    </div>
+
+
+                    <div class="col-md-1"
+                        ng-if="(vm.searchType=='Advanced Search' &&  vm.advFileListstatus) || (vm.searchType=='Deployment Activity' &&  vm.depActFileListstatus) || (vm.searchType=='Implementation Plan' && vm.implementationPlanExport) || (vm.searchType=='Implementation' && vm.implementationExport)">
+                        <label></label>
+                        <button ng-click="doExport()" style="background: #ef6c00;color:#fff;border: 0px;margin-top:5px;"
+                            class="btn btn-warning">
+                            <span>
+                                <i class="fa fa-download"></i> Export Results</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="row margin-left-none" ng-if="vm.searchType==='Shared Object'">
+                    <div class="col-md-3 padding-left-none" ng-if="vm.searchType==='Shared Object'">
+                        <label>SO Name
+                            <span class="requiredField">*</span>
+                        </label>
+                        <input type="text" class="form-control " ng-model="vm.soSearchData.soName"
+                            placeholder="Search Shared Object" />
+                    </div>
+                    <!--min-date="vm.soStartDate"-->
+                    <div class="col-md-3 soMoment padding-left-none" ng-if="vm.searchType==='Shared Object'">
+                        <label>Load Date
+                            <span class="requiredField">*</span>
+                        </label>
+                        <input moment-picker="vm.soSearchData.loadDate" class="form-control"
+                            ng-model="vm.soSearchData.loadDate" ng-model-options="{ updateOn: 'blur' }"
+                            format="MM-DD-YYYY" min-view="month" placeholder="Load Date " />
+                    </div>
+                    <div class="col-md-3 padding-left-none" ng-if="vm.searchType==='Shared Object'">
+                        <label>Target System
+                            <span class="requiredField">*</span>
+                        </label>
+                        <select name="soSystems" ng-model="vm.soSearchData.systemId" ng-change="alert()"
+                            class="form-control w-100" ng-options="item.id as item.name for item in vm.systemsList">
+                            <option value="">Select Target System</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row margin-left-none margin-right-none" ng-if="vm.searchType=='Advanced Search'">
+                    <div class="row">
+                        <div class="col-md-3 ">
+                            <label>Program Name</label>
+                            <input type="text" class="form-control " ng-model="vm.advSearchData.programName"
+                                placeholder="Program Name" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label>Name </label>
+                            <select name="name" select2single ng-model="vm.advSearchData.userName"
+                                ng-change="vm.advSearchData.role = vm.advSearchData.userName == '' ? null: vm.advSearchData.role;vm.ChangeName()"
+                                class="form-control" multiple="multiple" aria-label="name">
+                                <option ng-value="user.id" ng-repeat="user in userNameList  | orderBy: 'displayName'">
+                                    {{ user.displayName }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3 soMoment">
+                            <label>Start Load Date/Time
+                                <span class="requiredField">*</span>
+                            </label>
+                            <input class="form-control" ng-model="vm.advSearchData.startDateTime"
+                                ng-model-options="{ updateOn: 'blur' }" placeholder="Choose Start date/time"
+                                format="MM-DD-YYYY HH:mm" locale="en" min-view="month"
+                                moment-picker="vm.advSearchData.startDateTime">
+                        </div>
+                        <div class="col-md-3 soMoment">
+                            <label>End Load Date/Time
+                                <span class="requiredField">*</span>
+                            </label>
+                            <input class="form-control" ng-model="vm.advSearchData.endDateTime"
+                                ng-model-options="{ updateOn: 'blur' }" placeholder="Choose End date/time"
+                                format="MM-DD-YYYY HH:mm" locale="en" min-view="month"
+                                moment-picker="vm.advSearchData.endDateTime">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3 ">
+                            <label>Project Number</label>
+                            <select select2 data-placeholder="Search all Project Number"
+                                ng-model="vm.advSearchData.csrNo" class="form-control" multiple>
+                                <option value="{{csr.id}}" ng-repeat="csr in csrList">
+                                    {{csr.projectNumber}}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label>Target System(s)
+                                <span class="requiredField">*</span>
+                            </label>
+                            <select id="searchTargetSystems" data-placeholder="Target System(s)" class="form-control"
+                                multiple>
+                                <option value="0">
+                                    ALL
+                                </option>
+                                <option value="{{item.id}}" ng-repeat="item in vm.advancedSearchSystemList">
+                                    {{ item.name }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 ">
+                            <label>Package Name</label>
+                            <select select2 data-placeholder="Search All Packages"
+                                ng-model="vm.advSearchData.packageName" class="form-control" multiple>
+                                <option value="{{package}}" ng-repeat="package in filteredPackageName">
+                                    {{package}}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label>Plan Status</label>
+                            <select select2 data-placeholder="Search All Status" ng-model="vm.advSearchData.planStatus"
+                                name="planStatus" class="form-control" multiple="true">
+                                <option value="{{key}}" ng-repeat="(key,value) in planStatusList">
+                                    {{value}}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row"
+                        ng-if="vm.searchType=='Advanced Search' && vm.advSearchData.userName.length > 0 && vm.advSearchData.userName!=''">
+                        <div class="col-md-3"
+                            ng-if="vm.searchType=='Advanced Search' && vm.advSearchData.userName.length > 0 && vm.advSearchData.userName!=''">
+                            <label>Role<span class="requiredField">*</span></label>
+                            <select id="searchRole" select2 data-placeholder="Search All Roles"
+                                ng-model="vm.advSearchData.role" class="form-control" multiple>
+                                <option ng-disabled="allOption" value="0">
+                                    ALL
+                                </option>
+                                <option value="{{role}}" ng-repeat="role in roleList">
+                                    {{role}}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="row margin-left-none margin-right-none" ng-if="vm.searchType=='Deployment Activity'">
+                    <div class="row">
+                        <div class="col-md-3 " style="width=10%">
+                            <label>Environment<span class="requiredField">*</span></label>
+                            <md-input-container class="md-icon-float md-block spacingTwo">
+                                <md-radio-group layout="row" ng-model="vm.deploymentActivityData.environment">
+                                    <md-radio-button aria-label="environment" value="{{envi}}"
+                                        ng-repeat="envi in vm.depActEnvironment">
+                                        {{envi}}
+                                    </md-radio-button>
+                                </md-radio-group>
+                            </md-input-container>
+                        </div>
+                        <div class="col-md-3 ">
+                            <label>Deployment Action<span class="requiredField">*</span></label>
+                            {{vm.deploymentActivityData.depActions[da]}}
+                            <md-input-container class="md-icon-float md-block spacingTwo">
+                                <div layout="row">
+                                    <md-checkbox class="custom" ng-value="{{da}}"
+                                        on-change="sample(vm.deploymentActivityData.depActions)"
+                                        ng-model="vm.deploymentActivityData.depActions[da]"
+                                        ng-repeat="da in vm.depActions" aria-label="depActions">{{da}}
+                                    </md-checkbox>
+                                </div>
+                            </md-input-container>
+                        </div>
+                        <div class="col-md-3 soMoment">
+                            <label>Start Load Date/Time
+                                <span class="requiredField">*</span>
+                            </label>
+                            <input class="form-control" ng-model="vm.deploymentActivityData.startDateTime"
+                                ng-model-options="{ updateOn: 'blur' }" placeholder="Choose Start date/time"
+                                format="MM-DD-YYYY HH:mm" locale="en" min-view="month"
+                                moment-picker="vm.deploymentActivityData.startDateTime">
+                        </div>
+                        <div class="col-md-3 soMoment">
+                            <label>End Load Date/Time
+                                <span class="requiredField">*</span>
+                            </label>
+                            <input class="form-control" ng-model="vm.deploymentActivityData.endDateTime"
+                                ng-model-options="{ updateOn: 'blur' }" placeholder="Choose End date/time"
+                                format="MM-DD-YYYY HH:mm" locale="en" min-view="month"
+                                moment-picker="vm.deploymentActivityData.endDateTime">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3 ">
+                            <label>Target System(s)
+                                <span class="requiredField">*</span>
+                            </label>
+                            <select id="searchTargetSystemsDepAct" data-placeholder="Target System(s)"
+                                class="form-control" multiple>
+                                <option value="0">
+                                    ALL
+                                </option>
+                                <option value="{{item.id}}" ng-repeat="item in vm.depActSystemList">
+                                    {{ item.name }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label>Package Name</label>
+                            <select select2 data-placeholder="Search All Packages"
+                                ng-model="vm.deploymentActivityData.packageName" class="form-control" multiple>
+                                <option value="{{package}}" ng-repeat="package in filteredPackageNameDepAct">
+                                    {{package}}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 ">
+                            <label>Program Name</label>
+                            <!-- <input type="text" class="form-control " ng-model="vm.deploymentActivityData.programName" placeholder="Program Name" /> -->
+                            <input id="depActprogramName" aria-label="depActprogramName">
+                        </div>
+                        <div class="col-md-3"></div>
+                    </div>
+                </div>
+                <div class="row margin-left-none" ng-if="vm.searchType==='Source Artifact Search'">
+                    <div class="col-md-3 padding-left-none" ng-if="vm.searchType==='Source Artifact Search'">
+                        <label>Source Artifact Name
+                            <span class="requiredField">*</span>
+                        </label>
+                        <input type="text" class="form-control "
+                            ng-model="vm.sourceArtifactSearchData.sourceArtifactName"
+                            placeholder="Enter Source Artifact" />
+                    </div>
+                    <!--min-date="vm.soStartDate"-->
+                    <div class="col-md-3 soMoment padding-left-none" ng-if="vm.searchType==='Source Artifact Search'">
+                        <!--File Type Normal-->
+                        <!-- <label>File Type extension
+                                    <span class="requiredField">*</span>
+                                </label>
+                            <input type="text" class="form-control " ng-model="vm.sourceArtifactSearchData.fileType" placeholder="Enter File Type" />   -->
+                        <!--File Type DropDown-->
+                        <label>File Type extension</label>
+                        <select placeholder="Enter File Type" ng-options="ft for ft in fileTypeList  | orderBy "
+                            ng-model="vm.sourceArtifactSearchData.fileType" class="form-control">
+                            <option value="">Any</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 padding-left-none" ng-if="vm.searchType==='Source Artifact Search'">
+                        <!--Multiselect Normal-->
+                        <!-- <label>Target System
+                                        <span class="requiredField">*</span>
+                                    </label>
+                            <select name="soSystems" ng-model="vm.sourceArtifactSearchData.targetSystem" ng-change="alert()" class="form-control w-100" ng-options="item.id as item.name for item in vm.systemsList">
+                                        <option value="">Select Target System</option>
+                                    </select> -->
+
+                        <!--Select ALL defaultly selected-->
+                        <label>Target System(s)
+                            <span class="requiredField">*</span>
+                        </label>
+                        <select id="searchTargetSystemsSourceArtifactSearch" data-placeholder="Target System(s)"
+                            class="form-control" multiple>
+                            <option value="0">
+                                ALL
+                            </option>
+                            <option value="{{item.id}}" ng-repeat="item in vm.sourceArtifactSearchSystemList">
+                                {{ item.name }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row margin-left-none" ng-if="vm.searchType==='Segment/Repository Search'">
+                    <div class="col-md-3 padding-left-none">
+                        <label>Target System(s)
+                            <span class="requiredField">*</span>
+                        </label>
+                        <select id="searchSystemsSegmentRepository" data-placeholder="Target System(s)"
+                            class="form-control" multiple>
+                            <option value="0">
+                                ALL
+                            </option>
+                            <option value="{{item.id}}" ng-repeat="item in vm.sourceSegmentRepoSystemList">
+                                {{ item.name }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 padding-left-none">
+                        <label>Segment/Component
+                            <span class="requiredField">*</span>
+                        </label>
+                        <input type="text" class="form-control " ng-model="vm.segmentRepositorySearchData.segment"
+                            placeholder="Enter Full Segment Name (Ex: ABCD/abcd.asm/xyza.c)" />
+                    </div>
+                </div>
+        </div>
+
+        </form>
+    </div>
+    </div>
+</section>
+
+<!-- Main content -->
+<section class="content scrollingFunction" id="scroll_function">
+    <!-- row -->
+    <div class="row">
+        <div class="col-md-12 animated slideInLeft">
+            <div ng-if="!searchKeyClickedOnScreen"
+                style="background-color:#fff;color:#ddd;text-align:center;font-size:20px;padding:100px 0px;">
+                <b>Perform Search</b>
+            </div>
+
+            <!--Search Implementation Plan Content Rendering-->
+            <div ng-if="vm.searchType == 'Implementation Plan' && searchKeyClickedOnScreen">
+
+                <div class="well well-sm" style="background: #fff;">
+                    <div ng-include='templatePath+"/planBase.template.html"'></div>
+                </div>
+            </div>
+
+            <!--Search Implementation Content Rendering-->
+            <div ng-if="vm.searchType == 'Implementation' && searchKeyClickedOnScreen">
+                <div ng-include='templatePath+"/implbase.template.html"'></div>
+            </div>
+
+            <!--Search SO File Content Rendering-->
+            <div ng-if="vm.searchType == 'Shared Object' && searchKeyClickedOnScreen">
+                <div ng-if="vm.soFileList.length == 0"
+                    style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                    <b>No Shared Object found</b>
+                </div>
+                <!--Content to be rendered (SO Table starts) -->
+                <div class="well well-sm" style="background: #fff;" ng-if="vm.soFileList.length > 0">
+                    <div class="row">
+                        <div class="col-md-12 leadTotalCount">
+                            <span> Total number of items: <span class="templateCountSize">
+                                    {{vm.totalNumberOfItem}}</span> </span>
+                        </div>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-2" style="display: inline-flex;">
+                            <span style="padding: 10px;">Show</span>
+                            <select class="form-control" ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="150">150</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3"></div>
+                        <div class="col-md-6">
+                            <dir-pagination-controls boundary-links="true"
+                                on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination">
+                            </dir-pagination-controls>
+                        </div>
+                    </div>
+                    <div class="row textCenter divTableHeader">
+                        <div class="col-md-1"></div>
+                        <!--for Expanding Button -->
+                        <div class="col-md-2">
+                            Shared Object
+                        </div>
+                        <div class="col-md-3 unselectable">
+                            <span class="noClickProp" ng-click="sort('id')">
+                                Implementation Plan ID
+                                <span class="pull-right">
+                                    <i class="fa fa-long-arrow-down {{sortColumn.id.asc ? '' : 'sortDisabled'}}"></i>
+                                    <i class="fa fa-long-arrow-up {{sortColumn.id.desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="col-md-2 ">
+                            Target System(s)
+                        </div>
+                        <div class="col-md-2">
+                            Load Date
+                        </div>
+                        <div class="col-md-2">Status</div>
+                    </div>
+                    <div dir-paginate="soPlanObj in vm.soFileList | filter: q | itemsPerPage: tableConfig.pageSize"
+                        total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"
+                        pagination-id="tablePagination">
+                        <div class="row textCenter divTableBody flexCenter">
+                            <div class="col-md-1">
+                                <a ng-if="soPlanObj.expanded" aria-label="{{soPlanObj.planId.id}}"
+                                    ng-click="soPlanObj.expanded = false;">
+                                    <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+                                </a>
+                                <a ng-if="!soPlanObj.expanded" aria-label="{{soPlanObj.planId.id}}"
+                                    ng-click="soPlanObj.expanded = true;loadSystemImplApproverList(soPlanObj.planId);">
+                                    <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+                                </a>
+                            </div>
+                            <div class="col-md-2">
+                                {{soPlanObj.programName | splitMak}}
+                            </div>
+                            <div class="col-md-3">
+                                {{soPlanObj.planId.id}}
+                            </div>
+                            <div class="col-md-4 border-none">
+                                <div class="row border-none" ng-repeat="sLoad in soPlanObj.systemLoadList">
+                                    <div class="col-md-6">
+                                        {{sLoad.systemId.name}}
+                                    </div>
+                                    <div class="col-md-6">
+                                        {{sLoad.loadDateTime | formattedDateTime}}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 border-none">
+                                <span plan-status-to-display-label="{{soPlanObj.planId.planStatus}}"></span>
+                            </div>
+                        </div>
+                        <div class="row labelFix" style="margin:0px;" ng-init="pObj=soPlanObj.planId"
+                            ng-if="soPlanObj.expanded">
+                            <div ng-include='templatePath+"/impPlan.template.html"'></div>
+                        </div>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-2" style="display: inline-flex;">
+                            <span style="padding: 10px;">Show</span>
+                            <select class="form-control" ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="150">150</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3"></div>
+                        <div class="col-md-6">
+                            <dir-pagination-controls boundary-links="true"
+                                on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination">
+                            </dir-pagination-controls>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!--Content to be rendered (SO Table ends) -->
+            <!--Content to be rendered (Advanced Search Starts) -->
+            <div ng-if="vm.searchType == 'Advanced Search' && searchKeyClickedOnScreen">
+                <div ng-if="!vm.advFileListstatus"
+                    style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                    <b>No results found for your search</b>
+                </div>
+
+                <div class="well well-sm" style="background: #fff;" ng-if="vm.advFileListstatus">
+                    <div class="row">
+                        <div class="col-md-12 leadTotalCount">
+                            <span> Total number of items: <span class="templateCountSize">
+                                    {{vm.totalNumberOfItem}}</span> </span>
+                        </div>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-12">
+                            <div ng-if="vm.searchType=='Advanced Search' &&  vm.advFileListstatus" class="row">
+                                <div class="col-md-3" style="display: inline-flex;">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                            ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePaginations"></dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!--ng-if="vm.soFileList.length > 0"-->
+                    <div class="flex textCenter divTableHeader">
+                        <div class="flex-1 " style="flex: 1.2">
+                            <span class="noClickProp" ng-click="sort('planid')">
+                                Plan ID
+                                <span class="pull-right" style="font-size: small">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn.planid.asc ? '' : 'sortDisabled'}}"></i>
+                                    <i class="fa fa-long-arrow-up {{sortColumn.planid.desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="flex-1 " style="flex: 1.2">
+                            <span class="noClickProp" ng-click="sort('csrnumber')">
+                                Project Number
+                                <span class="pull-right" style="font-size: small">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn.csrnumber.asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn.csrnumber.desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="flex-1 " style="flex: 1.3;padding-left: 10px">
+                            <span class="noClickProp" ng-click="sort('planstatus')">
+                                Status<span class="pull-right" style="font-size: small">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn.planstatus.asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn.planstatus.desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="flex-1 " style="padding-right: 10px">
+                            Project Name
+                        </div>
+                        <div class="flex-1 " style="flex:1.2">
+                            Plan Description
+                        </div>
+                        <div class="flex-1 " style="flex:1.5;padding-left: 10px">
+                            Developer(s)
+                        </div>
+                        <div class="flex-1 ">
+                            Program Name
+                        </div>
+                        <div class="flex-1 ">
+                            Package Name
+                        </div>
+                        <div class="flex-1  word-wrap-w">
+                            <span class="noClickProp" ng-click="sort('qastatus')">
+                                QA By-passed
+                                <span class="pull-right" style="font-size: small">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn.qastatus.asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn.qastatus.desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="flex-1 ">
+                            Target System
+                        </div>
+                        <div class="flex-1 ">
+                            <span class="noClickProp" ng-click="sort('loadcategory')">
+                                Load Category
+                                <span class="pull-right" style="font-size: small">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn.loadcategory.asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn.loadcategory.desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="flex-1_5 ">
+                            <span class="noClickProp" ng-click="sort('loaddatetime')">
+                                Scheduled Load DT
+                                <span class="pull-right" style="font-size: small">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn.loaddatetime.asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn.loaddatetime.desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="flex-1_5 ">
+                            <span class="noClickProp" ng-click="sort('activateddatetime')">
+                                Actual Activation DT
+                                <span class="pull-right" style="font-size: small">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn.activateddatetime.asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn.activateddatetime.desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="flex-1  word-wrap-w" style="flex: 1.2">
+                            <span class="noClickProp" ng-click="sort('fallbackdatetime')">
+                                Fallback DT
+                                <span class="pull-right" style="font-size: small">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn.fallbackdatetime.asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn.fallbackdatetime.desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="searchHeight" style="overflow: auto;">
+                        <div dir-paginate="(searchkey,advSearchObj) in vm.advFileList | filter: q | itemsPerPage: tableConfig.pageSize"
+                            total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"
+                            pagination-id="tablePaginations">
+                            <div class="flex divFlexBody textCenter hoverCurrentRow">
+                                <div class="flex-1 fContent">
+                                    <div class="flex-1">
+                                        <a ng-if="advSearchObj.expanded" ng-click="advSearchObj.expanded = false;"
+                                            aria-label="{{advSearchObj.planid}}">
+                                            <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+                                        </a>
+                                        <a ng-if="!advSearchObj.expanded"
+                                            ng-click="advSearchObj.expanded = true;advSearchExpand(advSearchObj.planid,advSearchObj);"
+                                            aria-label="{{advSearchObj.planId}}">
+                                            <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+                                        </a>
+                                        <br />
+                                        <b>{{advSearchObj.planid}}</b>
+                                    </div>
+                                </div>
+                                <div class="flex-1 fContent" style="flex: 0.8">
+                                    {{advSearchObj.projectNumber}}
+                                </div>
+                                <div class="flex-1 fContent">
+                                    <span plan-status-to-display-label-for-advanced-search="{{advSearchObj.planstatus}}"
+                                        style="white-space: inherit;">
+                                </div>
+                                <div class="flex-1 fContent word-wrap-w"
+                                    style="line-height: 1.4em;max-height: 7em;overflow: hidden;">
+                                    <div style="padding-right: 5px">{{advSearchObj.projectname}}</div>
+                                    <md-tooltip md-direction='right' class="searchTooltip">{{advSearchObj.projectname}}
+                                    </md-tooltip>
+                                </div>
+                                <div class="flex-1 fContent word-wrap-w"
+                                    style="line-height: 1.4em;max-height: 7em;overflow: hidden;">
+                                    <div>{{advSearchObj.plandescription}}</div>
+                                    <md-tooltip md-direction='right' class="searchTooltip">
+                                        {{advSearchObj.plandescription}}</md-tooltip>
+                                </div>
+                                <div class="flex-1 fContent word-wrap-w" style="flex: 1.1">
+                                    {{advSearchObj.developername}}</div>
+
+                                <div class="flex-7 flex-self-center">
+                                    <div ng-repeat="sysObj in advSearchObj.advanceSearchSystemBasedDetails">
+                                        <div class="flex flex-system-group">
+                                            <!-- tooltip="{{sysObj.programname}}" -->
+                                            <div class="flex-1 fContent word-wrap-w"
+                                                style="line-height: 1.4em;max-height: 3em;overflow: hidden;flex:1.3">
+                                                <span ng-if="sysObj.progNames!=null">{{sysObj.progNames}}</span>
+                                                <md-tooltip md-direction='right' class="searchTooltip">
+                                                    {{sysObj.progNames}}</md-tooltip>
+                                                <span ng-if="sysObj.progNames==null">-</span>
+                                            </div>
+                                            <div class="flex-1 fContent"
+                                                style="line-height: 1.4em;max-height: 3em;overflow: hidden;">
+                                                <div>{{sysObj.functionalarea}}</div>
+                                                <span ng-if="sysObj.functionalarea==null">-</span>
+                                                <md-tooltip md-direction='right' class="searchTooltip">
+                                                    {{sysObj.functionalarea}}</md-tooltip>
+                                            </div>
+                                            <div class="flex-1 fContent">
+                                                <span ng-if="sysObj.qastatus=='YES'">
+                                                    <i class="fa fa-check-circle"></i>
+                                                </span>
+                                                <span ng-if="sysObj.qastatus=='NO'">
+                                                    -
+                                                </span>
+                                            </div>
+                                            <div class="flex-1 fContent">
+                                                <div class="flex-1">{{sysObj.targetsystem}}</div>
+                                            </div>
+                                            <div class="flex-1 fContent">
+                                                <div class="flex-1">{{sysObj.loadcategory}}</div>
+                                            </div>
+                                            <div class="flex-1_5 fContent">
+                                                <div class="flex flex-justify">
+                                                    <span
+                                                        ng-if="sysObj.loaddatetime!=null">{{sysObj.loaddatetime | formattedDateTime}}</span>
+                                                    <span style="width: 100%" ng-if="sysObj.loaddatetime==null">-</span>
+                                                </div>
+                                            </div>
+                                            <div class="flex-1_5 fContent">
+                                                <div class="flex flex-justify">
+                                                    <span
+                                                        ng-if="sysObj.activateddatetime!=null">{{sysObj.activateddatetime | formattedDateTime}}</span>
+                                                    <span style="width: 100%"
+                                                        ng-if="sysObj.activateddatetime==null">-</span>
+                                                </div>
+                                            </div>
+                                            <div class="flex-1_5 fContent">
+                                                <div class="flex flex-justify">
+                                                    <span
+                                                        ng-if="sysObj.fallbackdatetime!=null">{{sysObj.fallbackdatetime | formattedDateTime}}</span>
+                                                    <span style="width: 100%"
+                                                        ng-if="sysObj.fallbackdatetime==null">-</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+
+
+                            </div>
+                            <div class="row labelFix" style="margin:0px;"
+                                ng-init="$watch('pObj=vm.advFileList[searchkey].planObj')"
+                                ng-if="advSearchObj.expanded">
+                                <div ng-include='templatePath+"/impPlan.template.html"'></div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- <div class="row">
+                            <div class="col-md-2" style="padding: 20px;display: inline-flex;">
+                                <span style="padding: 10px;">Show</span>
+                                <select class="form-control" ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                    <option value="10">10</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="100">200</option>
+                                    <option value="100">300</option>
+                                    <option value="100">400</option>
+                                    <option value="100">500</option>
+                                    <option value="100">600</option>
+                                    <option value="100">700</option>
+                                    <option value="100">800</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 padding-left-none" style="padding: 28px;display: inline-flex;"><p>Total Records: {{vm.advResultCount}}</p></div>
+                            <div class="col-md-6">
+                                <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination"></dir-pagination-controls>
+                            </div>
+                        </div> -->
+                    <!--new row inserted-->
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-12">
+                            <div ng-if="vm.searchType=='Advanced Search' &&  vm.advFileListstatus" class="row">
+                                <div class="col-md-3" style="display: inline-flex;">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                            ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePaginations"></dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!--ends-->
+                </div>
+            </div>
+            <!--Content to be rendered (Advanced Search Ends) -->
+            <!--Content to be rendered (Deployment Activity Starts) -->
+            <div ng-if="vm.searchType == 'Deployment Activity' && searchKeyClickedOnScreen">
+                <div ng-if="!vm.depActFileListstatus"
+                    style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                    <b>No results found for your search</b>
+                </div>
+                <div class="well well-sm" style="background: #fff;" ng-if="vm.depActFileListstatus">
+                    <div class="row">
+                        <div class="col-md-12 leadTotalCount">
+                            <span> Total number of items: <span class="templateCountSize">
+                                    {{vm.totalNumberOfItem}}</span> </span>
+                        </div>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-12">
+                            <div ng-if="vm.searchType=='Deployment Activity' &&  vm.depActFileListstatus" class="row">
+                                <div class="col-md-3" style="display: inline-flex;">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                            ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePaginations"></dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex textCenter divTableHeader">
+                        <div class="flex-1">
+                            <!-- <span class="noClickProp" ng-click="sort('planid')"> -->
+                            Plan ID
+                            <!-- <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.planid.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.planid.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span> -->
+                        </div>
+                        <div class="flex-1">
+                            <!-- <span class="noClickProp" ng-click="sort('csrnumber')"> -->
+                            Environment
+                            <!-- <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.csrnumber.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.csrnumber.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span> -->
+                        </div>
+                        <div class="flex-1">
+                            <!-- <span class="noClickProp" ng-click="sort('planstatus')"> -->
+                            Status
+                            <!-- <span class="pull-right">
+                                            <i class="fa fa-long-arrow-down {{sortColumn.planstatus.asc ? '' : 'sortDisabled'}}"></i>
+                                            <i class="fa fa-long-arrow-up {{sortColumn.planstatus.desc ? '' : 'sortDisabled'}}"></i>
+                                        </span>
+                                </span> -->
+                        </div>
+                        <!-- <div class="flex-1_5">
+                                Load Attendee
+                            </div> -->
+
+                        <div class="flex-1_5">
+                            Developer(s)
+                        </div>
+                        <!-- <div style="flex:2" class="flex"> -->
+                        <div class="flex-1">
+                            Program Name
+                        </div>
+                        <div class="flex-1">
+                            Package Name
+                        </div>
+
+                        <!-- </div> -->
+                        <!-- <div class="flex-1">
+                                <span class="noClickProp" ng-click="sort('qastatus')">
+                                        QA Bypassed
+                                    <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.qastatus.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.qastatus.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span>
+                            </div> -->
+                        <div class="flex-1">
+                            <!-- <span class="noClickProp" ng-click="sort('targetsystem')"> -->
+                            Target System
+                            <!-- <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.targetsystem.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.targetsystem.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span> -->
+
+                        </div>
+                        <div class="flex-1">
+                            <!-- <span class="noClickProp" ng-click="sort('loadcategory')"> -->
+                            Load Category
+                            <!-- <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.loadcategory.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.loadcategory.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span> -->
+                        </div>
+                        <div class="flex-1_5">
+                            <!-- <span class="noClickProp" ng-click="sort('loaddatetime')"> -->
+                            Deployment Activity DT
+                            <!-- <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.loaddatetime.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.loaddatetime.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span> -->
+                        </div>
+                        <div class="flex-1_5">
+                            <!-- <span class="noClickProp" ng-click="sort('activateddatetime')"> -->
+                            Deployment Action
+                            <!-- <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.activateddatetime.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.activateddatetime.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span> -->
+                        </div>
+                        <!-- <div class="flex-1_5">
+                                <span class="noClickProp" ng-click="sort('fallbackdatetime')">
+                                    Fallback DT
+                                    <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.fallbackdatetime.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.fallbackdatetime.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span>
+                            </div> -->
+                    </div>
+                    <!-- (searchkey,advSearchObj) in vm.depActFileList -->
+                    <div class="searchHeight" style="overflow: auto;">
+                        <div dir-paginate="depObj in vm.depActFileList | filter: q | itemsPerPage: tableConfig.pageSize"
+                            total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"
+                            pagination-id="tablePaginations">
+                            <div class="flex divFlexBody textCenter hoverCurrentRow">
+                                <div class="flex-1 fContent">
+                                    <div class="flex-1">
+                                        <a ng-if="depObj.expanded" ng-click="depObj.expanded = false;"
+                                            aria-label="{{depObj.id}}">
+                                            <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+                                        </a>
+                                        <a ng-if="!depObj.expanded"
+                                            ng-click="depObj.expanded = true;depActSearchExpand(depObj.id,depObj);"
+                                            aria-label="{{depObj.planId}}">
+                                            <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+                                        </a>
+                                        <br />
+                                        <b>{{depObj.id}}</b>
+                                    </div>
+                                </div>
+                                <div class="flex-1 fContent">
+                                    {{depObj.environment}}
+                                </div>
+                                <div class="flex-1 fContent">
+                                    <span plan-status-to-display-label-for-advanced-search="{{depObj.planstatus}}"
+                                        style="white-space: inherit;">
+                                </div>
+                                <!-- <div class="flex-1_5 fContent word-wrap-w">
+                                        <div class="flex-1">{{depObj.loadattendee}}</div>
+                                    </div> -->
+                                <div class="flex-1_5 fContent word-wrap-w">{{depObj.devname}}</div>
+                                <!-- <div style="flex:2" class="flex-self-center">
+                                        <div class="flex flex-system-group" ng-repeat="sysObj in vm.uniqSegmentList(advSearchObj)">
+                                            <div class="flex-1 fContent word-wrap-w">
+                                                <span ng-if="sysObj.programname!=null">{{sysObj.programname}}</span>
+                                                <span ng-if="sysObj.programname==null">-</span>
+                                            </div>
+                                            <div class="flex-1 fContent">
+                                                <div class="flex-1">{{sysObj.functionalarea}}</div>
+                                            </div>
+                                        </div>
+                                    </div> -->
+                                <div class="flex-1 fContent word-wrap-w">
+                                    <span ng-if="depObj.programname!=null">{{depObj.programname}}</span>
+                                    <span ng-if="depObj.programname==null">-</span>
+                                </div>
+                                <div class="flex-1 fContent">
+                                    <div class="flex-1">{{depObj.funcarea}}</div>
+                                </div>
+                                <!-- <div class="flex-1 fContent">
+                                        <span ng-if="advSearchObj[0].qastatus=='YES'">
+                                                    <i class="fa fa-check-circle"></i>
+                                                </span>
+                                        <span ng-if="advSearchObj[0].qastatus=='NO'">
+                                                    -
+                                                </span>
+                                    </div> -->
+                                <div class="flex-1 fContent">
+                                    <div class="flex-1">{{depObj.targetsystem}}</div>
+                                </div>
+                                <div class="flex-1 fContent">
+                                    <div class="flex flex-justify">
+                                        <span ng-if="depObj.catname!=null">{{depObj.catname}}</span>
+                                        <span ng-if="depObj.catname==null">-</span>
+                                    </div>
+                                    <!-- <div class="flex-1">{{depObj.loadcategory}}</div> -->
+                                </div>
+                                <div class="flex-1_5 fContent">
+                                    <div class="flex flex-justify">
+                                        <span
+                                            ng-if="depObj.modifieddate!=null">{{depObj.modifieddate | formattedDateTime}}</span>
+                                        <span ng-if="depObj.modifieddate==null">-</span>
+                                    </div>
+                                </div>
+                                <div class="flex-1_5 fContent">
+                                    <div class="flex flex-justify">
+                                        <span ng-if="depObj.productionstatus!=null">{{depObj.productionstatus}}</span>
+                                        <span ng-if="depObj.productionstatus==null">-</span>
+                                    </div>
+                                </div>
+                                <!-- <div class="flex-1_5 fContent">
+                                        <div class="flex flex-justify">
+                                            <span ng-if="advSearchObj[0].fallbackdatetime!=null">{{advSearchObj[0].fallbackdatetime | formattedDateTime}}</span>
+                                            <span ng-if="advSearchObj[0].fallbackdatetime==null">-</span>
+                                        </div>
+                                    </div> -->
+                            </div>
+                            <div class="row labelFix" style="margin:0px;" ng-init="$watch('pObj=depObj.planObj')"
+                                ng-if="depObj.expanded">
+                                <div ng-include='templatePath+"/impPlan.template.html"'></div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- <div class="row">
+                            <div class="col-md-2" style="padding: 20px;display: inline-flex;">
+                                <span style="padding: 10px;">Show</span>
+                                <select class="form-control" ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                    <option value="10">10</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="100">200</option>
+                                    <option value="100">300</option>
+                                    <option value="100">400</option>
+                                    <option value="100">500</option>
+                                    <option value="100">600</option>
+                                    <option value="100">700</option>
+                                    <option value="100">800</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 padding-left-none" style="padding: 28px;display: inline-flex;"><p>Total Records: {{vm.advResultCount}}</p></div>
+                            <div class="col-md-6">
+                                <dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination"></dir-pagination-controls>
+                            </div>
+                        </div> -->
+                    <!--new row inserted-->
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-12">
+                            <div ng-if="vm.searchType=='Deployment Activity' &&  vm.depActFileListstatus" class="row">
+                                <div class="col-md-3" style="display: inline-flex;">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                            ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePaginations"></dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!--ends-->
+                </div>
+            </div>
+            <!--Content to be rendered ((Deployment Activity Ends) -->
+            <!--Content to be rendered (Source Artifact Search Starts) -->
+            <div ng-if="vm.searchType == 'Source Artifact Search' && searchKeyClickedOnScreen">
+                <div ng-if="!vm.sourceArtifactSearchstatus"
+                    style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                    <b>No results found for your search</b>
+                </div>
+                <div class="well well-sm" style="background: #fff;" ng-if="vm.sourceArtifactSearchstatus">
+                    <div class="row">
+                        <div class="col-md-12 leadTotalCount">
+                            <span> Total number of items: <span class="templateCountSize">
+                                    {{vm.totalNumberOfItem}}</span> </span>
+                        </div>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-12">
+                            <div ng-if="vm.searchType=='Source Artifact Search' &&  vm.sourceArtifactSearchstatus"
+                                class="row">
+                                <div class="col-md-3" style="display: inline-flex;">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                            ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePaginations"></dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex textCenter divTableHeader">
+                        <div class="flex-1">
+                            <!-- <span class="noClickProp" ng-click="sort('planid')"> -->
+                            Source Artifact Name
+                            <!-- <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.planid.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.planid.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span> -->
+                        </div>
+                        <div class="flex-1">
+                            <!-- <span class="noClickProp" ng-click="sort('planid')"> -->
+                            Functional Package
+                            <!-- <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.planid.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.planid.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span> -->
+                        </div>
+                        <div class="flex-1">
+                            <!-- <span class="noClickProp" ng-click="sort('csrnumber')"> -->
+                            Implementation #
+                            <!-- <span class="pull-right">
+                                        <i class="fa fa-long-arrow-down {{sortColumn.csrnumber.asc ? '' : 'sortDisabled'}}"></i>
+                                        <i class="fa fa-long-arrow-up {{sortColumn.csrnumber.desc ? '' : 'sortDisabled'}}"></i>
+                                    </span>
+                                </span> -->
+                        </div>
+                        <div class="flex-1">
+                            <!-- <span class="noClickProp" ng-click="sort('planstatus')"> -->
+                            Target System
+                            <!-- <span class="pull-right">
+                                            <i class="fa fa-long-arrow-down {{sortColumn.planstatus.asc ? '' : 'sortDisabled'}}"></i>
+                                            <i class="fa fa-long-arrow-up {{sortColumn.planstatus.desc ? '' : 'sortDisabled'}}"></i>
+                                        </span>
+                                </span> -->
+                        </div>
+
+                        <div class="flex-1">
+                            Load Date/Time
+                        </div>
+                        <div class="flex-1">
+                            Status
+                        </div>
+                        <div class="flex-1">
+                            Fallback Date/Time
+                        </div>
+                        <div class="flex-1">
+                            Developer Name
+                        </div>
+                        <!--  <div class="flex-1">
+                                Hyper link
+                            </div>-->
+                        <div class="flex-1">
+                            LST/MAP File
+                        </div>
+                    </div>
+                    <!-- (searchkey,advSearchObj) in vm.depActFileList -->
+                    <div class="searchHeight" style="overflow: auto;">
+                        <div dir-paginate="saObj in vm.sourceArtifactSearchList | filter: q | itemsPerPage: tableConfig.pageSize"
+                            ng-class="saObj.highlightGroupFlag ? 'lightGreen' : ''" total-items="tableConfig.totalItems"
+                            current-page="tableConfig.currentPage" pagination-id="tablePaginations">
+                            <div class="flex divFlexBody textCenter hoverCurrentRow">
+                                <!-- <div class="flex-1 fContent">
+                                        <div class="flex-1">
+                                            <a ng-if="saObj.expanded" ng-click="saObj.expanded = false;" aria-label="{{saObj.id}}">
+                                                <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+                                            </a>
+                                            <a ng-if="!saObj.expanded" ng-click="saObj.expanded = true;depActSearchExpand(saObj.id,saObj);" aria-label="{{saObj.planId}}">
+                                                <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+                                            </a>
+                                            <br/>
+                                            <b>{{saObj.id}}</b>
+                                            {{saObj[0]}}
+                                        </div>
+                                    </div> -->
+                                <div class="flex-1 fContent center">
+                                    <div class="">
+                                        <md-tooltip class="searchTooltip">{{saObj.programname}}</md-tooltip>
+                                        <span ng-if="saObj.programname!=null"> <a href="{{saObj.sourceartifactlink}}"
+                                                target="_blank"> {{saObj.programname | limitTo : 10}}</a> </span>
+                                        <span ng-if="saObj.programname==null">-</span>
+                                    </div>
+                                </div>
+                                <div class="flex-1 fContent">
+                                    <div class="">
+                                        <md-tooltip class="searchTooltip">{{saObj.funcpackage}}</md-tooltip>
+                                        <span
+                                            ng-if="saObj.programname!=null">{{saObj.funcpackage | limitTo : 13}}</span>
+                                        <span ng-if="saObj.programname==null">-</span>
+                                    </div>
+                                </div>
+                                <div class="flex-1 fContent">
+                                    <div class="">
+                                        <span ng-if="saObj.planid!=null">{{saObj.planid}}</span>
+                                        <span ng-if="saObj.planid==null">-</span>
+                                    </div>
+                                </div>
+								<!-- style="padding-left: 19px" -->
+                                <div class="flex-1 fContent" >
+                                    <div class="">
+                                        <span ng-if="saObj.targetsystem!=null">{{saObj.targetsystem}}</span>
+                                        <span ng-if="saObj.targetsystem==null">-</span>
+                                    </div>
+                                </div>
+                                <div class="flex-1 fContent">
+                                    <div class="">
+                                        <span
+                                            ng-if="saObj.loaddatetime!=null">{{saObj.loaddatetime | formattedDateTime}}</span>
+                                        <span ng-if="saObj.loaddatetime==null">-</span>
+                                    </div>
+                                </div>
+                                <div class="flex-1 fContent">
+                                    <div class="">
+                                        <span plan-status-to-display-label-for-source-Artifact="{{saObj.planstatus}}"
+                                            style="white-space: inherit;">
+
+                                    </div>
+                                </div>
+                                <div class="flex-1 fContent">
+                                    <div class="">
+                                        <span
+                                            ng-if="saObj.fallbackdatetime!=null">{{saObj.fallbackdatetime | formattedDateTime}}</span>
+                                        <span ng-if="saObj.fallbackdatetime==null">-</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex-1 fContent word-wrap-w">
+                                    <div class="">
+                                        <span ng-if="saObj.developername!=null">{{saObj.developername}}</span>
+                                        <span ng-if="saObj.developername==null">-</span>
+                                    </div>
+                                </div>
+                                <!-- <div class="flex-1 fContent word-wrap-w">
+                                            <div class="flex flex-justify">
+                                                    <span ng-if="saObj.sourceartifactlink!=null">{{saObj.sourceartifactlink}}</span>
+                                                    <span ng-if="saObj.sourceartifactlink==null">-</span>
+                                            </div>
+                                    </div>-->
+                                <div class="flex-1 fContent word-wrap-w">
+                                    <div class="">
+                                        <span ng-if="saObj.listingfilelink!=null"> <a href="{{saObj.listingfilelink}}"
+                                                target="_blank"> {{saObj.listingFile}}</a></span>
+                                        <span ng-if="saObj.listingfilelink==null">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- <div class="row labelFix" style="margin:0px;" ng-init="$watch('pObj=depObj.planObj')" ng-if="depObj.expanded">
+                                    <div ng-include='templatePath+"/impPlan.template.html"'></div>
+                                </div> -->
+                        </div>
+                    </div>
+                    <div class="row">
+                        <span style="padding: 10px;color: red">* Listing/Map file will show an error for IBM-based
+                            source files, if not present in /base/lst path</span>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-12">
+                            <div ng-if="vm.searchType=='Source Artifact Search' &&  vm.sourceArtifactSearchstatus"
+                                class="row">
+                                <div class="col-md-3" style="display: inline-flex;">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                            ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePaginations"></dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!--ends-->
+                </div>
+            </div>
+            <div ng-if="vm.searchType == 'Segment/Repository Search' && searchKeyClickedOnScreen">
+                <div ng-if="!vm.sourceSegmentRepoSearchstatus"
+                    style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                    <b>No results found for your search </b>
+                </div>
+                <div class="well well-sm" style="background: #fff;" ng-if="vm.sourceSegmentRepoSearchstatus">
+                    <div class="row">
+                        <div class="col-md-12 leadTotalCount">
+                            <span> Total number of items: <span class="templateCountSize">
+                                    {{vm.totalNumberOfItem}}</span> </span>
+                        </div>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-12">
+                            <div ng-if="vm.searchType=='Segment/Repository Search' && vm.sourceSegmentRepoSearchstatus"
+                                class="row">
+                                <div class="col-md-3" style="display: inline-flex;">
+                                    <span style="padding: 10px;">Shows</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                            ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePaginations"></dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex textCenter divTableHeader">
+                        <div class="flex-1">
+                            Functional Area
+                        </div>
+                        <div class="flex-1_5">
+                            Description
+                        </div>
+                        <div class="flex-2">
+                            Owner
+                        </div>
+
+                    </div>
+                    <!-- (searchkey,advSearchObj) in vm.depActFileList -->
+                    <div class="searchHeight" style="overflow: auto;">
+                        <div dir-paginate="saObj in vm.SegmentRepositorySearchList | filter: q | itemsPerPage: tableConfig.pageSize"
+                            total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"
+                            pagination-id="tablePaginations">
+                            <div class="flex divFlexBody textCenter hoverCurrentRow">
+                                <div class="flex-1 fContent">
+                                    <div class="flex flex-justify">
+                                        <span ng-if="saObj.functionalArea!=null">{{saObj.functionalArea}}</span>
+                                        <span ng-if="saObj.functionalArea==null">-</span>
+                                    </div>
+                                </div>
+                                <div class="flex-1_5 fContent">
+                                    <div class="flex flex-justify">
+                                        <span ng-if="saObj.description!=null">{{saObj.description}}</span>
+                                        <span ng-if="saObj.description==null">-</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex-2 fContent word-wrap-w">
+                                    <div class="flex flex-justify">
+                                        <span>{{saObj.repoOwners}}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-12">
+                            <div ng-if="vm.searchType=='Segment/Repository Search' && vm.sourceSegmentRepoSearchstatus"
+                                class="row">
+                                <div class="col-md-3" style="display: inline-flex;">
+                                    <span style="padding: 10px;">Shows</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                            ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePaginations"></dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!--ends-->
+                </div>
+            </div>
+            <!--Content to be rendered ((Source Artifact Search Ends) -->
+        </div>
+    </div>
+</section>
+<!-- /.content -->
+<!--<div ng-include=templatePath+"/impPlan.template.html"></div>-->
+<div id="submitModal" class="modal fade" role="dialog">
+    <div class="modal-dialog" style="width: 80%;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title commentTitle">Add Comment</h4>
+            </div>
+            <div class="modal-body dm-popup">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <label>Bypass QA Functional Testing</label>
+                                <div class="row margin-top-10">
+                                    <div class="col-md-3">
+                                        <md-checkbox class="check_ALL custom" ng-change="vm.all.functional()"
+                                            ng-model="vm.all.isFunctional" aria-label="ALL">ALL
+                                        </md-checkbox>
+                                    </div>
+                                    <div class="col-md-9">
+                                        <textarea ng-change="vm.all.fChange()" name="functionalComment"
+                                            ng-model="vm.all.functionalComment" class="commentDecision form-control"
+                                            style="width:100%;"
+                                            ng-attr-placeholder="{{vm.all.isFunctional ? '(Required)' : '(Optional)'}}"></textarea>
+                                    </div>
+                                </div>
+                                <div class="row margin-top-10" ng-repeat="(key, fActions) in vm.functionalActions">
+                                    <div class="col-md-3">
+                                        <md-checkbox class="check_each custom" ng-change="validateSingleFAction()"
+                                            ng-disabled="vm.all.isFunctional" ng-value="fActions.isSelected"
+                                            ng-model="fActions.isSelected" aria-label="each">{{fActions.systemName}}
+                                        </md-checkbox>
+                                    </div>
+                                    <div class="col-md-9">
+                                        <textarea name="functionalComment" ng-disabled="vm.all.isFunctional"
+                                            ng-model="fActions.systemComment" class="commentDecision form-control"
+                                            style="width:100%;"
+                                            ng-attr-placeholder="{{fActions.isSelected ? '(Required)' : '(Optional)'}}"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 bl-eee">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <label>Bypass QA Regression Testing</label>
+                                <div class="row margin-top-10">
+                                    <div class="col-md-3">
+                                        <md-checkbox class="check_ALL custom" ng-change="vm.all.regression()"
+                                            ng-model="vm.all.isRegression" aria-label="ALL">ALL
+                                        </md-checkbox>
+                                    </div>
+                                    <div class="col-md-9">
+                                        <textarea ng-change="vm.all.rChange()" name="regressionComment"
+                                            ng-model="vm.all.regressionComment" class="commentDecision form-control"
+                                            style="width:100%;"
+                                            ng-attr-placeholder="{{vm.all.isRegression ? '(Required)' : '(Optional)'}}"></textarea>
+                                    </div>
+                                </div>
+                                <div class="row margin-top-10" ng-repeat="(key,rActions) in vm.regressionActions">
+                                    <div class="col-md-3">
+                                        <md-checkbox class="check_each custom" ng-change="validateSingleRAction()"
+                                            ng-value="rActions.isSelected" ng-disabled="vm.all.isRegression"
+                                            ng-model="rActions.isSelected" aria-label="each">{{rActions.systemName}}
+                                        </md-checkbox>
+                                    </div>
+                                    <div class="col-md-9">
+                                        <textarea name="regressionComment" ng-model="rActions.systemComment"
+                                            ng-disabled="vm.all.isRegression" class="commentDecision form-control"
+                                            style="width:100%;"
+                                            ng-attr-placeholder="{{rActions.isSelected ? '(Required)' : '(Optional)'}}"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="row">
+                    <div class="col-md-8 text-justify">
+                    </div>
+                    <div class="col-md-4">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-default themeButton"
+                                data-dismiss="modal">Close</button>
+                            <button type="submit" class="btn btn-primary themeButton"
+                                data-ng-click="proceedToSubmit(vm.comment)" aria-label="proceedToSubmit">Submit</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

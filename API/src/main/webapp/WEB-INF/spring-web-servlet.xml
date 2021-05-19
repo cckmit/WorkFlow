@@ -1,0 +1,228 @@
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans     
+   http://www.springframework.org/schema/beans/spring-beans-3.2.xsd
+   http://www.springframework.org/schema/mvc 
+   http://www.springframework.org/schema/mvc/spring-mvc-3.2.xsd
+   http://www.springframework.org/schema/context 
+   http://www.springframework.org/schema/context/spring-context-3.2.xsd
+   http://www.springframework.org/schema/tx
+   http://www.springframework.org/schema/tx/spring-tx.xsd">
+   
+    <context:component-scan base-package="com.tsi.workflow" />
+    <bean class="org.springframework.web.servlet.mvc.annotation.DefaultAnnotationHandlerMapping"/>
+
+    <mvc:annotation-driven>
+        <mvc:message-converters>
+            <bean class="org.springframework.http.converter.json.MappingJackson2HttpMessageConverter">
+                <property name="objectMapper">
+                    <bean class="com.tsi.workflow.base.HibernateAwareObjectMapper" />
+                </property>
+            </bean>
+        </mvc:message-converters>
+    </mvc:annotation-driven>
+    
+    <mvc:interceptors>
+        <bean class="com.tsi.workflow.security.RequestInterceptor">
+        </bean>
+    </mvc:interceptors>  
+    
+    <bean id="multipartResolver"
+          class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+        <property name="maxUploadSize" value="5242880" />
+    </bean>
+    
+    <bean id ="lLdapUserMap" class="java.util.concurrent.ConcurrentHashMap"/>
+    <bean id ="lLdapGroupMap" class="java.util.concurrent.ConcurrentHashMap"/>
+    <bean id ="lSuperUserMap" class="java.util.concurrent.ConcurrentHashMap"/>
+    <bean id ="lDelegationMap" class="java.util.concurrent.ConcurrentHashMap"/>
+    <bean id ="lPlanUpdateStatusMap" class="java.util.concurrent.ConcurrentHashMap"/> 
+    <bean id ="lPlanOnlineFallbackStatusMap" class="java.util.concurrent.ConcurrentHashMap"/>
+    <bean id ="lPlanPreProdDeactivateMapMap" class="java.util.concurrent.ConcurrentHashMap"/>
+    <bean id ="lPreProdTOSOperationMap" class="java.util.concurrent.ConcurrentHashMap"/>
+
+    <bean id ="tosIpMap" class="java.util.concurrent.ConcurrentHashMap"/>
+    <bean id ="develBuildJob" class="java.util.concurrent.ConcurrentHashMap"/>
+    <bean id ="develLoaderJob" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="stagingWorkspaceCreationJobs" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="stagingBuildJobs" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="stagingLoaderJobs" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="testSystemMaintenanceList" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="wssPlanIdAndUserId" class="java.util.concurrent.ConcurrentHashMap"/>
+    <bean id ="dslFileGenerationList" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="qaBypassedLoadsetList" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="preProdRejectPlans" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="onlineBuildJobs" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="fallBackBuildJobs" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="lAsyncPlansStartTimeMap" class="java.util.concurrent.ConcurrentHashMap"/>
+    <bean id ="apiRequestQueue" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+    <bean id ="apiResponseQueue" class="java.util.concurrent.ConcurrentLinkedQueue"/>
+     
+    <bean id="postgresqlDataSource" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close">
+        <property name="url" value="${db.app.url}" />
+        <property name="driverClassName" value="${db.app.driver}" />
+        <property name="username" value="${db.app.username}" />
+        <property name="password" value="${db.app.password}" />
+        
+        <property name="initialSize" value="10" />
+        <property name="maxActive" value="50" />
+        <property name="minIdle" value="1" />
+        <property name="maxIdle" value="3" />
+        <property name="maxWait" value="3000" />
+        
+        <property name="validationQuery" value="SELECT 1" />
+        <property name="defaultAutoCommit" value="true" /> 
+        
+        <property name="timeBetweenEvictionRunsMillis" value="5000"/>
+        <property name="minEvictableIdleTimeMillis" value="30000"/>
+        
+        <property name="removeAbandonedTimeout" value="60"/>
+        <property name="removeAbandoned" value="true"/>
+    </bean>
+    
+    <bean id="ticketDataSource" class="org.apache.commons.dbcp.BasicDataSource"  destroy-method="close">
+        <property name="driverClassName" value="${db.ticket.driver}"/>
+        <property name="url" value="${db.ticket.url}"/>
+        <property name="username" value="${db.ticket.username}"/>
+        <property name="password" value="${db.ticket.password}"/>
+        
+        <property name="initialSize" value="10" />
+        <property name="maxActive" value="50" />
+        <property name="minIdle" value="1" />
+        <property name="maxIdle" value="3" />
+        <property name="maxWait" value="3000" />
+        
+        <property name="validationQuery" value="SELECT 1" />
+        <property name="defaultAutoCommit" value="true" /> 
+        
+        <property name="timeBetweenEvictionRunsMillis" value="5000"/>
+        <property name="minEvictableIdleTimeMillis" value="30000"/>
+        
+        <property name="removeAbandonedTimeout" value="60"/>
+        <property name="removeAbandoned" value="true"/>
+    </bean>
+    
+    <bean id="CSRDataSource" class="org.apache.commons.dbcp.BasicDataSource"  destroy-method="close">
+        <property name="driverClassName" value="${db.csr.driver}"/>
+        <property name="url" value="${db.csr.url}"/>
+        <property name="username" value="${db.csr.username}"/>
+        <property name="password" value="${db.csr.password}"/>
+        
+        <property name="initialSize" value="10" />
+        <property name="maxActive" value="50" />
+        <property name="minIdle" value="1" />
+        <property name="maxIdle" value="3" />
+        <property name="maxWait" value="3000" />
+        
+        <property name="validationQuery" value="SELECT 1" />
+        <property name="defaultAutoCommit" value="true" /> 
+        
+        <property name="timeBetweenEvictionRunsMillis" value="5000"/>
+        <property name="minEvictableIdleTimeMillis" value="30000"/>
+        
+        <property name="removeAbandonedTimeout" value="60"/>
+        <property name="removeAbandoned" value="true"/>
+    </bean>
+    
+    <bean id="VPARDataSource" class="org.apache.commons.dbcp.BasicDataSource"  destroy-method="close">
+        <property name="driverClassName" value="${db.vpar.driver}"/>
+        <property name="url" value="${db.vpar.url}"/>
+        <property name="username" value="${db.vpar.username}"/>
+        <property name="password" value="${db.vpar.password}"/>
+        
+        <property name="initialSize" value="10" />
+        <property name="maxActive" value="50" />
+        <property name="minIdle" value="1" />
+        <property name="maxIdle" value="3" />
+        <property name="maxWait" value="3000" />
+        
+        <property name="validationQuery" value="SELECT 1" />
+        <property name="defaultAutoCommit" value="true" /> 
+        
+        <property name="timeBetweenEvictionRunsMillis" value="5000"/>
+        <property name="minEvictableIdleTimeMillis" value="30000"/>
+        
+        <property name="removeAbandonedTimeout" value="60"/>
+        <property name="removeAbandoned" value="true"/>
+    </bean>
+    
+    <bean id="problemTicketDAO" class="com.tsi.workflow.dao.external.ProblemTicketDAO">
+        <property name="dataSource" ref="ticketDataSource"/>
+    </bean>
+    
+    <bean id="cSRNumberDAO" class="com.tsi.workflow.dao.external.CSRNumberDAO">
+        <property name="dataSource" ref="CSRDataSource"/>
+    </bean>
+    
+    <bean id="testSystemLoadDAO" class="com.tsi.workflow.dao.external.TestSystemLoadDAO">
+        <property name="dataSource" ref="VPARDataSource"/>
+    </bean>
+    
+    <bean id="databaseConfig" class="com.tsi.workflow.database.DatabaseConfigurator" init-method="checkDatabase" depends-on="postgresqlDataSource">
+        <property name="dataSource" ref="postgresqlDataSource"/>
+    </bean>
+
+    <bean id="sessionFactory" class="org.springframework.orm.hibernate4.LocalSessionFactoryBean" depends-on="databaseConfig">
+        <property name="dataSource" ref="postgresqlDataSource" />
+        <property name="annotatedClasses">
+            <list>
+                <value>com.tsi.workflow.beans.dao.ImpPlan</value>
+                <value>com.tsi.workflow.beans.dao.SystemLoad</value>
+                <value>com.tsi.workflow.beans.dao.Implementation</value>
+                <value>com.tsi.workflow.beans.dao.Platform</value>
+                <value>com.tsi.workflow.beans.dao.System</value>
+                <value>com.tsi.workflow.beans.dao.Build</value>
+                <value>com.tsi.workflow.beans.dao.Vpars</value>
+                <value>com.tsi.workflow.beans.dao.Project</value>
+                <value>com.tsi.workflow.beans.dao.LoadCategories</value>
+                <value>com.tsi.workflow.beans.dao.LoadWindow</value>
+                <value>com.tsi.workflow.beans.dao.LoadFreeze</value>
+                <value>com.tsi.workflow.beans.dao.CheckoutSegments</value>
+                <value>com.tsi.workflow.beans.dao.PutLevel</value>
+                <value>com.tsi.workflow.beans.dao.ImpPlanApprovals</value>
+                <value>com.tsi.workflow.beans.dao.SystemCpu</value>
+                <value>com.tsi.workflow.beans.dao.ActivityLog</value>
+                <value>com.tsi.workflow.beans.dao.SystemLoadActions</value>
+                <value>com.tsi.workflow.beans.dao.Dbcr</value>
+                <value>com.tsi.workflow.beans.dao.ProductionLoads</value>
+                <value>com.tsi.workflow.beans.dao.UserSettings</value>
+                <value>com.tsi.workflow.beans.dao.PreProductionLoads</value>
+                <value>com.tsi.workflow.beans.dao.PdddsLibrary</value>
+                <value>com.tsi.workflow.beans.dao.SystemPdddsMapping</value>   
+                <value>com.tsi.workflow.beans.dao.LegacyFallBackPlan</value>    
+                <value>com.tsi.workflow.beans.dao.GitProdSearchDb</value>  
+                <value>com.tsi.workflow.beans.dao.OnlineBuild</value>   
+                <value>com.tsi.workflow.beans.dao.RFCDetails</value>              
+                <value>com.tsi.workflow.beans.dao.GiPorts</value>      
+                <value>com.tsi.workflow.beans.dao.RfcConfigValues</value>  
+                <value>com.tsi.workflow.audit.beans.dao.ApiActions</value>        
+                <value>com.tsi.workflow.audit.beans.dao.ApiTransaction</value>        
+                <value>com.tsi.workflow.audit.beans.dao.GiTransaction</value>        
+                <value>com.tsi.workflow.audit.beans.dao.LinuxServers</value>        				
+                <value>com.tsi.workflow.audit.beans.dao.PlanDetails</value>  
+                <value>com.tsi.workflow.beans.dao.RepositoryDetails</value>        				
+            </list>
+        </property>
+        <property name="hibernateProperties">
+            <props>
+                <prop key="hibernate.dialect">org.hibernate.dialect.PostgreSQLDialect</prop>
+                <prop key="hibernate.show_sql">false</prop>
+                <prop key="hibernate.format_sql">false</prop>
+                <prop key="hibernate.use_sql_comments">false</prop>
+                <prop key="hibernate.hbm2ddl.auto">none</prop>
+            </props>
+        </property>
+    </bean>
+    
+    <bean id="transactionManager" class="org.springframework.orm.hibernate4.HibernateTransactionManager">
+        <property name="sessionFactory">
+            <ref bean="sessionFactory" />
+        </property>
+    </bean>
+
+    <tx:annotation-driven transaction-manager="transactionManager"/>
+    
+</beans>

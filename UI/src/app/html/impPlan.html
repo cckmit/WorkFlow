@@ -1,0 +1,167 @@
+<!-- Content Header (Page header) -->
+<section class="content-header">
+        <!--<div class="row">-->
+        <!--<div class="col-md-8"><h4 class="">Total Implementation Plan: <b>{{ vm.impPlanCount }}</b>-->
+        <!--</h4></div>-->
+        <!--<div class="col-md-4 hide">-->
+        <!--<button class="btn btn-warning btn-sm pull-right"><i class="fa fa-filter"></i> Filter-->
+        <!--</button>-->
+    
+        <!--<div class="input-group input-group-sm pull-right"-->
+        <!--style="width:200px;margin-right:10px;">-->
+        <!--<span class="input-group-addon" id="sizing-addon3"><i-->
+        <!--class="fa fa-search"></i></span>-->
+        <!--<input type="text" class="form-control" placeholder="Search"/>-->
+        <!--</div>-->
+        <!--</div>-->
+        <!--</div>-->
+    
+    
+    </section>
+    
+    <!-- Main content -->
+    <section class="content animated slideInLeft scrollingFunction" id="scroll_function">
+        <!-- row -->
+        <div class="row ">
+            <div class="col-md-12">
+                <div class="well well-sm" style="background: #fff;">
+                    <!-- <label>Choose Search Status: </label> -->
+                    <div class="row">
+                        <div class="col-md-2">
+                            <input type="text" class="form-control" press-enter-key="searchPlanDataforLead(vm.searchPlanDataforLead)"
+                                ng-model="vm.searchPlanDataforLead" placeholder="Search By Plan ID" />
+                        </div>
+                        <div class="col-md-4 padding-none">
+                            <button type="button" class="btn btn-primary themeButton refreshButton"
+                                ng-click="searchPlanDataforLead(vm.searchPlanDataforLead)" aria-label="searchDeploymentChanges">
+                                <i class="fa fa-search"></i>
+                                Search
+                            </button>
+                        </div>
+                        <div class="col-md-2" style="padding-left: 9%">
+                            <button type="button" class="btn refreshButton" ng-click="refreshDatas()"
+                                aria-label="refreshLoadCategoryWindow"><i class="fa fa-refresh"></i>
+                                Refresh
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-addon">
+                                    <i class="fa fa-filter" style="color:#000;"></i>
+                                </span>
+                                <select style="height: 35px" class="form-control" id="searchStatus"
+                                    ng-change="statusFilter(vm.searchStatus)" ng-model="vm.searchStatus">
+                                    <option value="">All</option>
+                                    <option ng-repeat="statusListData in vm.planStatusList" ng-value="statusListData">
+                                        {{statusListData}}
+                                    </option>
+                                </select>
+    
+                            </div>
+                        </div>
+                    </div>
+                    <div ng-include='templatePath+"/planBase.template.html"'></div>
+                </div>
+            </div>
+            <!-- /.col -->
+        </div>
+    
+    </section>
+    <!--<div ng-include=templatePath+ "/impPlan.template.html"></div>-->
+    
+    <div id="submitModal" class="modal fade" role="dialog">
+        <div class="modal-dialog" style="width: 80%;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title commentTitle">Add Comment</h4>
+                </div>
+                <div class="modal-body dm-popup">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <label>Bypass QA Functional Testing</label>
+                                    <div class="row margin-top-10">
+                                        <div class="col-md-3">
+                                            <md-checkbox class="check_ALL custom" ng-change="vm.all.functional()"
+                                                ng-model="vm.all.isFunctional" aria-label="ALL">ALL
+                                            </md-checkbox>
+                                        </div>
+                                        <div class="col-md-9">
+                                            <textarea ng-change="vm.all.fChange()" name="functionalComment"
+                                                ng-model="vm.all.functionalComment" class="commentDecision form-control"
+                                                style="width:100%;"
+                                                ng-attr-placeholder="{{vm.all.isFunctional ? '(Required)' : '(Optional)'}}"></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="row margin-top-10" ng-repeat="(key, fActions) in vm.functionalActions">
+                                        <div class="col-md-3">
+                                            <md-checkbox class="check_each custom" ng-change="validateSingleFAction()"
+                                                ng-disabled="vm.all.isFunctional" ng-value="fActions.isSelected"
+                                                ng-model="fActions.isSelected" aria-label="each">{{fActions.systemName}}
+                                            </md-checkbox>
+                                        </div>
+                                        <div class="col-md-9">
+                                            <textarea name="functionalComment" ng-disabled="vm.all.isFunctional"
+                                                ng-model="fActions.systemComment" class="commentDecision form-control"
+                                                style="width:100%;"
+                                                ng-attr-placeholder="{{fActions.isSelected ? '(Required)' : '(Optional)'}}"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 bl-eee">
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <label>Bypass QA Regression Testing</label>
+                                    <div class="row margin-top-10">
+                                        <div class="col-md-3">
+                                            <md-checkbox class="check_ALL custom" ng-change="vm.all.regression()"
+                                                ng-model="vm.all.isRegression" aria-label="ALL">ALL
+                                            </md-checkbox>
+                                        </div>
+                                        <div class="col-md-9">
+                                            <textarea ng-change="vm.all.rChange()" name="regressionComment"
+                                                ng-model="vm.all.regressionComment" class="commentDecision form-control"
+                                                style="width:100%;"
+                                                ng-attr-placeholder="{{vm.all.isRegression ? '(Required)' : '(Optional)'}}"></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="row margin-top-10" ng-repeat="(key,rActions) in vm.regressionActions">
+                                        <div class="col-md-3">
+                                            <md-checkbox class="check_each custom" ng-change="validateSingleRAction()"
+                                                ng-value="rActions.isSelected" ng-disabled="vm.all.isRegression"
+                                                ng-model="rActions.isSelected" aria-label="each">{{rActions.systemName}}
+                                            </md-checkbox>
+                                        </div>
+                                        <div class="col-md-9">
+                                            <textarea name="regressionComment" ng-model="rActions.systemComment"
+                                                ng-disabled="vm.all.isRegression" class="commentDecision form-control"
+                                                style="width:100%;"
+                                                ng-attr-placeholder="{{rActions.isSelected ? '(Required)' : '(Optional)'}}"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="row">
+                        <div class="col-md-8 text-justify">
+                        </div>
+                        <div class="col-md-4">
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-default themeButton"
+                                    data-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-primary themeButton"
+                                    data-ng-click="proceedToSubmit(vm.comment)" aria-label="proceedToSubmit">Submit</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>

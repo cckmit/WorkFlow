@@ -1,0 +1,99 @@
+#!/bin/bash
+#shellcheck disable=SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdsync                                                #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to common file sync between code in the implementation plan     #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Local Destination path                                           #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   12072016    Thilak  Created the script                                    #
+#   17082017    Uvais   Code refactor as per new SCM structure                #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+LOCAL_DEST_PATH="$1";                  #Read Local Dest path from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${LOCAL_DEST_PATH} RC:$RC"
+#-----------------------------------------------------------------------------#
+# Copy source file from one system to another system dir under the same impl
+function fileSync {
+  local _RC;
+  local x;
+  _RC=0;
+  x=$1;
+  pushd "$LOCAL_DEST_PATH" &> /dev/null
+  getSHProd="$( git log --oneline --raw -- "$x" | grep ":" | tail -1 | awk '{print $4}' )"
+  popd &> /dev/null
+  for cDir in *;
+  do
+    if [ "$cDir" != "$cCore" ]; then
+      pushd "$cDir"||exit
+      valSHProd="$( git log --oneline --raw -- "$x" | grep ":" | tail -1 | awk '{print $4}' )"
+      if [ "$getSHProd" == "$valSHProd" ]; then
+        cp -Rf --preserve=all "../$cCore/$x" "$x"
+        git add "$x"
+        git commit -m "$x sync from $cCore" "$x"
+      fi
+      popd &> /dev/null
+    fi
+  done
+  return "$_RC"
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ -d "$LOCAL_DEST_PATH" ]; then
+    pushd "$LOCAL_DEST_PATH" &> /dev/null
+    cCore="${LOCAL_DEST_PATH##*/}"
+    chgList="$( git status --porcelain | awk '{print $2}' | grep -v ".git" )"
+    if [[ -n "${chgList[*]// /}" ]]; then
+      for x in "${chgList[@]}"
+      do
+        popd &> /dev/null
+        fileCount="$( find . -type f -not -path "*.git*" | grep -c "$x" )"
+        if [ "$fileCount" -gt 1 ]; then
+          fileSync "$x" ; RC=$?;
+        fi
+        pushd "$LOCAL_DEST_PATH" &> /dev/null
+      done
+    fi
+  else
+    echo -e "ERROR: $LOCAL_DEST_PATH is not a valid GIT Directory";  #CONSOLE
+    RC="$EC";
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$LOCAL_DEST_PATH is not a valid GIT Directory RC:$RC"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${LOCAL_DEST_PATH} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

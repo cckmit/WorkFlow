@@ -1,0 +1,1290 @@
+#!/bin/bash
+#shellcheck disable=SC2207,SC2128,SC2046,SC2164,SC1117,SC2143,SC2035,SC2002,SC2178
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpfdvlloader                                              #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Create .oldr/.tldr for DEVL shared object                              #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Read Implementation plan with date and core info                 #
+#      $2  - Load type                                                        #
+#      $3  - loadset as per core and load catagory                            #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process.                                      #
+#      exit with 8, error message.                                            #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   10102017    NARASHIMAN   created the script                               #
+#   10132017    ARUL         maketpf.cfg check updated                        #
+#   12022017    ARUL         @KEYPOINT Updated                                #
+#   12092017    ARUL         OLDR/TLDR Bug fix                                #
+#   11072018    VINOTH       .json file Check                                 #
+#   07132018    ARUL         Sabre Talk Compilation warning excluded          #
+#   11082018    ARUL         Error files handling fix                         #
+#   04252019    GOWTHAM      Updated with logger support                      #
+#   09172019    VINOTH       dont fail, directories do not exist for stg dep  #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=4;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+Implementation="$1";
+LoadType="$2";
+LoadsetName="$3";
+#shellcheck disable=SC2034
+ListFallback="$4";
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+startDate=$(date +%Y%m%d%H%M%S)
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${Implementation} ${LoadType} ${LoadsetName} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#
+function addfile {
+  local _RC=0;
+  local xsd;
+  local xml;
+  local jar;
+  local kpt;
+  local sob;
+  local json;
+  local path;
+  local path1;
+  local path2;
+  local Jpath;
+  local i;
+  local _execDate;
+  if [ -d "${APP_DVL_IMPL_CWRK}" ] && [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+    _execDate=$(date +%-S)
+    #shellcheck disable=SC2164
+    pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+    if [ -f "maketpf.cfg" ]; then
+      xsd=( $(find . -type f -name "*\.xsd" | sed "s|^\./||" | sort -u) )
+      xml=( $(find . -type f -name "*\.xml" | sed "s|^\./||" | sort -u) )
+      jar=( $(find . -type f -name "*\.jar" | sed "s|^\./||" | sort -u) )
+      kpt=( $(find . -type f -name "*\.kpt" | sed "s|^\./||" | sort -u) )
+      sob=( $(find . -type f -name "*\.so" | sed "s|^\./||" | sort -u) )
+      json=( $(find . -type f -name "*\.json" | sed "s|^\./||" | sort -u) )
+      if [ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${kpt[0]// /}" ] || [ -n "${sob[0]// /}" ] || [ -n "${json[0]// }" ]; then
+        #@APPLICATION entry
+        if [ $(grep -o @APPLICATION *.load) ] && [ -n "${sob[0]// /}" ] && [[ "${LoadType}" == A ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@APPLICATION skip to add and it's already available RC:$_RC"
+          echo -e "INFO: @APPLICATION skip to add and it's already available" &> /dev/null
+        elif [ -n "${sob[0]// /}" ] && [[ "$PWD" =~ ztpfsys ]] && [[ "${LoadType}" == A ]]; then
+          sed -i "$ a @APPLICATION" "${LoadsetName}.load"
+        fi
+        #@FILE entry sections
+        # shellcheck disable=2235
+        if [ $(grep -o @FILE *.load) ] && ([ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${json[0]// /}" ]); then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@FILE skip to add and it's already available RC:$_RC"
+          echo -e "INFO: @FILE skip to add and it's already available" &> /dev/null
+        elif [ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${json[0]// /}" ]; then
+          sed -i "$ a @FILE -p ${TPF_CHMOD} -g ${TPF_USER} -o ${TPF_GROUP}" "${LoadsetName}.load"
+        fi
+        for((i=0; i<${#xsd[*]}; i++)); #XSD File process
+        do
+          if [ -f "${APP_DVL_IMPL_CWRK}${xsd[i]}" ]; then
+            sed -i "$ a ${APP_DVL_IMPL_CWRK}${xsd[i]} /sys/tpf_pbfiles/${xsd[i]}" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#xml[*]}; i++)); #XML File process
+        do
+          if [ -f "${APP_DVL_IMPL_CWRK}${xml[i]}" ]; then
+            sed -i "$ a ${APP_DVL_IMPL_CWRK}${xml[i]} /sys/tpf_pbfiles/${xml[i]}" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#jar[*]}; i++)); #JAR File process
+        do
+          if [ -f "${APP_DVL_IMPL_CWRK}${jar[i]}" ]; then
+            path=${jar[i]//derived/}
+            path1=${path%/*}
+            path2=${path1%/*}
+            Jpath=${path2%/*}
+            sed -i "$ a ${APP_DVL_IMPL_CWRK}${jar[i]} /sys/tpf_pbfiles/apps$Jpath/${jar[i]##*/}" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#json[*]}; i++)); #JSON File process
+        do
+          if [ -f "${APP_DVL_IMPL_CWRK}${json[i]}" ]; then
+            sed -i "$ a ${APP_DVL_IMPL_CWRK}${json[i]} /sys/tpf_pbfiles/${json[i]}" "${LoadsetName}.load"
+          fi
+        done
+        #@KEYPOINT entry sections
+        if [ "$1" == TLDR ];then
+          if [ $(grep -o @KEYPOINT *.load) ] && [ "$kpt" != '' ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@FILE skip to add and it's already available RC:$_RC"
+            echo -e "INFO: @FILE skip to add and it's already available" &> /dev/null
+          elif [ "$kpt" != '' ]; then
+            sed -i "$ a @KEYPOINT" "${LoadsetName}.load"
+          fi
+          for((i=0; i<${#kpt[*]}; i++)); #KPT File process
+          do
+            if [ -f "${APP_DVL_IMPL_CWRK}${kpt[i]}" ]; then
+              if [[ "${USR_IMPL_CORE}" == air ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == res ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %G" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == oss ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %O" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %P" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == wsp ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %G" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %H" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == apo ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == pgr ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == pre ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+              fi
+            fi
+          done
+        fi
+        if [ "$1" == OLDR ] && [ -f "${LoadsetName}.load" ];then
+          loadtpf -debugfiles YES -old "${LoadsetName}.load" -o "${LoadsetName}.oldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out"; _RC=$?;
+          cat "${LoadsetName}.out";
+          if [ "$_RC" -ne 0 ]; then
+            loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${APP_DVL_IMPL_CWRK} - loadtpf OLDR creation failed. RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${APP_DVL_IMPL_CWRK} - loadtpf OLDR creation failed."
+            _RC="$EC";
+          fi
+        elif [ "$1" == TLDR ] && [ -f "${LoadsetName}.load" ];then
+          loadtpf -debugfiles YES -tld "${LoadsetName}.load" -o "${LoadsetName}.tldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out" ; _RC=$?;
+          cat "${LoadsetName}.out";
+          if [ "$_RC" -ne 0 ]; then
+            loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${APP_DVL_IMPL_CWRK} - loadtpf TLDR creation failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${APP_DVL_IMPL_CWRK} - loadtpf TLDR creation failed."
+            _RC="$EC";
+          fi
+        fi
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found at ${APP_DVL_IMPL_CWRK} RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found at ${APP_DVL_IMPL_CWRK}."
+      _RC="$EC";
+    fi
+    popd &> /dev/null
+    pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+    if [ -f "maketpf.cfg" ]; then
+      xsd=( $(find . -type f -name "*\.xsd" | sed "s|^\./||" | sort -u) )
+      xml=( $(find . -type f -name "*\.xml" | sed "s|^\./||" | sort -u) )
+      jar=( $(find . -type f -name "*\.jar" | sed "s|^\./||" | sort -u) )
+      kpt=( $(find . -type f -name "*\.kpt" | sed "s|^\./||" | sort -u) )
+      sob=( $(find . -type f -name "*\.so" | sed "s|^\./||" | sort -u) )
+      json=( $(find . -type f -name "*\.json" | sed "s|^\./||" | sort -u) )
+      cd "$APP_DVL_IMPL_CWRK"
+      if [ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${kpt[0]// /}" ] || [ -n "${sob[0]// /}" ] || [ -n "${json[0]// /}" ]; then
+        #@APPLICATION entry sections
+        if [ $(grep -o @APPLICATION *.load) ] && [ -n "${sob[0]// /}" ] && [[ "${LoadType}" == A ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@APPLICATION skip to add and it's already available RC:$_RC"
+          echo -e "INFO: @APPLICATION skip to add and it's already available" &> /dev/null
+        elif [ -n "${sob[0]// /}" ] && [[ "$PWD" =~ ztpfsys ]] && [[ "${LoadType}" == A ]]; then
+          sed -i "$ a @APPLICATION" "${LoadsetName}.load"
+        fi
+        #@FILE entry sections
+        # shellcheck disable=2235
+        if [ $(grep -o @FILE *.load) ] && ([ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${json[0]// /}" ]); then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@FILE skip to add and it's already available RC:$_RC"
+          echo -e "INFO: @FILE skip to add and it's already available" &> /dev/null
+        elif [ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${json[0]// /}" ]; then
+          sed -i "$ a @FILE -p ${TPF_CHMOD} -g ${TPF_USER} -o ${TPF_GROUP}" "${LoadsetName}.load"
+        fi
+        for((i=0; i<${#xsd[*]}; i++)); #XSD file process
+        do
+          if [ -f "${SYS_DVL_IMPL_CWRK}${xsd[i]}" ]; then
+            path=${xsd[i]//base/}
+            sed -i "$ a ${SYS_DVL_IMPL_CWRK}${xsd[i]} /sys/tpf_pbfiles$path" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#xml[*]}; i++)); #XML file process
+        do
+          if [ -f "${SYS_DVL_IMPL_CWRK}${xml[i]}" ]; then
+            path=${xml[i]//base/}
+            sed -i "$ a ${SYS_DVL_IMPL_CWRK}${xml[i]} /sys/tpf_pbfiles$path" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#jar[*]}; i++)); #JAR file process
+        do
+          if [ -f "${SYS_DVL_IMPL_CWRK}${jar[i]}" ]; then
+            path=${jar[i]//derived/}
+            path1=${path%/*}
+            path2=${path1%/*}
+            Jpath=${path2%/*}
+            sed -i "$ a ${SYS_DVL_IMPL_CWRK}${jar[i]} /sys/tpf_pbfiles/apps$Jpath/${jar[i]##*/}" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#json[*]}; i++)); #JSON File process
+        do
+          if [ -f "${SYS_DVL_IMPL_CWRK}${json[i]}" ]; then
+            path=${json[i]//base/}
+            sed -i "$ a ${SYS_DVL_IMPL_CWRK}${json[i]} /sys/tpf_pbfiles/$path" "${LoadsetName}.load"
+          fi
+        done
+        #@KEYPOINT sections
+        if [ "$1" == TLDR ];then
+          if [ $(grep -o @KEYPOINT *.load) ] && [ "$kpt" != '' ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@KEYPOINT skip to add and it's already available RC:$_RC"
+            echo -e "INFO: @KEYPOINT skip to add and it's already available" &> /dev/null
+          elif [ "$kpt" != '' ]; then
+            sed -i "$ a @KEYPOINT" "${LoadsetName}.load"
+          fi
+          for((i=0; i<${#kpt[*]}; i++)); #KPT File process
+          do
+            if [ -f "${SYS_DVL_IMPL_CWRK}${kpt[i]}" ]; then
+              path=${xsd[i]//base/}
+              if [[ "${USR_IMPL_CORE}" == air ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == res ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %G" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == oss ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %O" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %P" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == wsp ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %G" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %H" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == apo ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == pgr ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == pre ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+              fi
+            fi
+          done
+        fi
+        if [ "$1" == OLDR ] && [ -f "${LoadsetName}.load" ]; then
+          loadtpf -debugfiles YES -old "${LoadsetName}.load" -o "$LoadsetName.oldr" -l "${LoadsetName}.load" -r "$LoadsetName.report" &> "${LoadsetName}.out"; _RC=$?;
+          cat "${LoadsetName}.out";
+          if [ "$_RC" -ne 0 ]; then
+            loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${SYS_DVL_IMPL_CWRK} - loadtpf OLDR creation failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${SYS_DVL_IMPL_CWRK} - loadtpf OLDR creation failed."
+            _RC="$EC";
+          fi
+        elif [ "$1" == TLDR ] && [ -f "${LoadsetName}.load" ];then
+          loadtpf -debugfiles YES -tld "${LoadsetName}.load" -o "$LoadsetName.tldr" -l "${LoadsetName}.load" -r "$LoadsetName.report" &> "${LoadsetName}.out"; _RC=$?;
+          cat "${LoadsetName}.out";
+          if [ "$_RC" -ne 0 ]; then
+            loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${SYS_DVL_IMPL_CWRK} - loadtpf TLDR creation failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${SYS_DVL_IMPL_CWRK} - loadtpf TLDR creation failed."
+            _RC="$EC";
+          fi
+        fi
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found at ${SYS_DVL_IMPL_CWRK} RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found at ${SYS_DVL_IMPL_CWRK}."
+      _RC="$EC";
+    fi
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Non-Object files analyzed in ${APP_DVL_IMPL_CWRK} and ${SYS_DVL_IMPL_CWRK} path to add files completed - $(($(date +%-S)-_execDate))s"
+  elif [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+    _execDate=$(date +%-S)
+    pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+    if [ -f "maketpf.cfg" ]; then
+      xsd=( $(find . -type f -name "*\.xsd" | sed "s|^\./||" | sort -u) )
+      xml=( $(find . -type f -name "*\.xml" | sed "s|^\./||" | sort -u) )
+      jar=( $(find . -type f -name "*\.jar" | sed "s|^\./||" | sort -u) )
+      kpt=( $(find . -type f -name "*\.kpt" | sed "s|^\./||" | sort -u) )
+      sob=( $(find . -type f -name "*\.so" | sed "s|^\./||" | sort -u) )
+      json=( $(find . -type f -name "*\.json" | sed "s|^\./||" | sort -u) )
+      if [ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${kpt[0]// /}" ] || [ -n "${sob[0]// /}" ] || [ -n "${json[0]// /}" ]; then
+        #@APPLICATION entry sections
+        if [ $(grep -o @APPLICATION *.load) ] && [ -n "${sob[0]// /}" ] && [[ "${LoadType}" == A ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@APPLICATION skip to add and it's already available RC:$_RC"
+          echo -e "INFO: @APPLICATION skip to add and it's already available" &> /dev/null
+        elif [ -n "${sob[0]// /}" ] && [[ "$PWD" =~ ztpfsys ]] && [[ "${LoadType}" == A ]]; then
+          sed -i "$ a @APPLICATION" "${LoadsetName}.load"
+        fi
+        #@FILE entry sections
+        # shellcheck disable=2235
+        if [ $(grep -o @FILE *.load) ] && ([ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${json[0]// /}" ]); then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@FILE skip to add and it's already available RC:$_RC"
+          echo -e "INFO: @FILE skip to add and it's already available" &> /dev/null
+        elif [ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${json[0]// /}" ]; then
+          sed -i "$ a @FILE -p ${TPF_CHMOD} -g ${TPF_USER} -o ${TPF_GROUP}" "${LoadsetName}.load"
+        fi
+        for((i=0; i<${#xsd[*]}; i++)); #XSD file process
+        do
+          if [ -f "${APP_DVL_IMPL_CWRK}${xsd[i]}" ]; then
+            sed -i "$ a ${APP_DVL_IMPL_CWRK}${xsd[i]} /sys/tpf_pbfiles/${xsd[i]}" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#xml[*]}; i++)); #XML file process
+        do
+          if [ -f "${APP_DVL_IMPL_CWRK}${xml[i]}" ]; then
+            sed -i "$ a ${APP_DVL_IMPL_CWRK}${xml[i]} /sys/tpf_pbfiles/${xml[i]}" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#jar[*]}; i++)); #JAR file process
+        do
+          if [ -f "${APP_DVL_IMPL_CWRK}${jar[i]}" ]; then
+            path=${jar[i]//derived/}
+            path1=${path%/*}
+            path2=${path1%/*}
+            Jpath=${path2%/*}
+            sed -i "$ a ${APP_DVL_IMPL_CWRK}${jar[i]} /sys/tpf_pbfiles/apps$Jpath/${jar[i]##*/}" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#json[*]}; i++)); #JSON file process
+        do
+          if [ -f "${APP_DVL_IMPL_CWRK}${json[i]}" ]; then
+            sed -i "$ a ${APP_DVL_IMPL_CWRK}${json[i]} /sys/tpf_pbfiles/${json[i]}" "${LoadsetName}.load"
+          fi
+        done
+        #@KEYPOINT entry sections
+        if [ "$1" == TLDR ];then
+          if [ $(grep -o @KEYPOINT *.load) ] && [ "$kpt" != '' ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@KEYPOINT skip to add and it's already available RC:$_RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: @KEYPOINT skip to add and it's already available"
+          elif [ "$kpt" != '' ]; then
+            sed -i "$ a @KEYPOINT" "${LoadsetName}.load"
+          fi
+          for((i=0; i<${#kpt[*]}; i++)); #KPT file process
+          do
+            if [ -f "${APP_DVL_IMPL_CWRK}${kpt[i]}" ]; then
+              if [[ "${USR_IMPL_CORE}" == air ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == res ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %G" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == oss ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %O" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %P" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == wsp ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %G" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %H" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == apo ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == pgr ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == pre ]]; then
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${APP_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+              fi
+            fi
+          done
+        fi
+        if [ "$1" == OLDR ] && [ -f "${LoadsetName}.load" ];then
+          loadtpf -debugfiles YES -old "${LoadsetName}.load" -o "$LoadsetName.oldr" -l "${LoadsetName}.load" -r "$LoadsetName.report" &> "${LoadsetName}.out"; _RC=$?;
+          cat "${LoadsetName}.out";
+          if [ "$_RC" -ne 0 ]; then
+            loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${APP_DVL_IMPL_CWRK} - loadtpf OLDR creation failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${APP_DVL_IMPL_CWRK} - loadtpf OLDR creation failed."
+            _RC="$EC";
+          fi
+        elif [ "$1" == TLDR ] && [ -f "${LoadsetName}.load" ];then
+          loadtpf -debugfiles YES -tld "${LoadsetName}.load" -o "$LoadsetName.tldr" -l "${LoadsetName}.load" -r "$LoadsetName.report" &> "${LoadsetName}.out"; _RC=$?;
+          cat "${LoadsetName}.out";
+          if [ "$_RC" -ne 0 ]; then
+            loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${APP_DVL_IMPL_CWRK} - loadtpf OLDR creation failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${APP_DVL_IMPL_CWRK} - loadtpf OLDR creation failed."
+            _RC="$EC";
+          fi
+        fi
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found at ${SYS_DVL_IMPL_CWRK} RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found at ${SYS_DVL_IMPL_CWRK}."
+      _RC="$EC";
+    fi
+    popd &> /dev/null
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Non-Object files analyzed in ${APP_DVL_IMPL_CWRK} path to add files completed - $(($(date +%-S)-_execDate))s"
+  elif [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+    _execDate=$(date +%-S)
+    pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+    if [ -f "maketpf.cfg" ]; then
+      xsd=( $(find . -type f -name "*\.xsd" | sed "s|^\./||" | sort -u) )
+      xml=( $(find . -type f -name "*\.xml" | sed "s|^\./||" | sort -u) )
+      jar=( $(find . -type f -name "*\.jar" | sed "s|^\./||" | sort -u) )
+      kpt=( $(find . -type f -name "*\.kpt" | sed "s|^\./||" | sort -u) )
+      sob=( $(find . -type f -name "*\.so" | sed "s|^\./||" | sort -u) )
+      json=( $(find . -type f -name "*\.json" | sed "s|^\./||" | sort -u) )
+      if [ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${kpt[0]// /}" ] || [ -n "${sob[0]// /}" ] || [ -n "${json[0]// /}" ]; then
+        #@APPLICATION entry sections
+        if [ $(grep -o @APPLICATION *.load) ] && [ -n "${sob[0]// /}" ] && [[ "${LoadType}" == A ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@APPLICATION skip to add and it's already available RC:$_RC"
+          echo -e "INFO: @APPLICATION skip to add and it's already available" &> /dev/null
+        elif [ -n "${sob[0]// /}" ] && [[ "$PWD" =~ ztpfsys ]] && [[ "${LoadType}" == A ]]; then
+          sed -i "$ a @APPLICATION" "${LoadsetName}.load"
+        fi
+        #@FILE entry sections
+        # shellcheck disable=2235
+        if [ $(grep -o @FILE *.load) ] && ([ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${json[0]// /}" ]); then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@FILE skip to add and it's already available RC:$_RC"
+          echo -e "INFO: @FILE skip to add and it's already available" &> /dev/null
+        elif [ -n "${xml[0]// /}" ] || [ -n "${xsd[0]// /}" ] || [ -n "${jar[0]// /}" ] || [ -n "${json[0]// /}" ]; then
+          sed -i "$ a @FILE -p ${TPF_CHMOD} -g ${TPF_USER} -o ${TPF_GROUP}" "${LoadsetName}.load"
+        fi
+        for((i=0; i<${#xsd[*]}; i++)); #XSD file process
+        do
+          if [ -f "${SYS_DVL_IMPL_CWRK}${xsd[i]}" ]; then
+            path=${xsd[i]//base/}
+            sed -i "$ a ${SYS_DVL_IMPL_CWRK}${xsd[i]} /sys/tpf_pbfiles$path" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#xml[*]}; i++)); #XML file process
+        do
+          if [ -f "${SYS_DVL_IMPL_CWRK}${xml[i]}" ]; then
+            path=${xml[i]//base/}
+            sed -i "$ a ${SYS_DVL_IMPL_CWRK}${xml[i]} /sys/tpf_pbfiles$path" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#jar[*]}; i++)); #JAR file process
+        do
+          if [ -f "${SYS_DVL_IMPL_CWRK}${jar[i]}" ]; then
+            path=${jar[i]//derived/}
+            path1=${path%/*}
+            path2=${path1%/*}
+            Jpath=${path2%/*}
+            sed -i "$ a ${SYS_DVL_IMPL_CWRK}${jar[i]} /sys/tpf_pbfiles/apps$Jpath/${jar[i]##*/}" "${LoadsetName}.load"
+          fi
+        done
+        for((i=0; i<${#json[*]}; i++)); #XSD file process
+        do
+          if [ -f "${SYS_DVL_IMPL_CWRK}${json[i]}" ]; then
+            path=${json[i]//base/}
+            sed -i "$ a ${SYS_DVL_IMPL_CWRK}${json[i]} /sys/tpf_pbfiles$path" "${LoadsetName}.load"
+          fi
+        done
+        #@KEYPOINT entry sections
+        if [ "$1" == TLDR ];then
+          if [ $(grep -o @KEYPOINT *.load) ] && [ "$kpt" != '' ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:@KEYPOINT skip to add and it's already available RC:$RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: @KEYPOINT skip to add and it's already available"
+          elif [ "$kpt" != '' ]; then
+            sed -i "$ a @KEYPOINT" "${LoadsetName}.load"
+          fi
+          for((i=0; i<${#kpt[*]}; i++)); #KPT file process
+          do
+            if [ -f "${SYS_DVL_IMPL_CWRK}${kpt[i]}" ]; then
+              path=${kpt[i]//base/}
+              if [[ "${USR_IMPL_CORE}" == air ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == res ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %G" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == oss ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %O" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %P" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == wsp ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %G" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %H" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == apo ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == pgr ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+              elif [[ "${USR_IMPL_CORE}" == pre ]]; then
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %A" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %B" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %C" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %D" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %E" "${LoadsetName}.load"
+                sed -i "$ a ${SYS_DVL_IMPL_CWRK}${kpt[i]} %F" "${LoadsetName}.load"
+              fi
+            fi
+          done
+        fi
+        if [ "$1" == OLDR ] && [ -f "${LoadsetName}.load" ];then
+          loadtpf -debugfiles YES -old "${LoadsetName}.load" -o "$LoadsetName.oldr" -l "${LoadsetName}.load" -r "$LoadsetName.report" &> "${LoadsetName}.out"; _RC=$?;
+          cat "${LoadsetName}.out";
+          if [ "$_RC" -ne 0 ]; then
+            loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${SYS_DVL_IMPL_CWRK} - loadtpf OLDR creation failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${SYS_DVL_IMPL_CWRK} - loadtpf OLDR creation failed."
+            _RC="$EC";
+          fi
+        elif [ "$1" == TLDR ] && [ -f "${LoadsetName}.load" ];then
+          loadtpf -debugfiles YES -tld "${LoadsetName}.load" -o "$LoadsetName.tldr" -l "${LoadsetName}.load" -r "$LoadsetName.report" &> "${LoadsetName}.out"; _RC=$?;
+          cat "${LoadsetName}.out";
+          if [ "$_RC" -ne 0 ]; then
+            loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${SYS_DVL_IMPL_CWRK} - loadtpf TLDR creation failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${SYS_DVL_IMPL_CWRK} - loadtpf TLDR creation failed."
+            _RC="$EC";
+          fi
+        fi
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found at ${SYS_DVL_IMPL_CWRK} RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found at ${SYS_DVL_IMPL_CWRK}."
+      _RC="$EC";
+    fi
+    popd &> /dev/null
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Non-Object files analyzed in ${SYS_DVL_IMPL_CWRK} path to add files completed - $(($(date +%-S)-_execDate))s"
+  fi
+  return "$_RC"
+}
+#
+#-----------------------------------------------------------------------------#
+#
+function oldrBuild {
+  local errSeg;
+  local _errList=' ';
+  local _RC=0;
+  local _errExclude;
+  local err;
+  local sbr;
+  local errFNFT;
+  local errFN;
+  local sbrFNFT;
+  local sbrFN;
+  local _execDate;
+  warningExclude;
+  if [ -d "${APP_DVL_IMPL_CWRK}" ] && [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+    err=( $(find "${APP_DVL_IMPL_CWRK}" "${SYS_DVL_IMPL_CWRK}" -type f -name "*\.err" 2> /dev/null) )
+    #echo "${err[@]}"                  #DEBUG
+    sbr=( $(find "${APP_DVL_IMPL_CWRK}/sbtasm" -type f 2> /dev/null) )
+    #echo "${sbr[@]}"                  #DEBUG
+    for errFile in "${err[@]}"
+    do
+      errFNFT="${errFile##*/}"
+      errFN="${errFNFT%.*}"
+      if [[ "${errFNFT}" == +($ERR_EXCL) ]] && [ "${#sbr[@]}" -eq 0 ]; then
+        _errExclude="${_errExclude/ /} ${errFile}"
+      elif [[ "${errFNFT}" != +($ERR_EXCL) ]] && [ "${#sbr[@]}" -eq 0 ]; then
+        grep -w "directories do not exist:" "${errFile}"; _RC=$?
+        if [ "${_RC}" -eq 0 ]; then
+          _errExclude="${_errExclude/ /} ${errFile}"
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${errFile} The error created due to following APPL or TPF ROOT directories do not exist RC:$_RC"
+        else
+          _errList="${_errList/ /} ${errFNFT}"
+        fi
+      elif [[ "${errFNFT}" != +($ERR_EXCL) ]] && [ "${#sbr[@]}" -ne 0 ]; then
+        for sbrFile in "${sbr[@]}"
+        do
+          sbrFNFT="${sbrFile##*/}"
+          sbrFN="${sbrFNFT%.*}"
+          if [[ "${errFN,,}" == "${sbrFN,,}" ]]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${sbrFNFT} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n RC:$_RC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${sbrFNFT} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n";
+            _errExclude="${_errExclude/ /} ${sbrFNFT}"
+            _errList="${_errList//${errFNFT}/}"
+            break
+          elif [[ ! "${_errList}" =~ ${errFNFT} ]]; then
+            grep -w "directories do not exist:" "${errFile}"; _RC=$?
+            if [ "${_RC}" -eq 0 ]; then
+              _errExclude="${_errExclude/ /} ${errFile}"
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${errFile} The error created due to following APPL or TPF ROOT directories do not exist: RC:$_RC"
+            else
+              _errList="${_errList/ /} ${errFNFT}"
+            fi
+          fi
+        done
+      fi
+    done
+    if [[ "${_errList}" == ' ' ]]; then
+      cd "$APP_DVL_IMPL_CWRK"
+      if [ -f "maketpf.cfg" ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Loadset creation initiated - OLDR RC:$_RC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Loadset creation initiated - OLDR.";
+        so=( $(find "${APP_DVL_IMPL_CWRK}" "${SYS_DVL_IMPL_CWRK}" -type f -name "*\.so" -not -name "lib*" -not -path "*/lib/*" 2> /dev/null) )
+        if [ "${so[0]}" != '' ]; then
+          so_app=( $(find "${APP_DVL_IMPL_CWRK}" -type f -name "*\.so" -not -name "lib*" -not -path "*/lib/*" 2> /dev/null) )
+          so_sys=( $(find "${SYS_DVL_IMPL_CWRK}" -type f -name "*\.so" -not -name "lib*" -not -path "*/lib/*" 2> /dev/null) )
+          if [ "${so_app[0]}" != '' ] && [ "${so_sys[0]}" != '' ]; then
+            loadtpf -debugfiles YES -oldr "${so_app[@]}" "${so_sys[@]}" -s "${LoadsetName}" -o "${LoadsetName}.oldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out"; _RC=$?;
+            cat "${LoadsetName}.out"
+            if [ "$_RC" -ne 0 ]; then
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF include paths ${APP_DVL_IMPL_CWRK} and ${SYS_DVL_IMPL_CWRK} - OLDR creation failed RC:$EC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF include paths ${APP_DVL_IMPL_CWRK} and ${SYS_DVL_IMPL_CWRK} - OLDR creation failed."
+              loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+              _RC="$EC";
+            fi
+          elif [ "${so_app[0]}" != '' ]; then
+            loadtpf -debugfiles YES -oldr "${so_app[@]}" -s "${LoadsetName}" -o "${LoadsetName}.oldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out"; _RC=$?;
+            cat "${LoadsetName}.out"
+            if [ "$_RC" -ne 0 ]; then
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF include paths ${APP_DVL_IMPL_CWRK} - OLDR creation failed RC:$EC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF include paths ${APP_DVL_IMPL_CWRK} - OLDR creation failed."
+              loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+              _RC="$EC";
+            fi
+          elif [ "${so_sys[0]}" != '' ]; then
+            loadtpf -debugfiles YES -oldr "${so_sys[@]}" -s "${LoadsetName}" -o "${LoadsetName}.oldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out"; _RC=$?;
+            cat "${LoadsetName}.out"
+            if [ "$_RC" -ne 0 ]; then
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF include paths ${SYS_DVL_IMPL_CWRK} - OLDR creation failed RC:$EC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF include paths ${SYS_DVL_IMPL_CWRK} - OLDR creation failed."
+              loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+              _RC="$EC";
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF .SO NOT FOUND - ${APP_DVL_IMPL_CWRK} ${SYS_DVL_IMPL_CWRK} RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF .SO NOT FOUND - ${APP_DVL_IMPL_CWRK} ${SYS_DVL_IMPL_CWRK}"
+            _RC="$EC";
+          fi
+          if [ "$_RC" -eq 0 ]; then
+            addfile "OLDR"; _RC=$?;
+          fi
+        else
+          echo "@DEFINE" > "${LoadsetName}.load"
+          sed -i "$ a SYSID=BSS" "${LoadsetName}.load"
+          sed -i "$ a DEBUGFILES=YES" "${LoadsetName}.load"
+          sed -i "$ a @LOADSET ${LoadsetName}" "${LoadsetName}.load"
+          addfile "OLDR"; _RC=$?;
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found at ${APP_DVL_IMPL_CWRK} RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found at ${APP_DVL_IMPL_CWRK}."
+        _RC="$EC";
+      fi
+    else
+      errSeg="${_errList}"
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file identified in this project - ${errSeg} RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Error file identified in this project - ${errSeg}";
+      loadErr="Error file identified in this project"
+      _RC="$EC";
+    fi
+  elif [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+    cd "$APP_DVL_IMPL_CWRK"
+    if [ -f "maketpf.cfg" ]; then
+      err=( $(find . -type f -name "*\.err" 2> /dev/null) )
+      sbr=( $(find sbtasm -type f 2> /dev/null) )
+      for errFile in "${err[@]}"
+      do
+        errFNFT="${errFile##*/}"
+        errFN="${errFNFT%.*}"
+        if [[ "${errFNFT}" == +($ERR_EXCL) ]] && [ "${#sbr[@]}" -eq 0 ]; then
+          _errExclude="${_errExclude/ /} ${errFile}"
+        elif [[ "${errFNFT}" != +($ERR_EXCL) ]] && [ "${#sbr[@]}" -eq 0 ]; then
+          grep -w "directories do not exist:" "${errFNFT}"; _RC=$?
+          if [ "${_RC}" -eq 0 ]; then
+            _errExclude="${_errExclude/ /} ${errFile}"
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${errFNFT} The error created due to following APPL or TPF ROOT directories do not exist: RC:$_RC"
+          else
+            _errList="${_errList/ /} ${errFNFT}"
+          fi
+        elif [[ "${errFNFT}" != +($ERR_EXCL) ]] && [ "${#sbr[@]}" -ne 0 ]; then
+          for sbrFile in "${sbr[@]}"
+          do
+            sbrFNFT="${sbrFile##*/}"
+            sbrFN="${sbrFNFT%.*}"
+            if [[ "${errFN,,}" == "${sbrFN,,}" ]]; then
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${errFNFT} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n RC:$RC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${errFNFT} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n";
+              _errExclude="${_errExclude/ /} ${errFile}"   #Add to exclusion list
+              _errList="${_errList//${errFNFT}/}"          #Remove this error file from list
+              break;
+            elif [[ ! "${_errList}" =~ ${errFNFT} ]]; then
+              grep -w "directories do not exist:" "${errFNFT}"; _RC=$?
+              if [ "${_RC}" -eq 0 ]; then
+                _errExclude="${_errExclude/ /} ${errFile}"
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${errFNFT} The error created due to following APPL or TPF ROOT directories do not exist: RC:$_RC"
+              else
+                _errList="${_errList/ /} ${errFNFT}"
+              fi
+            fi
+          done
+        fi
+      done
+      if [[ "${_errList}" == ' ' ]]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Loadset creation initiated - OLDR RC:$RC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Loadset creation initiated - OLDR.";
+        so=( $(find "${APP_DVL_IMPL_CWRK}" -type f -name "*\.so" -not -name "lib*" -not -path "*/lib/*" 2> /dev/null) )
+        if [ "${so[0]}" != '' ]; then
+          loadtpf -debugfiles YES -oldr "${so[@]}" -s "${LoadsetName}" -o "${LoadsetName}.oldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out"; _RC=$?;
+          cat "${LoadsetName}.out"
+          if [ "$_RC" -ne 0 ]; then
+            loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF include paths ${APP_DVL_IMPL_CWRK} - OLDR creation failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF include paths ${APP_DVL_IMPL_CWRK} - OLDR creation failed."
+            _RC="$EC";
+          fi
+          if [ "$_RC" -eq 0 ]; then
+            addfile "OLDR"; _RC=$?;
+          fi
+        else
+          echo "@DEFINE" > "${LoadsetName}.load"
+          sed -i "$ a SYSID=BSS" "${LoadsetName}.load"
+          sed -i "$ a DEBUGFILES=YES" "${LoadsetName}.load"
+          sed -i "$ a @LOADSET ${LoadsetName}" "${LoadsetName}.load"
+          addfile "OLDR"; _RC=$?;
+        fi
+      else
+        errSeg="${_errList}"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file identified in this project - ${errSeg} RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Error file identified in this project - ${errSeg}";
+        loadErr="Error file identified in this project"
+        _RC="$EC";
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found at ${APP_DVL_IMPL_CWRK} RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found at ${APP_DVL_IMPL_CWRK}."
+      _RC="$EC";
+    fi
+  elif [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+    cd "$SYS_DVL_IMPL_CWRK"
+    if [ -f "maketpf.cfg" ]; then
+      #Error handling
+      err=( $(find . -type f -name "*\.err") )
+      for errFile in "${err[@]}"
+      do
+        errFNFT="${errFile#*/}"
+        errFN="${errFNFT%.*}"
+        if [[ "${errFNFT}" == +($ERR_EXCL) ]]; then
+          _errExclude="${_errExclude/ /} ${errFNFT}"
+        else
+          _errList="${_errList/ /} ${errFNFT}"
+        fi
+      done
+      if [[ "${_errList}" == ' ' ]]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Loadset creation initiated - OLDR RC:$RC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Loadset creation initiated - OLDR.";
+        so=( $(find "${SYS_DVL_IMPL_CWRK}" -type f -name "*\.so" -not -name "lib*" -not -path "*/lib/*" 2> /dev/null) )
+        if [ "${so[0]}" != '' ]; then
+          loadtpf -debugfiles YES -oldr "${so[@]}" -s "${LoadsetName}" -o "${LoadsetName}.oldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out"; _RC=$?;
+          cat "${LoadsetName}.out";
+          if [ "${_RC}" -ne 0 ]; then
+            loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF include paths ${SYS_DVL_IMPL_CWRK} - OLDR creation failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF include paths ${SYS_DVL_IMPL_CWRK} - OLDR creation failed."
+            _RC="$EC";
+          fi
+          if [ "${_RC}" -eq 0 ]; then
+            addfile "OLDR"; _RC=$?;
+          fi
+        else
+          echo "@DEFINE" > "${LoadsetName}.load"
+          sed -i "$ a SYSID=BSS" "${LoadsetName}.load"
+          sed -i "$ a DEBUGFILES=YES" "${LoadsetName}.load"
+          sed -i "$ a @LOADSET ${LoadsetName}" "${LoadsetName}.load"
+          addfile "OLDR"; _RC=$?;
+        fi
+      else
+        errSeg="${_errList}"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file identified in this project - ${errSeg} RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Error file identified in this project - ${errSeg}";
+        loadErr="Error file identified in this project"
+        _RC="$EC";
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found at ${SYS_DVL_IMPL_CWRK} RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found at ${SYS_DVL_IMPL_CWRK}."
+      _RC="$EC";
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Workspace not found at ${DVL_TPF_APP} and ${DVL_TPF_SYS} RC:$EC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Workspace not found at ${DVL_TPF_APP} and ${DVL_TPF_SYS}."
+    _RC="$EC";
+  fi
+  if [ "${_RC}" -eq 0 ]; then
+    rm -f "${DVL_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE}"/*
+    mkdir -p "${DVL_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE}"
+    if [ -f "${LoadsetName}.load" ] && [ -f "${LoadsetName}.report" ]; then
+      cp --preserve=all "${LoadsetName}"* "${DVL_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE}/" && rm "${LoadsetName}"*
+      chmod +x "${DVL_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE}"/*
+    else
+      rm -f "${LoadsetName}"*
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF Failed to create RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF Failed to create"
+      _RC="$EC"
+    fi
+    echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Loadset realted files unable to move due to previous error RC:$EC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Loadset realted files unable to move due to previous error.";
+    echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+    echo -e "\\nJSON RESULT --> { \"errorMessage\" : \"${loadErr[*]//\"/}\", \"errorFiles\" : \"${errSeg[*]}\" }\n"
+    _RC="$EC";
+  fi
+  return "${_RC}";
+}
+#
+#-----------------------------------------------------------------------------#
+#
+function tldrBuild {
+  local errSeg;
+  local _errList=' ';
+  local _RC=0;
+  local _errExclude;
+  local err;
+  local sbr;
+  local Csv;
+  local errFNFT;
+  local errFN;
+  local sbrFNFT;
+  local sbrFN;
+  local _execDate;
+  warningExclude;
+  if [ -d "${APP_DVL_IMPL_CWRK}" ] && [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+    err=( $(find "${APP_DVL_IMPL_CWRK}" "${SYS_DVL_IMPL_CWRK}" -type f -name "*\.err") )
+    sbr=( $(find "${APP_DVL_IMPL_CWRK}sbtasm" "${SYS_DVL_IMPL_CWRK}" -type f 2> /dev/null) )
+    Csv=( $(find "${APP_DVL_IMPL_CWRK}" "${SYS_DVL_IMPL_CWRK}" -type f -name "*\.csv") )
+    if [ "${Csv[0]}" == '' ]; then
+      for errFile in "${err[@]}"
+      do
+        errFNFT="${errFile##*/}"
+        errFN="${errFNFT%.*}"
+        if [[ "${errFNFT}" == +($ERR_EXCL) ]] && [ "${#sbr[@]}" -eq 0 ]; then
+          _errExclude="${_errExclude/ /} ${errFile}"
+        elif [[ "${errFNFT}" != +($ERR_EXCL) ]] && [ "${#sbr[@]}" -eq 0 ]; then
+          grep -w "directories do not exist:" "${errFile}" ; _RC=$?
+          if [ "${_RC}" -eq 0 ]; then
+            _errExclude="${_errExclude/ /} ${errFile}"
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${errFNFT} The error created due to following APPL or TPF ROOT directories do not exist: RC:$_RC"
+          else
+            _errList="${_errList/ /} ${errFNFT}"
+          fi
+          #_errList="${_errList/ /} ${errFNFT}"
+        elif [[ "${errFNFT}" != +($ERR_EXCL) ]] && [ "${#sbr[@]}" -ne 0 ]; then
+          for sbrFile in "${sbr[@]}"
+          do
+            sbrFNFT="${sbrFile##*/}"
+            sbrFN="${sbrFNFT%.*}"
+            if [[ "${errFN,,}" == "${sbrFN,,}" ]]; then
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${err[0]} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n RC:$_RC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${err[0]} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n";
+              _errExclude="${_errExclude/ /} ${err[0]}"
+              _errList="${_errList//${errFNFT}/}"
+              break;
+            elif [[ ! "${_errList}" =~ ${errFNFT} ]]; then
+              #_errList="${_errList/ /} ${errFNFT}"
+              grep -w "directories do not exist:" "${errFile}"; _RC=$?
+              if [ "${_RC}" -eq 0 ]; then
+                _errExclude="${_errExclude/ /} ${errFile}"
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${errFNFT} The error created due to following APPL or TPF ROOT directories do not exist: RC:$_RC"
+              else
+                _errList="${_errList/ /} ${errFNFT}"
+              fi
+            fi
+          done
+        fi
+      done
+      if [[ "${_errList}" == ' ' ]]; then
+        cd "$APP_DVL_IMPL_CWRK"
+        if [ -f "maketpf.cfg" ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Loadset creation initiated - TLDR RC:$_RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Loadset creation initiated - TLDR.";
+          so=( $(find "${APP_DVL_IMPL_CWRK}" "${SYS_DVL_IMPL_CWRK}" -type f -name "*\.so" -not -name "lib*" -not -path "*/lib/*" 2> /dev/null) )
+          if [ "${so[0]}" != '' ]; then
+            so_app=( $(find "${APP_DVL_IMPL_CWRK}" -type f -name "*\.so" -not -name "lib*" -not -path "*/lib/*" 2> /dev/null) )
+            so_sys=( $(find "${SYS_DVL_IMPL_CWRK}" -type f -name "*\.so" -not -name "lib*" -not -path "*/lib/*" 2> /dev/null) )
+            if [ "${so_app[0]}" != '' ] && [ "${so_sys[0]}" != '' ]; then
+              loadtpf -debugfiles YES -tldr "${so_app[@]}" "${so_sys[@]}" -s "${LoadsetName}" -o "${LoadsetName}.tldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out"; _RC=$?;
+              cat "${LoadsetName}.out";
+              if [ "$_RC" -ne 0 ]; then
+                loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF include paths ${APP_DVL_IMPL_CWRK} and ${SYS_DVL_IMPL_CWRK} - TLDR creation failed RC:$EC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF include paths ${APP_DVL_IMPL_CWRK} and ${SYS_DVL_IMPL_CWRK} - TLDR creation failed."
+                _RC="$EC";
+              fi
+            elif [ "${so_app[0]}" != '' ]; then
+              loadtpf -debugfiles YES -tldr "${so_app[@]}" -s "${LoadsetName}" -o "${LoadsetName}.tldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out"; _RC=$?;
+              cat "${LoadsetName}.out";
+              if [ "$_RC" -ne 0 ]; then
+                loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF include paths ${APP_DVL_IMPL_CWRK} - TLDR creation failed RC:$EC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF include paths ${APP_DVL_IMPL_CWRK} - TLDR creation failed."
+                _RC="$EC";
+              fi
+            elif [ "${so_sys[0]}" != '' ]; then
+              loadtpf -debugfiles YES -tldr "${so_sys[@]}" -s "${LoadsetName}" -o "${LoadsetName}.tldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out"; _RC=$?;
+              cat "${LoadsetName}.out";
+              if [ "$_RC" -ne 0 ]; then
+                loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF include paths ${APP_DVL_IMPL_CWRK} - TLDR creation failed RC:$EC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF include paths ${SYS_DVL_IMPL_CWRK} - TLDR creation failed."
+                _RC="$EC";
+              fi
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF .SO NOT FOUND - ${APP_DVL_IMPL_CWRK} ${SYS_DVL_IMPL_CWRK} RC:$EC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF .SO NOT FOUND - ${APP_DVL_IMPL_CWRK} ${SYS_DVL_IMPL_CWRK}"
+              _RC="$EC";
+            fi
+            if [ "$_RC" -eq 0 ]; then
+              addfile "TLDR"; _RC=$?;
+            fi
+          else
+            echo "@DEFINE" > "${LoadsetName}.load"
+            sed -i "$ a SYSID=BSS" "${LoadsetName}.load"
+            sed -i "$ a DEBUGFILES=YES" "${LoadsetName}.load"
+            addfile "TLDR"; _RC=$?;
+          fi
+          if [ "$_RC" -ne 0 ]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${APP_DVL_IMPL_CWRK} - loadtpf failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${APP_DVL_IMPL_CWRK} - loadtpf failed."
+            _RC="$EC";
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found at ${APP_DVL_IMPL_CWRK} RC:$EC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found at ${APP_DVL_IMPL_CWRK}."
+          _RC="$EC";
+        fi
+      else
+        errSeg="${_errList}"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file identified in this project - ${errSeg} RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Error file identified in this project - ${errSeg}";
+        loadErr="Error file identified in this project"
+        _RC="$EC";
+      fi
+    else
+      _RC="$EC";
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:CSV file included, so generate .TLDR and ftp .TLDR Manually RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: CSV file included, so generate .TLDR and ftp .TLDR Manually."
+    fi
+  elif [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+    cd "$APP_DVL_IMPL_CWRK"
+    Csv=( $(find "${APP_DVL_IMPL_CWRK}" -type f -name "*\.csv") )
+    if [ "${Csv[0]}" == '' ]; then
+      if [ -f "maketpf.cfg" ]; then
+        err=( $(find . -type f -name "*\.err" 2> /dev/null) )
+        sbr=( $(find sbtasm -type f 2> /dev/null) )
+        for errFile in "${err[@]}"
+        do
+          errFNFT="${errFile##*/}"
+          errFN="${errFNFT%.*}"
+          if [[ "${errFNFT}" == +($ERR_EXCL) ]] && [ "${#sbr[@]}" -eq 0 ]; then
+            _errExclude="${_errExclude/ /} ${errFile}"
+          elif [[ "${errFNFT}" != +($ERR_EXCL) ]] && [ "${#sbr[@]}" -eq 0 ]; then
+            grep -w "directories do not exist:" "${errFNFT}"; _RC=$?
+            if [ "${_RC}" -eq 0 ]; then
+              _errExclude="${_errExclude/ /} ${errFile}"
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${errFNFT} The error created due to following APPL or TPF ROOT directories do not exist: RC:$_RC"
+            else
+              _errList="${_errList/ /} ${errFNFT}"
+            fi
+            #_errList="${_errList/ /} ${errFNFT}"
+          elif [[ "${errFNFT}" != +($ERR_EXCL) ]] && [ "${#sbr[@]}" -ne 0 ]; then
+            for sbrFile in "${sbr[@]}"
+            do
+              sbrFNFT="${sbrFile##*/}"
+              sbrFN="${sbrFNFT%.*}"
+              if [[ "${errFN,,}" == "${sbrFN,,}" ]]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File ${err[0]} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n RC:$_RC"
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: File ${err[0]} part of sabretalk warning exception - PROCEEDED WITH COMPILER WARNING\n";
+                _errExclude="${_errExclude/ /} ${err[0]}"
+                _errList="${_errList//${errFNFT}/}"
+                break;
+              elif [[ ! "${_errList}" =~ ${errFNFT} ]]; then
+                grep -w "directories do not exist:" "${errFNFT}"; _RC=$?
+                if [ "${_RC}" -eq 0 ]; then
+                  _errExclude="${_errExclude/ /} ${errFile}"
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${errFNFT} The error created due to following APPL or TPF ROOT directories do not exist: RC:$_RC"
+                else
+                  _errList="${_errList/ /} ${errFNFT}"
+                fi
+                #_errList="${_errList/ /} ${errFNFT}"
+              fi
+            done
+          fi
+        done
+        if [[ "${_errList}" == ' ' ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Loadset creation initiated - TLDR RC:$_RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Loadset creation initiated - TLDR.";
+          so=( $(find "${APP_DVL_IMPL_CWRK}" -type f -name "*\.so" -not -name "lib*"-not -path "*/lib/*" 2> /dev/null) )
+          if [ "${so[0]}" != '' ]; then
+            loadtpf -debugfiles YES -tldr "${so[@]}" -s "${LoadsetName}" -o "${LoadsetName}.tldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &>"${LoadsetName}.out"; _RC=$?;
+            cat "${LoadsetName}.out";
+            if [ "$_RC" -ne 0 ]; then
+              loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF include paths ${APP_DVL_IMPL_CWRK} - TLDR creation failed RC:$EC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF include paths ${APP_DVL_IMPL_CWRK} - TLDR creation failed."
+              _RC="$EC";
+            fi
+            if [ "$_RC" -eq 0 ]; then
+              addfile "TLDR"; _RC=$?
+            fi
+          else
+            echo "@DEFINE" > "${LoadsetName}.load"
+            sed -i "$ a SYSID=BSS" "${LoadsetName}.load"
+            sed -i "$ a DEBUGFILES=YES" "${LoadsetName}.load"
+            addfile "TLDR"; _RC=$?;
+          fi
+          if [ "$_RC" -ne 0 ]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${APP_DVL_IMPL_CWRK} - loadtpf failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${APP_DVL_IMPL_CWRK} - loadtpf failed."
+            _RC="$EC";
+          fi
+        else
+          errSeg="${_errList}"
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file identified in this project - ${errSeg} RC:$EC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Error file identified in this project - ${errSeg}";
+          loadErr="Error file identified in this project"
+          _RC="$EC";
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found at ${APP_DVL_IMPL_CWRK} RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found at ${APP_DVL_IMPL_CWRK}."
+        _RC="$EC";
+      fi
+    else
+      _RC="$EC";
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:CSV file included, so generate .TLDR and ftp .TLDR Manually RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: CSV file included, so generate .TLDR and ftp .TLDR Manually."
+    fi
+  elif [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+    cd "$SYS_DVL_IMPL_CWRK"
+    Csv=( $(find "${SYS_DVL_IMPL_CWRK}" -type f -name "*\.csv") )
+    if [ "${Csv[0]}" == '' ]; then
+      if [ -f "maketpf.cfg" ]; then
+        #Error handling
+        err=( $(find . -type f -name "*\.err") )
+        for errFile in "${err[@]}"
+        do
+          errFNFT="${errFile#*/}"
+          errFN="${errFNFT%.*}"
+          if [[ "${errFNFT}" == +($ERR_EXCL) ]]; then
+            _errExclude="${_errExclude/ /} ${errFile}"
+          else
+            grep -w "directories do not exist:" "${errFNFT}"; _RC=$?
+            if [ "${_RC}" -eq 0 ]; then
+              _errExclude="${_errExclude/ /} ${errFile}"
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${errFNFT} The error created due to following APPL or TPF ROOT directories do not exist: RC:$_RC"
+            else
+              _errList="${_errList/ /} ${errFNFT}"
+            fi
+            #_errList="${_errList/ /} ${errFNFT}"
+          fi
+        done
+        if [[ "${_errList}" == ' ' ]]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Loadset creation initiated - TLDR RC:$RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Loadset creation initiated - TLDR.";
+          so=( $(find "${SYS_DVL_IMPL_CWRK}" -type f -name "*\.so" -not -name "lib*" -not -path "*/lib/*" 2> /dev/null) )
+          if [ "${so[0]}" != '' ]; then
+            loadtpf -debugfiles YES -tldr "${so[@]}" -s "${LoadsetName}" -o "${LoadsetName}.tldr" -l "${LoadsetName}.load" -r "${LoadsetName}.report" &> "${LoadsetName}.out"; _RC=$?;
+            cat "${LoadsetName}.out"
+            if [ "$_RC" -ne 0 ]; then
+              loadErr=( $(cat "${LoadsetName}.out"| grep -v "[MTP]*[I]\|halted") )
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF include paths ${SYS_DVL_IMPL_CWRK} - TLDR creation failed RC:$EC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF include paths ${SYS_DVL_IMPL_CWRK} - TLDR creation failed."
+              _RC="$EC";
+            fi
+            if [ "$_RC" -eq 0 ]; then
+              addfile "TLDR"; _RC=$?
+            fi
+          else
+            echo "@DEFINE" > "${LoadsetName}.load"
+            sed -i "$ a SYSID=BSS" "${LoadsetName}.load"
+            sed -i "$ a DEBUGFILES=YES" "${LoadsetName}.load"
+            addfile "TLDR"; _RC=$?;
+          fi
+          if [ "$_RC" -ne 0 ]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${SYS_DVL_IMPL_CWRK} - loadtpf failed RC:$EC"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${SYS_DVL_IMPL_CWRK} - loadtpf failed."
+            _RC="$EC";
+          fi
+        else
+          errSeg="${_errList}"
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error file identified in this project - ${errSeg} RC:$EC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Error file identified in this project - ${errSeg}";
+          loadErr="Error file identified in this project"
+          _RC="$EC";
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:maketpf.cfg not found at ${SYS_DVL_IMPL_CWRK} RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: maketpf.cfg not found at ${SYS_DVL_IMPL_CWRK}."
+        _RC="$EC";
+      fi
+    else
+      _RC="$EC";
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:CSV file included, so generate .TLDR and ftp .TLDR Manually RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: CSV file included, so generate .TLDR and ftp .TLDR Manually."
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Workspace not found at ${APP_DVL_IMPL_CWRK} and ${SYS_DVL_IMPL_CWRK} RC:$EC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Workspace not found at ${APP_DVL_IMPL_CWRK} and ${SYS_DVL_IMPL_CWRK}."
+    _RC="$EC";
+  fi
+  if [ "$_RC" == 0 ]; then
+    rm -f "${DVL_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE}"/*
+    mkdir -p "${DVL_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE}"
+    if [ -f "${LoadsetName}.load" ] && [ -f "${LoadsetName}.report" ]; then
+      cp --preserve=all "${LoadsetName}"* "${DVL_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE}/" && rm "${LoadsetName}"*
+      chmod +x "${DVL_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE}"/*
+    else
+      rm -f "${LoadsetName}"*
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:LOADTPF Failed to create. RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: LOADTPF Failed to create"
+      _RC="$EC"
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Loadset realted files unable to move due to previous error RC:$EC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Loadset realted files unable to move due to previous error.";
+    echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+    echo -e "\\nJSON RESULT --> { \"errorMessage\" : \"${loadErr[*]//\"/}\", \"errorFiles\" : \"$errSeg\" }\n"
+    _RC="$EC";
+  fi
+  return "$_RC";
+}
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  getParmFromBranch "${Implementation%_*}" "DVL";
+  execDate=$(date +%-S)
+  if [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+    appBuildErr=$(buildVerify "${APP_DVL_IMPL_CWRK%/*}")
+  fi
+  if [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+    sysBuildErr=$(buildVerify "${SYS_DVL_IMPL_CWRK%/*}")
+  fi
+  if [ -z "${appBuildErr// /}" ] && [ -z "${sysBuildErr// /}" ]; then
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Existing build workspace validation completed - $(($(date +%-S)-execDate))s"
+    case "$LoadType" in
+      A)
+        execDate=$(date +%-S)
+        tldrBuild "$Implementation";
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: TLDR Loadset creation completed - $(($(date +%-S)-execDate))s"
+        RC=$?;                         #TLDR Creation
+      ;;
+      E)
+        execDate=$(date +%-S)
+        oldrBuild "$Implementation";
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: OLDR Loadset creation completed - $(($(date +%-S)-execDate))s"
+        RC=$?;                         #OLDR Creation
+      ;;
+      *)
+        RC="$EC";
+      ;;
+    esac
+  else
+    if [[ -n "${appBuildErr// /}" ]] && [[ -n "${sysBuildErr// /}" ]]; then
+      SegErr="${appBuildErr},${sysBuildErr}"
+      printErr="Source ${appBuildErr} in ${APP_DVL_IMPL_CWRK} and ${sysBuildErr} in ${SYS_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+    elif [[ -z "${appBuildErr}" ]] && [[ -n "${sysBuildErr// /}" ]]; then
+      SegErr="${sysBuildErr}"
+      printErr="Source ${SegErr} in ${SYS_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+    elif [[ -n "${appBuildErr// /}" ]] && [[ -z "${sysBuildErr// /}" ]]; then
+      SegErr="${appBuildErr}"
+      printErr="Source ${SegErr} in ${APP_DVL_IMPL_CWRK} build directory might not have associated .O and/or .SO derived artefacts. Please perform create build and then attempt loadset generation again."
+    fi
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${printErr} RC:$EC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: ${printErr}.";
+    if [ -z "${loadErr// /}" ]; then
+      loadErr="${printErr}"
+    fi
+    RC="$EC";
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Existing build workspace validation completed - $(($(date +%-S)-execDate))s"
+    echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+    echo -e "\\nJSON RESULT --> { \"errorMessage\" : \"ERROR: ${printErr}\", \"errorFiles\" : \"${SegErr}\" }\n"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${Implementation} ${LoadType} ${LoadsetName} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

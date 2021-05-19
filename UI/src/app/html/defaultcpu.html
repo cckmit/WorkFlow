@@ -1,0 +1,71 @@
+<style>
+    .defaultCPUs td {
+        width: 25%;
+    }
+</style>
+<section class="content scrollingFunction" id="scroll_function">
+    <div class="col-md-12 animated slideInLeft">
+        <div class="row">
+            <div class="well well-sm" style="background-color:#fff;min-height:400px">
+                <div class="row">
+                    <div class="col-md-12">
+                        <div ng-if="vm.systemCPUList.length == 0" style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                            <b>No data found</b>
+                        </div>
+                        <table class="table" ng-if="vm.systemCPUList.length > 0" style="border-color:rgba(187, 187, 187, 0.17);">
+                            <thead>
+                                <tr class="tableHeader alignText">
+                                    <th>Target System</th>
+                                    <th>Production CPU</th>
+                                    <th>Native TOS CPU</th>
+                                    <!-- <th>Pre Prod TOS CPU</th> -->
+                                    <th>
+                                        <span style="margin-left:40px;">Actions</span>
+                                        <button class="btn btn-info pull-right btn-xs text-shadow-none themeButton" ng-click="refreshCPUList()">
+                                                    Refresh
+                                                </button>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="defaultCPUs">
+                                <tr ng-repeat="scObj in vm.systemCPUList" class="textCenter hoverCurrentRow">
+                                    <td>{{scObj.name}}</td>
+                                    <td>
+                                        <span ng-if="!vm.cpu_action[scObj.id]">{{scObj.defaultProdCpu.cpuName | emptyCheck}}</span>
+                                        <select ng-model="scObj.defaultProdCpu" ng-if="vm.cpu_action[scObj.id]" class="form-control">
+                                            <option value=""></option>
+                                            <option ng-selected="scObj.defaultProdCpu.id == prodObj.id" ng-repeat="prodObj in vm.system_prodlist[scObj.id]" value="{{prodObj.id}}"> {{prodObj.cpuName}} </option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <span ng-if="!vm.cpu_action[scObj.id]">{{scObj.defaultNativeCpu.cpuName | emptyCheck}}</span>
+                                        <select ng-model="scObj.defaultNativeCpu" ng-if="vm.cpu_action[scObj.id]" class="form-control">
+                                            <option value=""></option>
+                                            <option ng-selected="scObj.defaultNativeCpu.id == nativeObj.id" ng-repeat="nativeObj in vm.system_nativelist[scObj.id]" value="{{nativeObj.id}}">{{nativeObj.cpuName}}</option>
+                                        </select>
+                                    </td>
+                                    <!-- <td>
+                                        <span ng-if="!vm.cpu_action[scObj.id]">{{scObj.defaultPreProdCpu.cpuName | emptyCheck}}</span>
+                                        <select ng-model="scObj.defaultPreProdCpu" ng-if="vm.cpu_action[scObj.id]" class="form-control">
+                                            <option value=""></option>
+                                            <option ng-selected="scObj.defaultPreProdCpu.id == preProdObj.id" ng-repeat="preProdObj in vm.system_preprodlist[scObj.id]" value="{{preProdObj.id}}">{{preProdObj.cpuName}}</option>
+                                        </select>
+                                    </td> -->
+                                    <td>
+                                        <button ng-if="!vm.cpu_action[scObj.id]" class="btn btn-default btn-xs text-shadow-none themeButton" ng-click="editDefault(scObj.id)">
+                                                    <i class="fa fa-edit"></i> Edit
+                                                </button>
+                                        <button ng-if="vm.cpu_action[scObj.id]" class="btn btn-warning btn-xs text-shadow-none themeButton" ng-click="submitDefault(scObj)">
+                                            Set default
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- /.content -->

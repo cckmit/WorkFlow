@@ -1,0 +1,10 @@
+INSERT INTO system_cpu(system_id, cpu_name, display_name, cpu_code, cpu_type, created_by, created_dt, active) VALUES (5, 'RES1', 'CPU-1', 'B', 'PRODUCTION', 'MTPService', '2017/01/01 10:00:00', 'Y');
+INSERT INTO system_cpu(system_id, cpu_name, display_name, cpu_code, cpu_type, created_by, created_dt, active) VALUES (5, 'RES2', 'CPU-2', 'C', 'PRODUCTION', 'MTPService', '2017/01/01 10:00:00', 'Y');
+INSERT INTO system_cpu(system_id, cpu_name, display_name, cpu_code, cpu_type, created_by, created_dt, active) VALUES (5, 'RES3', 'CPU-3', 'D', 'PRODUCTION', 'MTPService', '2017/01/01 10:00:00', 'Y');
+INSERT INTO system_cpu(system_id, cpu_name, display_name, cpu_code, cpu_type, created_by, created_dt, active) VALUES (5, 'RES4', 'CPU-4', 'E', 'PRODUCTION', 'MTPService', '2017/01/01 10:00:00', 'Y');
+INSERT INTO system_cpu(system_id, cpu_name, display_name, cpu_code, cpu_type, created_by, created_dt, active) VALUES (5, 'RES5', 'CPU-5', 'F', 'PRODUCTION', 'MTPService', '2017/01/01 10:00:00', 'Y');
+INSERT INTO system_cpu(system_id, cpu_name, display_name, cpu_code, cpu_type, created_by, created_dt, active) VALUES (5, 'RES6', 'CPU-6', 'G', 'PRODUCTION', 'MTPService', '2017/01/01 10:00:00', 'Y');
+INSERT INTO system_cpu(system_id, cpu_name, display_name, cpu_code, cpu_type, created_by, created_dt, active) VALUES (6, 'OSS1', 'CPU-A', 'A', 'PRODUCTION', 'MTPService', '2017/01/01 10:00:00', 'Y');
+INSERT INTO system_cpu(system_id, cpu_name, display_name, cpu_code, cpu_type, created_by, created_dt, active) VALUES (7, 'AIR1', 'CPU-1', '1', 'PRODUCTION', 'MTPService', '2017/01/01 10:00:00', 'Y');
+INSERT INTO system_cpu(system_id, cpu_name, display_name, cpu_code, cpu_type, created_by, created_dt, active) VALUES (7, 'AIR2', 'CPU-2', '2', 'PRODUCTION', 'MTPService', '2017/01/01 10:00:00', 'Y');
+INSERT INTO system_cpu(system_id, cpu_name, display_name, cpu_code, cpu_type, created_by, created_dt, active) VALUES (7, 'AIR3', 'CPU-3', '3', 'PRODUCTION', 'MTPService', '2017/01/01 10:00:00', 'Y');

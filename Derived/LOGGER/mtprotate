@@ -1,0 +1,14 @@
+# logrotate configuration file
+#
+# Install: Copy this file to /etc/logrotate.d/ then restart rsyslog deamon
+#
+/var/log/workflow/mtpconsole.log {
+        daily
+        missingok
+        #rotate 5
+        create 0644 root mtpservice
+        notifempty
+        postrotate
+                systemctl restart rsyslog
+        endscript
+}

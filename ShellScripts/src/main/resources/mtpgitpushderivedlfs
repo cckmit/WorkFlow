@@ -1,0 +1,615 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitpushderivedlfs                                         #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      STG Workspace for TPF Project to git derived directory                 #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation plan with load date info                          #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   03032020    VINOTH       created the script                               #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+implementation="$1";                   #Implementation plan with load date info
+implPutLevel="$2";                     #PUT Level of the plan
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+startDate=$(date +%Y%m%d%H%M%S);
+minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${implementation} ${implPutLevel} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function submoduleLFS {
+  local _branch="$1";
+  local _RC=0;
+  local i="";
+  local _execDate;                     #Execution block timestamp
+  local _taskDate;                     #Execution task execution timestamp
+  local _submDate;                     #Subtask execution timestamp
+  if [ -d "${GIT_CLONE}${_putlev}/derived_${_putlev}" ]; then
+    _execDate=$(date +%-S)
+    pushd "${GIT_CLONE}${_putlev}/derived_${_putlev}" &>/dev/null;
+      git reset --hard &> /dev/null
+      git checkout "${_branch}" &> /dev/null
+      GIT_SSL_NO_VERIFY=true git fetch --all
+      retryCMD "GIT_SSL_NO_VERIFY=true git push -u origin ${_branch} --tags" "N" "N"; _RC=$?;
+      if [ "${_RC}" -ne 0 ]; then
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git derived artefacts PUSH to derived_${_putlev} remote repository failed"
+        _taskDate=$(date +%-S)
+        curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=derived_${_putlev}&pisSource=true"; _RC=$?;
+        if [ "${_RC}" -eq 0 ]; then
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git do GC to reindex derived artefact derived_${_putlev} remote repository - $(($(date +%-S)-_taskDate))s"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Re-Try git derived artefacts PUSH to derived_${_putlev} remote repository"
+          retryCMD "GIT_SSL_NO_VERIFY=true git push -u origin ${_branch} --tags" "N" "N"; _RC=$?;
+        else
+          _RC="$EC"
+        fi
+      fi
+      if [ "${_RC}" -eq 0 ]; then
+        _taskDate=$(date +%-S)
+        GIT_SSL_NO_VERIFY=true git checkout master; _RC=$?;
+        if [ "${_RC}" -eq 0 ]; then
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Checkout default master branch in IBM zTPF level local cache derived_${_putlev} repository - $(($(date +%-S)-_taskDate))s"
+        else
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Checkout default master branch in IBM zTPF level local cache derived_${_putlev} repository failed - $(($(date +%-S)-_taskDate))s"
+          _RC="$EC"
+        fi
+      fi
+    popd &>/dev/null ;
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git derived artefacts PUSH to remote repository - $(($(date +%-S)-_execDate))s"
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+function derivedLFS {
+  local _RC=0;
+  local _DC=0;
+  local _FC=0;
+  local _srcCommitHash;
+  local _binCommitHash;
+  local _sortUniq;
+  local _gitReference=();
+  local i="";
+  local _execDate;                     #Execution block timestamp
+  local _taskDate;                     #Execution task execution timestamp
+  local _submDate;                     #Subtask execution timestamp
+#Store derived artifacts to GitLFS--------------------------------------------#
+  if [ -d "${APP_STG_IMPL_CWRK}" ] || [ -d "${SYS_STG_IMPL_CWRK}" ]; then
+    #Delete temp workspace if alreay exist
+    [ -d "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}" ] && rm -rf "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}";
+    DEV_SURL="${DEV_BIN_RURL_SUSR}/gitblit/r/${DEV_GIT_SRC}";
+    DEV_DURL="${DEV_BIN_RURL_SUSR}/gitblit/r/${DEV_GIT_BIN}";
+    DEV_SRC_RURL_SMOD="${DEV_SRC_CHNL}://${DEV_RHOST}:${DEV_SRC_PORT}";
+    DEV_BIN_RURL_SMOD="${DEV_BIN_CHNL}://${DEV_RHOST}:${DEV_BIN_PORT}/gitblit/r";
+#Git clone source repository using HTTP protocol------------------------------#
+    if [ ! -d "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_SRC" ]; then
+      _execDate=$(date +%-S)
+      retryCMD "GIT_SSL_NO_VERIFY=true git clone -b ${USR_MASTER_CORE} ${DEV_SURL} ${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_SRC" "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_SRC" "N"; _RC=$?;
+      if [ "${_RC}" -ne 0 ]; then
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git clone ${USR_IMPL_PLAN} source repository failed"
+        _taskDate=$(date +%-S)
+        curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+        if [ "${_RC}" -eq 0 ]; then
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git do GC to reindex source artefact ${USR_IMPL_PLAN} remote repository - $(($(date +%-S)-_taskDate))s"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Re-Try Git clone ${USR_IMPL_PLAN} source repository"
+          retryCMD "GIT_SSL_NO_VERIFY=true git clone -b ${USR_MASTER_CORE} ${DEV_SURL} ${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_SRC" "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_SRC" "N"; _RC=$?;
+        else
+          _RC="$EC"
+        fi
+      fi
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git clone ${USR_IMPL_PLAN} source repository - $(($(date +%-S)-_execDate))s"
+    fi
+    if [ "${_RC}" -eq 0 ]; then
+      if [ -d "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}" ]; then
+        pushd "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}" &> /dev/null;
+          if [ -d "${USR_IMPL_PLAN}_SRC" ]; then
+            pushd "${USR_IMPL_PLAN}_SRC" &> /dev/null;
+              _execDate=$(date +%-S)
+              GIT_SSL_NO_VERIFY=true git submodule update --init &> /dev/null;
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git all submodule update initialized - $(($(date +%-S)-_execDate))s"
+              #shellcheck disable=SC2002
+              declare -a _srcProdUrl=( $(cat .gitmodules | grep url | cut -d ' ' -f3) );
+              #shellcheck disable=SC2002
+              declare -a _srcProdPath=( $(cat .gitmodules | grep path | cut -d ' ' -f3) );
+              i="";
+              for i in "${_srcProdPath[@]}"
+              do
+                _execDate=$(date +%-S)
+                pushd "${i}" &> /dev/null;
+                  git checkout "${USR_IMPL_PLAN}_${USR_IMPL_CORE}" &> /dev/null;
+                popd &> /dev/null;
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Switch to ${i} repository and then checkout ${USR_IMPL_PLAN}_${USR_IMPL_CORE} branch - $(($(date +%-S)-_execDate))s"
+              done
+              declare -a _srcProdList=( $(find .gitref/ -type f) );
+              _srcCommitHash="$(git log -1 --pretty=%h)";
+            popd &> /dev/null;
+          fi
+        popd &> /dev/null;
+      fi
+#Git clone derived repository using HTTP protocol-----------------------------#
+      if [ ! -d "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_BIN" ]; then
+        _execDate=$(date +%-S)
+        retryCMD "GIT_SSL_NO_VERIFY=true git clone -b ${USR_MASTER_CORE} ${DEV_DURL} ${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_BIN" "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_BIN" "N"; _RC=$?;
+        if [ "${_RC}" -ne 0 ]; then
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git clone ${USR_IMPL_PLAN} derived repository failed"
+          _taskDate=$(date +%-S)
+          curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; _RC=$?;
+          if [ "${_RC}" -eq 0 ]; then
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git do GC to reindex source artefact ${USR_IMPL_PLAN} remote repository - $(($(date +%-S)-_taskDate))s"
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Re-Try Git clone ${USR_IMPL_PLAN} source repository"
+            retryCMD "GIT_SSL_NO_VERIFY=true git clone -b ${USR_MASTER_CORE} ${DEV_DURL} ${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_BIN" "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_BIN" "N"; _RC=$?;
+          else
+            _RC="$EC"
+          fi
+        fi
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git clone ${USR_IMPL_PLAN} derived repository - $(($(date +%-S)-_execDate))s"
+      fi
+      if [ "${_RC}" -eq 0 ]; then
+        if [ -d "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_BIN" ]; then
+          pushd "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}/${USR_IMPL_PLAN}_BIN" &> /dev/null
+            #Git to prepare production BIN support
+            if [[ ! -d "./.gitref" ]]; then
+              mkdir .gitref;
+            fi
+            _execDate=$(date +%-S)
+            GIT_SSL_NO_VERIFY=true git submodule update --init &> /dev/null
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git all submodule update initialized - $(($(date +%-S)-_execDate))s"
+#Production URL process to add submodule--------------------------------------#
+            i="";
+            for i in "${_srcProdUrl[@]}"
+            do
+              _prefixName="${i##*tpf/}"
+              _prefixName="${_prefixName%/*}"
+              _suffixName="${i##*_}"
+              _subModName="./.gitref/derived_${_suffixName%.*}"
+              if [[ "${_subModName}" =~ ${implPutLevel} ]]; then
+                _execDate=$(date +%-S)
+                if [[ -d "${GIT_CLONE}${_suffixName%.*}/derived_${_suffixName%.*}" ]]; then
+                  j="";
+                  for j in {0..2}      #Retry if it's failed
+                  do
+                    if [ ! -d "${_subModName}" ]; then
+                      _taskDate=$(date +%-S)
+                      GIT_SSL_NO_VERIFY=true git submodule add -f --name "${_subModName}" -- "${GIT_CLONE}${_suffixName%.*}/derived_${_suffixName%.*}" "${_subModName}" &> /dev/null; _RC=$?;
+                      if [ "${_RC}" -ne 0 ]; then
+                        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Submodule ${_subModName} add failed"
+                        _submDate=$(date +%-S)
+                        curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=derived_${_suffixName%.*}&pisSource=true"; _RC=$?;
+                        if [ "${_RC}" -eq 0 ]; then
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git do GC to reindex ${_subModName} remote repository - $(($(date +%-S)-_submDate))s"
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Re-Try Git submodule to add ${_subModName} remote repository"
+                          GIT_SSL_NO_VERIFY=true git submodule add -f --name "${_subModName}" -- "${GIT_CLONE}${_suffixName%.*}/derived_${_suffixName%.*}" "${_subModName}" &> /dev/null; _RC=$?;
+                        fi
+                      fi
+                      if [ "${_RC}" -eq 0 ]; then
+                        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Submodule ${_subModName} added - $(($(date +%-S)-_taskDate))s"
+                        break;
+                      elif [ "${_RC}" -eq 0 ]; then
+                        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote not acccessible re-try attempt - $i RC:$_RC"
+                        echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARNING: Git remote not acccessible re-try attempt - $i" &> /dev/null; #DEBUG
+                        rm -rf "${_subModName}"
+                        sleep 3;
+                        _RC="$EC";
+                      else
+                        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Submodule ${_subModName} failed to add - $(($(date +%-S)-_taskDate))s"
+                        _RC="$EC";
+                      fi
+                    else
+                      break;
+                    fi
+                  done
+                  if [[ -d  "${GIT_CLONE}${_suffixName%.*}/${USR_MASTER_CORE}" ]]; then
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Master repo is cloned already.. ${USR_MASTER_CORE} RC:$RC"
+                    echo -e "Master repo is cloned already.. ${USR_MASTER_CORE}";
+                  else
+                    if [ -d "${GIT_CLONE}${_suffixName%.*}" ]; then
+                      pushd "${GIT_CLONE}${_suffixName%.*}" &> /dev/null
+                        _execDate=$(date +%-S)
+                        k="";
+                        for k in {0..2} #Retry if it's failed
+                        do
+                          if [ ! -d "${USR_MASTER_CORE}" ]; then
+                            GIT_SSL_NO_VERIFY=true git clone -b "${USR_MASTER_CORE}" "${DEV_BIN_RURL_SMOD}/tpf/${_prefixName}/derived_${_suffixName}" "${USR_MASTER_CORE}" &> /dev/null; _DC=$?;
+                            if [ "${_DC}" -ne 0 ]; then
+                              echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git clone ${_suffixName} remote repository failed"
+                              _taskDate=$(date +%-S)
+                              curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=derived_${_suffixName%.*}&pisSource=true"; _DC=$?;
+                              if [ "${_DC}" -eq 0 ]; then
+                                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git do GC to reindex to ${_suffixName} remote repository - $(($(date +%-S)-_taskDate))s"
+                                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Re-Try git clone ${_suffixName} remote repository"
+                                GIT_SSL_NO_VERIFY=true git clone -b "${USR_MASTER_CORE}" "${DEV_BIN_RURL_SMOD}/tpf/${_prefixName}/derived_${_suffixName}" "${USR_MASTER_CORE}" &> /dev/null; _DC=$?;
+                              fi
+                            fi
+                            if [ "${_DC}" -eq 0 ]; then
+                              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git clone ${_suffixName} repository from remote - $(($(date +%-S)-_execDate))s"
+                              break;
+                            elif [ "${_DC}" -eq 128 ]; then
+                              sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote not acccessible re-try attempt - $i RC:$_DC"
+                              echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARNING: Git remote not acccessible re-try attempt - $i" &> /dev/null; #DEBUG
+                              rm -rf "${USR_MASTER_CORE}"
+                              sleep 3;
+                              _DC="$EC";
+                            else
+                              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git clone ${_suffixName} repository from remote error - $(($(date +%-S)-_execDate))s"
+                              _DC="$EC";
+                            fi
+                          else
+                            break;
+                          fi
+                        done
+                        if [ "$_DC" -eq 0 ]; then
+                          pushd "${USR_MASTER_CORE}" &> /dev/null;
+                            git branch -r | grep -v '\->' | while read -r remote; do git branch --track "${remote#origin/}" "$remote"; done
+                          popd &> /dev/null;
+                        fi
+                      popd &> /dev/null
+                    fi
+                  fi
+                else
+                  mkdir -p "${GIT_CLONE}${_suffixName%.*}"
+                  pushd "${GIT_CLONE}${_suffixName%.*}" &> /dev/null
+                    j="";
+                    for j in {0..2}    #Retry if it's failed
+                    do
+                      if [ ! -d "derived_${_suffixName%.*}" ]; then
+                        _taskDate=$(date +%-S)
+                        GIT_SSL_NO_VERIFY=true git clone "${DEV_BIN_RURL_SMOD}/tpf/${_prefixName}/derived_${_suffixName}" "derived_${_suffixName%.*}" &> /dev/null; _FC=$?;
+                        if [ "${_FC}" -ne 0 ]; then
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git clone ${_suffixName} failed"
+                          _submDate=$(date +%-S)
+                          curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=derived_${_suffixName%.*}&pisSource=true"; _FC=$?;
+                          if [ "${_FC}" -eq 0 ]; then
+                            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git do GC to reindex ${_suffixName} remote repository - $(($(date +%-S)-_submDate))s"
+                            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Re-Try Git clone ${_suffixName} repository"
+                            GIT_SSL_NO_VERIFY=true git clone "${DEV_BIN_RURL_SMOD}/tpf/${_prefixName}/derived_${_suffixName}" "derived_${_suffixName%.*}" &> /dev/null; _FC=$?;
+                          fi
+                        fi
+                        if [ "${_FC}" -eq 0 ]; then
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git clone ${_suffixName} completed - $(($(date +%-S)-_taskDate))s"
+                          break;
+                        elif [ "${_FC}" -eq 128 ]; then
+                          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote not acccessible re-try attempt - $i RC:$_FC"
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARNING: Git remote not acccessible re-try attempt - $i" &> /dev/null; #DEBUG
+                          rm -rf "derived_${_suffixName%.*}";
+                          sleep 3;
+                          _FC="$EC";
+                        else
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Submodule ${_subModName} failed to add - $(($(date +%-S)-_taskDate))s"
+                          _FC="$EC";
+                        fi
+                      else
+                        break;
+                      fi
+                    done
+                    k="";
+                    for k in {0..2} #Retry if it's failed
+                    do
+                      if [ ! -d "${USR_MASTER_CORE}" ]; then
+                        _taskDate=$(date +%-S)
+                        GIT_SSL_NO_VERIFY=true git clone -b "${USR_MASTER_CORE}" "${DEV_BIN_RURL_SMOD}/tpf/${_prefixName}/derived_${_suffixName}" "${USR_MASTER_CORE}" &> /dev/null; _DC=$?;
+                        if [ "${_DC}" -ne 0 ]; then
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git clone ${_suffixName} failed"
+                          _submDate=$(date +%-S)
+                          curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=derived_${_suffixName%.*}&pisSource=true"; _DC=$?;
+                          if [ "${_DC}" -eq 0 ]; then
+                            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git do GC to reindex ${_suffixName} remote repository - $(($(date +%-S)-_submDate))s"
+                            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Re-Try Git clone ${_suffixName} repository"
+                            GIT_SSL_NO_VERIFY=true git clone -b "${USR_MASTER_CORE}" "${DEV_BIN_RURL_SMOD}/tpf/${_prefixName}/derived_${_suffixName}" "${USR_MASTER_CORE}" &> /dev/null; _DC=$?;
+                          fi
+                        fi
+                        if [ "${_DC}" -eq 0 ]; then
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git clone ${_suffixName} completed - $(($(date +%-S)-_taskDate))s"
+                          break;
+                        elif [ "${_DC}" -eq 128 ]; then
+                          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote not acccessible re-try attempt - $i RC:$_DC"
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARNING: Git remote not acccessible re-try attempt - $i" &> /dev/null; #DEBUG
+                          rm -rf "${USR_MASTER_CORE}";
+                          sleep 3;
+                          _DC="$EC";
+                        else
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Submodule ${_subModName} failed to add - $(($(date +%-S)-_taskDate))s"
+                          _DC="$EC";
+                        fi
+                      else
+                        break;
+                      fi
+                    done
+                    if [ "${_DC}" -eq 0 ]; then
+                      pushd "${USR_MASTER_CORE}" &> /dev/null;
+                        git branch -r | grep -v '\->' | while read -r remote; do git branch --track "${remote#origin/}" "$remote"; done
+                      popd &> /dev/null;
+                    fi
+                    if [ "${_FC}" -eq 0 ]; then
+                      pushd "derived_${_suffixName%.*}" &> /dev/null;
+                        git branch -r | grep -v '\->' | while read -r remote; do git branch --track "${remote#origin/}" "$remote"; done
+                      popd &> /dev/null;
+                    fi
+                  popd &> /dev/null;
+                  if [[ ! -d  "${_subModName}" ]]; then
+                    j="";
+                    for j in {0..2}    #Retry if it's failed
+                    do
+                      if [ ! -d "${_subModName}" ]; then
+                        _taskDate=$(date +%-S)
+                        GIT_SSL_NO_VERIFY=true git submodule add -f --name "${_subModName}" -- "${GIT_CLONE}${_suffixName%.*}/derived_${_suffixName%.*}" "${_subModName}" &> /dev/null; _RC=$?;
+                        if [ "${_RC}" -eq 0 ]; then
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git submodule add ${_subModName} completed - $(($(date +%-S)-_taskDate))s"
+                          break;
+                        elif [ "${_RC}" -eq 128 ]; then
+                          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try  - $i RC:$_RC"
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                          rm -rf "${_subModName}";
+                          sleep 3;
+                          _RC="$EC";
+                        else
+                          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git submodule add ${_subModName} failed"
+                          _RC="$EC";
+                        fi
+                      else
+                        break;
+                      fi
+                    done
+                  fi
+                fi
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git production repository ${_subModName} attached as submodule in ${USR_IMPL_PLAN} derived repo - $(($(date +%-S)-_execDate))s"
+              else
+                if [[ ! -d  "${_subModName}" ]]; then
+                  j="";
+                  for j in {0..2}      #Retry if it's failed
+                  do
+                    if [ ! -d "${_subModName}" ]; then
+                      _taskDate=$(date +%-S)
+                      GIT_SSL_NO_VERIFY=true git submodule add -f --name "${_subModName}" -- "${DEV_BIN_RURL_SMOD}/tpf/${_prefixName}/derived_${_suffixName}" "${_subModName}" &> /dev/null; _RC=$?;
+                      if [ "${_RC}" -eq 0 ]; then
+                        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git submodule add ${_subModName} completed - $(($(date +%-S)-_taskDate))s"
+                        break;
+                      elif [ "${_RC}" -eq 128 ]; then
+                        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try  - $i RC:$_RC"
+                        echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                        rm -rf "${_subModName}";
+                        sleep 3;
+                        _RC="$EC";
+                      else
+                        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git submodule add ${_subModName} failed"
+                        _RC="$EC";
+                      fi
+                    else
+                      break;
+                    fi
+                  done
+                fi
+              fi
+              if [ -d "${_subModName}" ]; then
+                pushd "${_subModName}" &> /dev/null;
+                  _taskDate=$(date +%-S)
+                  git branch -a | grep "${USR_IMPL_PLAN}_${USR_IMPL_CORE}" &> /dev/null; _FC=$?;
+                  if [ "$_FC" -eq 0 ]; then
+                    git checkout "${USR_IMPL_PLAN}_${USR_IMPL_CORE}" &> /dev/null;
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Switch to ${_subModName} repository and then checkout ${USR_IMPL_PLAN}_${USR_IMPL_CORE} branch - $(($(date +%-S)-_taskDate))s"
+                  else
+                    git checkout -b "${USR_IMPL_PLAN}_${USR_IMPL_CORE}" &> /dev/null;
+                    echo -e "derived/* binary\nlib/* binary\nload/* binary\nobj/* binary\nbase/lib/* binary\nbase/load/* binary\nbase/obj/* binary\nbss/lib/* binary\nbss/load/* binary\nbss/obj/* binary\n" > .gitattributes
+                    touch .gitignore;
+                    git add . &> /dev/null;
+                    git commit -am "Initial Commit" &> /dev/null;
+                    _binCommitHash="$(git log -1 --pretty=%h)";
+                    _gitReference+="${PWD},${USR_IMPL_PLAN}_${USR_IMPL_CORE} ";
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Switch to ${_subModName} repository and then checkout ${USR_IMPL_PLAN}_${USR_IMPL_CORE} branch - $(($(date +%-S)-_taskDate))s"
+                  fi
+                popd &> /dev/null;
+              fi
+            done
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Clean-up existing derived objects in repository to copy new objects RC:${_RC}"
+            rm ./* -rf &> /dev/null #Clean-up existing derived objects from the repository
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Clean-up existing derived objects in repository to copy new objects.";
+#NON-IBM segment update ------------------------------------------------------#
+            if [ -d "${STG_TPF_APP}/${USR_IMPL_PLAN}" ]; then
+              _execDate=$(date +%-S)
+              cp -fr --preserve=all "${STG_TPF_APP}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/maketpf.cfg" "maketpf.cfg";
+              #Production derived reference store
+              for j in "${_srcProdList[@]}"
+              do
+                j1="${j##*/}";
+                j2="${j1%.*}";
+                _tempCut0="${j#*/}";
+                _tempCut1="${_tempCut0%%/*}";
+                _tempCut2="${_tempCut1#*_}";
+                if [ -n "$j2" ]; then
+                  _devBinList=( $( find "${STG_TPF_APP}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" -type f \( -name "*${j2}*" -o -name "*${j2^^}*" \) ) );
+                  for k in "${_devBinList[@]}"
+                  do
+                    _copyFile="${k##*${USR_IMPL_CORE}/}";
+                    k1="${k##*/}";
+                    k2="${k1%.*}";
+                    _taskDate=$(date +%-S)
+                    if [[ "$k1" =~ ($EXT_TPF_APP) ]]; then
+                      if [[ "${_copyFile}" =~ derived ]] || [[ ${_copyFile} =~ sbtasm ]] || [[ ${_copyFile} =~ sbtlst ]]; then #Derived TPFAR & SABRE support
+                        if [[ "${_copyFile}" =~ / ]]; then
+                          mkdir -p "${_copyFile%/*}";
+                          mkdir -p ".gitref/derived_${_tempCut2}/${_copyFile%/*}";
+                        fi
+                        #Copy to plan derived repository
+                        cp -fr --preserve=all "${STG_TPF_APP}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/${_copyFile}" "${_copyFile}";
+                        #Copy to production derived repository
+                        cp -fr --preserve=all "${STG_TPF_APP}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/${_copyFile}" ".gitref/derived_${_tempCut2}/${_copyFile}";
+                      else
+                        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:SKIP - $k RC:$RC"
+                        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: SKIP - $k" &> /dev/null;
+                      fi
+                    else
+                      if [[ "${_copyFile}" =~ / ]]; then
+                        mkdir -p "${_copyFile%/*}";
+                        mkdir -p ".gitref/derived_${_tempCut2}/${_copyFile%/*}";
+                      fi
+                      cp -fr --preserve=all "${STG_TPF_APP}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/${_copyFile}" "${_copyFile}";
+                      #Copy to production derived repository
+                      cp -fr --preserve=all "${STG_TPF_APP}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/${_copyFile}" ".gitref/derived_${_tempCut2}/${_copyFile}";
+                    fi
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: ${_copyFile} file copied to implementations and productions derived repository - $(($(date +%-S)-_taskDate))s"
+                  done
+                fi
+              done
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: NON-IBM Segments updated - $(($(date +%-S)-_execDate))s"
+            fi
+#IBM Segment update-----------------------------------------------------------#
+            if [ -d "${STG_TPF_SYS}/${USR_IMPL_PLAN}" ]; then
+              _execDate=$(date +%-S)
+              cp -fr --preserve=all "${STG_TPF_SYS}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/maketpf.cfg" "maketpf.cfg";
+              #Production derived reference store
+              for j in "${_srcProdList[@]}"
+              do
+                j1="${j##*/}";
+                j2="${j1%.*}";
+                _tempCut0="${j#*/}";
+                _tempCut1="${_tempCut0%%/*}";
+                _tempCut2="${_tempCut1#*_}";
+                if [ -n "$j2" ]; then
+                  _devBinList=( $( find "${STG_TPF_SYS}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" -type f \( -name "*${j2}*" -o -name "*${j2^^}*" \) ) );
+                  for k in "${_devBinList[@]}"
+                  do
+                    _copyFile="${k##*${USR_IMPL_CORE}/}";
+                    k1="${k##*/}";
+                    k2="${k1%.*}";
+                    _taskDate=$(date +%-S)
+                    if [[ "$k1" =~ ($EXT_TPF_APP) ]]; then
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:SKIP-$k RC:$RC"
+                      echo "SKIP-$k" &> /dev/null;
+                    else
+                      if [[ ! "${_copyFile}" =~ /oco/ ]]; then
+                        if [[ "${_copyFile}" =~ / ]]; then
+                          mkdir -p "${_copyFile%/*}";
+                          mkdir -p ".gitref/derived_${_tempCut2}/${_copyFile%/*}";
+                        fi
+                        cp -fr --preserve=all "${STG_TPF_SYS}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/${_copyFile}" "${_copyFile}";
+                        cp -fr --preserve=all "${STG_TPF_SYS}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}/${_copyFile}" ".gitref/derived_${_tempCut2}/${_copyFile}";
+                      fi
+                    fi
+                    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: ${_copyFile} file copied to implementations and productions derived repository - $(($(date +%-S)-_taskDate))s"
+                  done
+                fi
+              done
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: IBM Segments updated - $(($(date +%-S)-_execDate))s"
+            fi
+            _execDate=$(date +%-S)
+            echo -e "derived/* binary\nlib/* binary\nload/* binary\nobj/* binary\nbase/lib/* binary\nbase/load/* binary\nbase/obj/* binary\nbss/lib/* binary\nbss/load/* binary\nbss/obj/* binary\n" > .gitattributes
+            git add . &> /dev/null;
+            git commit -am "${USR_IMPL_PLAN}_${_srcCommitHash} - Build." &> /dev/null;
+            _binCommitHash4="$(git log -1 --pretty=%h)";
+            _gitReference+="${PWD},${USR_MASTER_CORE} ";
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Derived files added into implementation plan repository - $(($(date +%-S)-_execDate))s"
+            for j in "${_srcProdList[@]}"
+            do
+              j1="${j##*/}";
+              j2="${j1%.*}";
+              _tempCut0="${j#*/}";
+              _tempCut1="${_tempCut0%%/*}";
+              _tempCut2="${_tempCut1#*_}";
+              if [ -d ".gitref/derived_${_tempCut2}" ]; then
+                _taskDate=$(date +%-S)
+                pushd ".gitref/derived_${_tempCut2}" &> /dev/null;
+                  git checkout "${USR_IMPL_PLAN}_${USR_IMPL_CORE}" &> /dev/null;
+                  echo -e "derived/* binary\nlib/* binary\nload/* binary\nobj/* binary\nbase/lib/* binary\nbase/load/* binary\nbase/obj/* binary\nbss/lib/* binary\nbss/load/* binary\nbss/obj/* binary\n" > .gitattributes
+                  git add . &> /dev/null;
+                  git commit -am "${USR_IMPL_PLAN}_${_binCommitHash4} - Build." &> /dev/null;
+                  _binCommitHash5="$(git log -1 --pretty=%h)";
+                  _gitReference+="${PWD},${USR_IMPL_PLAN}_${USR_IMPL_CORE} ";
+                  if [[ "${_tempCut2}" =~ ${implPutLevel} ]]; then
+                    _putlev="${_tempCut2}";
+                  fi
+                popd &> /dev/null
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: ${j1} source files related with derived files added into derived_${_tempCut2} production repository - $(($(date +%-S)-_taskDate))s"
+              fi
+            done
+          popd &> /dev/null
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Derived repository not accessible RC:$EC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Derived repository not accessible.";
+          _RC="${EC}";
+        fi
+        #Clean-up dir if the process successs
+        if [ "${_RC}" -eq 0 ]; then
+          _execDate=$(date +%-S)
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git operation initiated to background job RC:$_RC"
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git operation initiated to background job";
+          _sortUniq=($(echo "${_gitReference[@]}" | tr ' ' '\n' | sort -u | tr '\n' ';'));
+          bash "$MTP_ENV/mtpgitpushbinary" "${HOME}/${USER}_${USR_IMPL_PLAN}_${USR_IMPL_CORE}" "${_sortUniq[@]}" ; _RC=$?;
+          if [ "${_RC}" -eq 0 ]; then
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git derived artefacts PUSH to remote repository - $(($(date +%-S)-_execDate))s"
+            if [[ "${_putlev}" =~ ${implPutLevel} ]]; then
+              submoduleLFS "${USR_IMPL_PLAN}_${USR_IMPL_CORE}";
+            fi
+          else
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git derived artefacts PUSH to remote repository failed - $(($(date +%-S)-_execDate))s"
+          fi
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Source repository not accessible RC:$EC"
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Source repository not accessible.";
+        _RC="${EC}";
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Source repository not accessible RC:$EC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Source repository not accessible.";
+      _RC="${EC}";
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Stagging workspace not available RC:$EC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Stagging workspace not available.";
+    _RC="${EC}";
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+if [ "${RC}" -eq 0 ]; then
+  USR_IMPL_DATE="${implementation##*_}";
+  getParmFromBranch "${implementation%_*}" "STG"; #RC=$?;
+  if [ -d "${APP_STG_IMPL_CWRK}" ] || [ -d "${SYS_STG_IMPL_CWRK}" ]; then
+    execDate=$(date +%-S)
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Store derived artifacts in progress RC:$RC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Store derived artifacts in progress...";
+    derivedLFS; RC=$?;
+    if [ "${RC}" -eq 0 ]; then
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Storing derived artifacts completed - ${USR_PLAN_CORE} - $(($(date +%-S)-execDate))s"
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}: Store derived artifacts completed ${USR_PLAN_CORE} - $(($(date +%-S)-execDate))s RC:$RC"
+    else
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Storing derived artifacts failed - ${USR_PLAN_CORE} - $(($(date +%-S)-execDate))s"
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}: Store derived artifacts failed ${USR_PLAN_CORE} - $(($(date +%-S)-execDate))s RC:$RC"
+    fi
+  else
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: Staging directory doesn't exist RC:$EC"
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Staging directory doesn't exist";
+    RC=${EC};
+  fi
+fi
+if [ "${RC}" -ne 0 ]; then             # send email to support
+  sendEMMSG "Scheduled Job Failed: ${USR_PLAN_CORE^^}- $(date +%Y%m%d-%H%M%S%z) - Derived artifacts copy to git failed" \
+            "Scheduled Job Failed: ${USR_PLAN_CORE^^}- $(date +%Y%m%d-%H%M%S%z) - Derived artifacts copy to git failed"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${implementation} ${implPutLevel} RC:${RC}"
+exit "${RC}"
+#-----------------------------------------------------------------------------#

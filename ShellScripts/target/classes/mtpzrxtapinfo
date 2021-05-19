@@ -1,0 +1,108 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpzrxtapinfo                                                #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      TAP Info support to get secured implementation plan and date from      #
+#      Modernize tools using WorkflowAPI                                      #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - System Name                                                      #
+#      $2  - Load Date                                                        #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   05142018    ARUL    Created script                                        #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1091
+source "/opt/mtp/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+RC=0;
+EC=8;
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+SysName="${1^^}";                      #Read system name
+LoadDate="$2";                         #Read secured load date
+#
+#-----------------------------------------------------------------------------#
+# This function used to validate minimum input parms
+function minInputValidation {
+  # $1 - Expected input
+  # $2 - Received input
+  local x;
+  if [ "$2" -lt "$1" ]; then
+    echo "ERROR: Missing inputs"; RC=$EC;
+  elif [ "$2" -gt "$1" ]; then
+    echo "ERROR: Unexpected no of arguments - $2"; RC=$EC;
+  else
+    for x; do
+      if [ -z "$x" ]; then
+        echo "ERROR: Verify input arguments some of item is empty"; RC=$EC;
+      fi
+    done
+  fi
+  return "$RC"
+}
+#
+#-----------------------------------------------------------------------------#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${SysName} ${LoadDate} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ "${#LoadDate}" -eq 8 ]; then
+    LoadDate="${LoadDate}000000"
+  elif [ "${#LoadDate}" -le 8 ] || [ "${#LoadDate}" -ne 14 ]; then
+    echo -e "ERROR: Invalid load date format";                         #CONSOLE
+    RC="$EC"
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid load date format ${LoadDate} RC:$RC"
+  fi
+  if [ "$RC" -eq 0 ]; then
+    IFS=$'\n'
+    for lst in $(curl -k -s --request GET --url "${PRD_BIN_CHNL}://" "${PRD_RHOST}:${PRD_API_PORT}/${PRD_API_WKF}/" "common/getTAPDetails?systemName=${SysName}&loadDate=${LoadDate}")
+    do
+      if [[ "${lst:0:3}" == "${SysName}" ]]; then #Print only plan and load date
+        echo -e "${lst:4:8} ${lst:17:14}";                             #CONSOLE
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${lst:4:8} ${lst:17:14} RC:$RC"
+      else
+        echo -e "API_ERROR";                                           #CONSOLE
+        RC="$EC"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${PRD_API_WKF}/common/getTAPDetails API_ERROR RC:$RC"
+        break
+      fi
+    done
+    unset IFS
+    if [ -z "${lst}" ]; then
+      echo -e "NO_DATA";                                               #CONSOLE
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${PRD_API_WKF}/common/getTAPDetails NO_DATA RC:$RC"
+    fi
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${SysName} ${LoadDate} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

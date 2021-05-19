@@ -1,0 +1,109 @@
+<section class="content scrollingFunction" id="scroll_function">
+    <!-- <md-fab-trigger style="position: absolute;right: 20px;bottom: 55px;">
+                <md-button aria-label="menu" class="md-fab">
+                    <md-icon class="fa fa-plus fa-2x"></md-icon>
+                </md-button>
+            </md-fab-trigger> -->
+    <div class="col-md-12 animated slideInLeft">
+        <div class="row">
+            <div class="well well-sm" style="background-color:#fff;height: 70vh;">
+                <div class="row margin-none height-100">
+                    <div class="col-md-4 well padding-none height-inherit">
+                        <ul class="nav nav-tabs dataTabs text-center">
+                            <li class="active">
+                                <a data-target="#superuserTab" data-toggle="tab" aria-label="superuserTab">Super User</a>
+                            </li>
+                            <li>
+                                <a data-target="#delegateTab" data-toggle="tab" aria-label="delegateTab">Delegation</a>
+                            </li>
+                        </ul>
+                        <div class="tab-content padding-20">
+                            <div class="tab-pane active" id="superuserTab">
+                                <label>Delegate from  </label>
+                                <select name="delegateFromSuperUsersList" ng-model="vm.delegateFromSuperUser" id="delegateSuperUsersListFrom" class="form-control" aria-label="delegateUsersList">
+                                        <option value="{{dulObj.id}}" 
+                                                ng-repeat="dulObj in vm.superUserFromUsersList | orderBy:'displayName'"
+                                                ng-selected="dulObj.id == vm.delegateFromSuperUser">
+                                            {{ dulObj.displayName }}
+                                        </option>
+                                    </select>
+                                <br>
+                                <br>
+                                <label>Delegate to <span
+                                    class="requiredField">*</span></label>
+                                <input type="text" class="form-control" ng-value="vm.currentUser.displayName" disabled/>
+                                <br>
+                                <br>
+                                <hr style="border-top-color:#ddd;">
+
+                                <button class="btn btn-warning themeButton" ng-click="resetSuperUser()">
+                                        Reset
+                                    </button>
+                                    <button class="btn btn-success themeButton" ng-disabled="delegationInProgress" ng-click="saveSuperUser()">
+                                            <span ng-if="delegationInProgress">
+                                                    <i class="fa fa-spinner fa-pulse" style="color:white"></i> Delegation In-Progress
+                                                </span> 
+                                                <span ng-if="!delegationInProgress">
+                                                        Save
+                                                </span>
+                                            
+                                    </button>
+                            </div>
+                            <div class="tab-pane" id="delegateTab">
+                                <label>Delegate from <span
+                                        class="requiredField">*</span></label>
+                                <select name="delegateFromUsersList" ng-model="vm.delegateFromUser" id="delegateUsersListFrom" class="form-control" aria-label="delegateUsersList">
+                                    <option value="{{dulObj.id}}" 
+                                            ng-repeat="dulObj in vm.delegateFromUsersList | orderBy:'displayName'"
+                                            ng-selected="dulObj.id == vm.delegateFromUser">
+                                        {{ dulObj.displayName }}
+                                    </option>
+                                </select>
+                                <br>
+                                <br>
+                                <label>Delegate to <span
+                                    class="requiredField">*</span></label>
+                                <select name="delegateToUsersList" ng-model="vm.delegateToUser" id="delegateUsersListTo" class="form-control" aria-label="delegateUsersList">
+                                    <option value="{{dulObj.id}}" 
+                                            ng-repeat="dulObj in vm.delegateToUsersList | orderBy:'displayName'"
+                                            ng-selected="dulObj.id == vm.delegateToUser">
+                                        {{ dulObj.displayName }}
+                                    </option>
+                                </select>
+                                <br>
+                                <br>
+                                <label> Status </label>
+                                <br>
+                                <md-radio-group ng-model="vm.delegateStatus" layout="row">
+                                    <md-radio-button value="1" class="md-primary">On</md-radio-button>
+                                    <md-radio-button value="0"> Off </md-radio-button>
+                                </md-radio-group>
+                                <br>
+                                <hr style="border-top-color:#ddd;">
+
+                                <button class="btn btn-warning themeButton" ng-click="resetDelegation()">
+                                        Reset
+                                    </button>
+                                <button class="btn btn-success themeButton" ng-click="saveDelegation()">
+                                            Save
+                                        </button>
+                            </div>
+                        </div>
+
+                    </div>
+                    <div class="col-md-8 height-inherit">
+                        <div class="well textCenter height-inherit">
+                            <div style="margin:20% auto;">
+                                <i class="fa fa-group fa-4x" style="color:#ccc;"></i>
+                                <h1 style="color:#ccc;">Manage Delegate</h1>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</section>
+<!-- /.content -->

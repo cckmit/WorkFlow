@@ -1,0 +1,143 @@
+#!/bin/bash
+#shellcheck disable=SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdexport1                                             #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to export the source from implementation plan master core       #
+#             remote branch                                                   #
+#                                                                             #
+#   NOTE: This script needs to integrated with existing export                #
+#         Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Project directory path                                           #
+#      $2  - Branch name                                                      #
+#      $3  - User id (Linux)                                                  #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   01062017    ARUL    Created script                                        #
+#   04222019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#shellcheck disable=SC1090,SC1117
+source "${MTP_ENV:=$PWD}/.mtpconfig"
+source "${MTP_ENV:=$PWD}/mtplibvalidation"
+shopt -s extglob nullglob              #Expand BASH options
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ProjectDir="$1";                       #Read actual path of prject dir
+LocalBranchName="$2"                   #Read local branch name
+LocalUserID="$3"                       #Read Linux User ID for workspace
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ProjectDir} ${LocalBranchName} ${LocalUserID} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ "$LocalUserID" == "$MTP_SUSR" ]; then
+    echo "$ProjectDir" &> /dev/null
+    if [ "$RC" -eq 0 ]; then
+      getParmFromBranch "$LocalBranchName" "STG";
+      if [ -n "${SYS_STG_IMPL_CWRK}" ] && [ -n "${APP_STG_IMPL_CWRK}" ]; then
+        if [ "${LocalBranchName:0:1}" == "t" ]; then
+          activeRepo="${PRD_SRC_RURL}/tpf/tp/source/${USR_IMPL_PLAN}.git";
+        elif [ "${LocalBranchName:0:1}" == "d" ]; then
+          activeRepo="${PRD_SRC_RURL}/tpf/dl/source/${USR_IMPL_PLAN}.git";
+        fi
+        originRepo="${activeRepo/\/*@/\//${MTP_SUSR}@}";
+        tempDir="${HOME}/mtpGit_$LocalUserID/$LocalBranchName";
+        rm -rf "$tempDir";
+        git clone -b "master_$USR_IMPL_CORE" "$originRepo" "$tempDir" &> /dev/null; RC=$?;
+        if [ "$RC" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Source export in progress RC:$RC";
+          echo -e "INFO: Source export in progress...\n";              #CONSOLE
+          if [ ${#tempDir[@]} -gt 0 ]; then
+            pushd "$tempDir" &> /dev/null
+              rm .git* -Rf
+              #
+              # Systems data export to DVL workspace
+              #
+              if [ -d "${SYS_STG_IMPL_CWRK}" ]; then
+                # shellcheck disable=SC2086
+                mv -fu !($DIR_TPF_APP|.*) "${SYS_STG_IMPL_CWRK}" &> /dev/null
+                #Remove SYS workspace if it's empty
+                if [ ! "$(ls -A "$SYS_STG_IMPL_CWRK")" ]; then
+                  rm -Rf "$SYS_STG_IMPL_CWRK";
+                  #Remove SYS impl.plan if it's empty
+                  if [ ! "$(ls -A "${STG_TPF_SYS}/${USR_IMPL_PLAN}")" ]; then
+                    rm -Rf "${STG_TPF_SYS:?}/${USR_IMPL_PLAN}";
+                  fi
+                else
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Export to ${SYS_STG_IMPL_CWRK} RC:$RC";
+                  echo -e "INFO: Export to ${SYS_STG_IMPL_CWRK} \n";   #CONSOLE
+                fi
+              else
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Workspace doesn't exist - ${SYS_STG_IMPL_CWRK} RC:$RC";
+                echo -e "INFO: Workspace doesn't exist - ${SYS_STG_IMPL_CWRK} \n"; #CONSOLE
+              fi
+              #
+              # Application data export to DVL workspace
+              #
+              if [ -d "${APP_STG_IMPL_CWRK}" ]; then
+                if [ ${#tempDir[@]} -gt 0 ]; then
+                  if [ "$(ls -A)" ]; then
+                    echo -e "INFO: Export to ${APP_STG_IMPL_CWRK} \n"; #CONSOLE
+                    #mv -f !(.*) "${APP_STG_IMPL_CWRK}";
+                    shopt -s dotglob; mv -- * "${APP_STG_IMPL_CWRK}";
+                  fi
+                  #Remove APP workspace if it's empty
+                  if [ ! "$(ls -A "${APP_STG_IMPL_CWRK}")" ]; then
+                    rm -Rf "${APP_STG_IMPL_CWRK}";
+                    #Remove APP impl.plan if it's empty
+                    if [ ! "$(ls -A "${STG_TPF_APP}/${USR_IMPL_PLAN}")" ]; then
+                      rm -Rf "${STG_TPF_APP:?}/${USR_IMPL_PLAN}";
+                    fi
+                  fi
+                fi
+              else
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Workspace doesn't exist - ${APP_STG_IMPL_CWRK} RC:$RC";
+                echo -e "INFO: Workspace doesn't exist - ${APP_STG_IMPL_CWRK} \n"; #CONSOLE
+              fi
+            popd &> /dev/null
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Nothing to export RC:$RC";
+            echo -e "INFO: Nothing to export.\n";                      #CONSOLE
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to reach remote repository RC:$EC";
+          echo -e "ERROR: Unable to reach remote repository.\n"; RC="$EC"; #CONSOLE
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to build DVL workspace path RC:$EC";
+        echo -e "ERROR: Unable to build DVL workspace path.\n"; RC="$EC"; #CONSOLE
+      fi
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Requested service user invalid RC:$EC";
+    echo -e "ERROR: Requested service user invalid.\n"; RC="$EC";      #CONSOLE
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ProjectDir} ${LocalBranchName} ${LocalUserID} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

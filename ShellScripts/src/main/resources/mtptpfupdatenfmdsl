@@ -1,0 +1,459 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpfupdatenfmdsl.                                          #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Update oldr .load after nightly automated completed.                   #
+#      sorted of target system load date and time.                            #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Read requested systems name                                      #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process.                                      #
+#      exit with 8, error message.                                            #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   23062017    NARASHIMAN   created the script.                              #
+#   12212017    ARUL         CFG Support included and permission error fix    #
+#   05112018    ARUL         Empty txt file and invalid .so issues fix        #
+#   09132018    ARUL         Excluded TPF File system path .so path fix       #
+#   04292019    GOWTHAM      Updated with logger support                      #
+#   05272019    ARUL         Optimize this NFM and DSL Process                #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+IP_CORE="${1^^}";
+#
+LOAD_CFG="${IP_CORE,,}_maketpf.cfg"
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${IP_CORE} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function getConfig {
+  local _RC=0;
+  local _syslineNo;
+  local _applineNo;
+  wget --no-check-certificate -N "${CFG_URL}" &> /dev/null; _RC=$?;
+  if [ "$_RC" -lt 1 ]; then
+    mv maketpf.cfg "${LOAD_CFG}"; _RC=$?
+    if [ "$_RC" -eq 0 ]; then
+# TPF_ROOT Update-------------------------------------------------------------#
+      _syslineNo=( $(grep -n '^TPF_ROOT \|#TPF_ROOT ' "${LOAD_CFG}" | cut -d : -f 1 ) )
+      for((i=0; i<${#_syslineNo[@]}; i++)); #Remove all exsiting TPF_ROOT lines
+      do
+        sed -i "${_syslineNo[0]}d" "${LOAD_CFG}"
+      done
+      #/ztpfrepos/Project workspace path--------------------------------------#
+      if [ -d "${NFM_TPF_LOD}" ]; then
+        sed -i "${_syslineNo[0]} i TPF_ROOT := ${NFM_TPF_LOD}" "${LOAD_CFG}"
+      fi
+      #/ztpfsys/core/derived production path----------------------------------#
+      if [ -d "${TPF_SYS}/${IP_CORE,,}/prod/derived" ]; then
+        sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${TPF_SYS}/${IP_CORE,,}/prod/derived" "${LOAD_CFG}"
+      fi
+      #/ztpfsys/core production path------------------------------------------#
+      if [ -d "${TPF_SYS}/${IP_CORE,,}/prod" ]; then
+        sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${TPF_SYS}/${IP_CORE,,}/prod" "${LOAD_CFG}"
+      fi
+      #/ztpfsys/common production path----------------------------------------#
+      if [[ "${IP_CORE,,}" =~ ^(apo|pgr|pre)$ ]]; then
+        if [ -d "${TPF_SYS}/common/prod/derived" ]; then
+          sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${TPF_SYS}/common/prod/derived" "${LOAD_CFG}"
+        fi
+        if [ -d "${TPF_SYS}/common/prod" ]; then
+          sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${TPF_SYS}/common/prod" "${LOAD_CFG}"
+        fi
+      fi
+      #/ztpf/put level production path----------------------------------------#
+      if [ -d "${PRD_TPF_IBM}" ]; then
+        sed -i "$((_syslineNo=_syslineNo + 1)) i TPF_ROOT += ${PRD_TPF_IBM}" "${LOAD_CFG}"
+      fi
+# APPL_ROOT Update------------------------------------------------------------#
+      _applineNo=($(grep -n '^APPL_ROOT \|#APPL_ROOT ' "${LOAD_CFG}" | cut -d : -f 1 ))
+      for((i=0; i<${#_applineNo[@]}; i++)); #Remove all exsiting TPF_ROOT lines
+      do
+        sed -i "${_applineNo[0]}d" "${LOAD_CFG}"
+      done
+      #/ztpfrepos/Project workspace path--------------------------------------#
+      if [ -d "${NFM_TPF_LOD}" ]; then
+        sed -i "${_applineNo[0]} i APPL_ROOT := ${NFM_TPF_LOD}" "${LOAD_CFG}"
+      fi
+      #/ztpfrepos/common production path--------------------------------------#
+      if [[ "${IP_CORE,,}" =~ ^(apo|pgr|pre)$ ]]; then
+        if [ -d "${TPF_APP}/common/derived" ]; then
+          sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${TPF_APP}/common/derived" "${LOAD_CFG}"
+        fi
+        if [ -d "${TPF_APP}/common" ]; then
+          sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${TPF_APP}/common" "${LOAD_CFG}"
+        fi
+      fi
+      #/ztpfrepos/core/derived production path--------------------------------#
+      if [ -d "${TPF_APP}/${IP_CORE,,}/derived" ]; then
+        sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${TPF_APP}/${IP_CORE,,}/derived" "${LOAD_CFG}"
+      fi
+      #/ztpfrepos/core production path----------------------------------------#
+      if [ -d "${TPF_APP}/${IP_CORE,,}" ]; then
+        sed -i "$((_applineNo=_applineNo + 1)) i APPL_ROOT += ${TPF_APP}/${IP_CORE,,}" "${LOAD_CFG}"
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to rename maketpf.cfg to ${LOAD_CFG} RC:${_RC}"
+      echo -e "ERROR: Failed to rename maketpf.cfg to ${LOAD_CFG}";
+      _RC="$EC";
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to get maketpf.cfg RC:${_RC}"
+    echo -e "ERROR: Failed to get maketpf.cfg";
+    _RC="$EC";
+  fi
+  return "$_RC";
+}
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+function execDSL {
+  local _RC=0;
+    pushd "${NFM_TPF_LOD}" &> /dev/null
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Utility EXEC:${SUP_DSL_NFM} Nightly file maintanance initialized RC:${RC}"
+      rexec -l "${NFM_DSL_USER}" -p "${NFM_DSL_SSAL}" "${NFM_DSL_HOST}" "${SUP_DSL_NFM}" &> /dev/null
+      RC=$?;
+      if [ "$RC" -eq 0 ]; then
+        #touch "${NFM_TPF_LOD}/.nfm0"
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Utility Nightly file maintanance completed and success RC:${RC}"
+        echo -e "INFO: NFM check completed"
+        #Update NFM/DSL to create loadset
+        if [ -f ./active.txt ]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Utility NFM already in progress. active.txt found at DSL directory RC:$EC"
+          echo -e "ERROR: NFM already in progress. active.txt found  at DSL directory"
+          RC="$EC";
+          #sendMail "NFM_ALREADY_RUNNING_MAIL" "${IP_CORE}" "Report: Utility Nightly maintanance is already running"
+        else
+          vparsList=$(curl -k -s "${PRD_API_CHNL}://${PRD_API_HOST}:${PRD_API_PORT}/${PRD_API_DSL}?systemName=${IP_CORE}")
+          vparsList=($(echo -e "${vparsList[*]//\"/}")) #Array over ride
+          if [ -z "${vparsList[*]// /}" ] || [[ "${vparsList[*]}" =~ DOCTYPE ]]; then
+            RC=$EC;
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${PRD_API_DSL} API not reachable RC:$RC"
+            sendMail "NFM_FAIL_MAIL" "${IP_CORE}" "Report:${PRD_API_DSL} API not reachable"
+          else
+            dslFiles=( $(find . -name "${IP_CORE,,}*.txt" -not -name "active.txt" | sed "s|^\./||" 2> /dev/null) )
+            for dslFile in "${dslFiles[@]}"
+            do
+              dslFile="${dslFile%_*}"
+              if [[ "${dslFile}" =~ +(apo|pgr|pre|wsp|air|res|oss) ]]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Old DSL formats files for systems and plans skip to process RC:$RC"
+              elif [[ "${vparsList[*]}" =~ ${dslFile^^} ]]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Existing ${dslFile} systems and plans will be validate RC:$RC"
+              else
+                sendEMMSG "$(date +%Y%m%d-%H%M%S%z) NFM Clean-up - ${dslFile}" "$(ls -l "${dslFile}".* "${dslFile}"_*.*)"
+                rm -f ./"${dslFile}".* ./"${dslFile}"_*.*; #Clean-up existing old NFM/DSL files
+              fi
+            done
+            for vparData in "${vparsList[@]}"
+            do
+              if [[ "${vparData}" == NOT_FOUND ]] || [ -z "${vparData}" ]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:No systems and plans included for NFM RC:$RC"
+              else
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${vparData} systems and plans included for NFM RC:$RC"
+                createOLDR "${vparData}";
+                RC=$?;
+              fi
+            done
+          fi
+        fi
+      else
+        #touch "${NFM_TPF_LOD}/.nfm8"
+        sendLOG "WARNING" "pid[${SPID}]" "${SPNM##*/}:${SUP_DSL_NFM} Utility Nightly file maintanance failed and error RC:${RC}"
+        echo -e "INFO: NFM check failed"
+        sendMail "NFM_FAIL_MAIL" "${IP_CORE}" "Report: ${SUP_DSL_NFM} Utility Nightly file maintanance failed and error"
+      fi
+    popd &> /dev/null
+  return "${_RC}";
+}
+#
+#-----------------------------------------------------------------------------#
+function createOLDR {
+  local _RC=0;
+  local _planList;
+  local _plan;
+  local _loadSets;
+  local _loadset;
+  local _loadLists;
+  local _loadPath;
+  local _stgPath;
+  local _dvlPath;
+  local _refDate;
+  local _vparData="$1"; #Sample WSP_LTQA|HASH:GI900316_20190525_0900,GF900596_20190608_0900,GI900514_20190611_1000
+  local _vparFile="${_vparData%:*}"; #WSP_LTQA|HASH
+  local _vparPlan="${_vparData#*:}"; #GI900316_20190525_0900,GF900596_20190608_0900,GI900514_20190611_1000
+  local _vparName="${_vparFile%|*}"; #WSP_LTQA
+  local _vparHash="${_vparFile#*|}"; #HASH
+  local _vparText="${_vparName}_${_vparHash:0:8}.txt";
+  local _vparLoad="${_vparName}.load";
+  local _vparOldr="${_vparName}.oldr";
+  local _vparRept="${_vparName}.report";
+  if [[ ! "${_vparName}" =~ WSP ]]; then
+    _vparName="${_vparName,,}";
+    _vparHash="${_vparHash,,}";
+    _vparText="${_vparText,,}";
+    _vparLoad="${_vparLoad,,}";
+    _vparOldr="${_vparOldr,,}";
+    _vparRept="${_vparRept,,}";
+  fi
+  if [ -f "${_vparText}" ]; then
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:System ${_vparName} upto date with DSL process RC:${_RC}"
+    echo -e "INFO: System ${_vparName} upto date with DSL process"
+  else
+    rm -f ./"${_vparName}".* ./"${_vparName}"_*.*; #Clean-up existing old NFM/DSL files
+    if [ -n "${_vparPlan[*]// /}" ]; then
+      IFS=',' read -ra _planList <<< "${_vparPlan[@]}"
+      for _plan in "${_planList[@]}"
+      do
+        echo -e "${_plan//_/ }" >> "${_vparText}"
+      done
+      unset IFS
+      if [ -f "${_vparText}" ]; then
+        #Sort vpars text file by date and time
+        sort -u "${_vparText}" -o "${_vparText}";
+        sort -k2 "${_vparText}" -o "${_vparText}";
+        _loadSets=( $(cut -c 1-8 "${_vparText}") );
+        #Create vpars load file for process
+        echo -e "@DEFINE" > "${_vparLoad}"; #Line1
+        sed -i -e "$ a SYSID=BSS" "${_vparLoad}"; #Line2
+        sed -i -e "$ a DEBUGFILES=YES" "${_vparLoad}" #Line3
+        for _loadset in "${_loadSets[@]}"
+        do
+          _stgPath=$(ls "${STG_TPF_LOD}"/*/"${IP_CORE,,}/${_loadset}.load" 2> /dev/null)
+          _dvlPath=$(ls "${DVL_TPF_LOD}"/*/"${IP_CORE,,}/${_loadset}.load" 2> /dev/null)
+          if [ -f "${_stgPath}" ]; then          #STG LOADS Update
+            sed -n /"${_loadset}"/,\$p "${_stgPath}" >> "${_vparLoad}"
+          elif [ -f "${_dvlPath}" ]; then        #DVL LOADS Update
+            sed -n /"${_loadset}"/,\$p "${_dvlPath}" >> "${_vparLoad}"
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Requested loadset ${_loadset} not found RC:$EC"
+          fi
+        done
+        #Check Line greter than default lines
+        if [ "$(wc -l < "${_vparLoad}")" -gt 3 ]; then
+          #Validate all the loadable file if present or not in the respective path
+          _loadLists=( $(grep "\." "${_vparLoad}") )
+          for _loadPath in "${_loadLists[@]}"
+          do
+            if [ ! -s "${_loadPath}" ] && [[ ! "${_loadPath}" =~ '/sys/' ]]; then
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid ${_loadPath} entry at ${_vparLoad} RC:$EC"
+              echo -e "ERROR: Invalid ${_loadPath} entry at ${_vparLoad}" >> "${_vparRept}"
+              _RC="$EC"
+              mkdir -p "${NFM_TPF_ERR}" &> /dev/null
+              _refDate=$(date +%Y%m%d%H%M%S)
+              cp "${_vparLoad}" "${NFM_TPF_ERR}/${_vparLoad}.${_refDate}"
+              cp "${_vparRept}" "${NFM_TPF_ERR}/${_vparRept}.${_refDate}"
+            fi
+          done
+          if [ -f "${_vparRept}" ] && [ "${_RC}" -ne 0 ]; then
+            _errLoadset=( $(cut -f 3 -d ' ' "${_vparRept}") )
+            for _errLS in "${_errLoadset[@]}"
+            do
+              _eL=( $(echo "${_errLS}" | cut -f 4 -d '/') )
+              _eN=( $(grep -n "${_eL:2}" "${_vparText}" | cut -d : -f 1) )
+              _eS=( $(grep "${_eL:2}" "${_vparText}" ) )
+              sed -i "${_eN[*]}d" "${_vparText}" #Delete existing files
+              sendNFMError "${_eS[*]}" "${_vparName}" "${NFM_TPF_ERR}/${_vparRept}.${_refDate}"
+            done
+            rm "${_vparLoad}"
+            if [ -f "${_vparText}" ]; then
+              #Sort vpars text file by date and time
+              sort -u "${_vparText}" -o "${_vparText}";
+              sort -k2 "${_vparText}" -o "${_vparText}";
+              _loadSets=( $(cut -c 1-8 "${_vparText}") );
+              #Create vpars load file for process
+              echo -e "@DEFINE" > "${_vparLoad}"; #Line1
+              sed -i -e "$ a SYSID=BSS" "${_vparLoad}"; #Line2
+              sed -i -e "$ a DEBUGFILES=YES" "${_vparLoad}" #Line3
+              for _loadset in "${_loadSets[@]}"
+              do
+                _stgPath=$(ls "${STG_TPF_LOD}"/*/"${IP_CORE,,}/${_loadset}.load" 2> /dev/null)
+                _dvlPath=$(ls "${DVL_TPF_LOD}"/*/"${IP_CORE,,}/${_loadset}.load" 2> /dev/null)
+                if [ -f "${_stgPath}" ]; then          #STG LOADS Update
+                  sed -n /"${_loadset}"/,\$p "${_stgPath}" >> "${_vparLoad}"
+                elif [ -f "${_dvlPath}" ]; then        #DVL LOADS Update
+                  sed -n /"${_loadset}"/,\$p "${_dvlPath}" >> "${_vparLoad}"
+                else
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Requested loadset ${_loadset} not found RC:$EC"
+                fi
+              done
+              #Check Line greter than default lines
+              if [ "$(wc -l < "${_vparLoad}")" -gt 3 ]; then
+                #Validate all the loadable file if present or not in the respective path
+                _loadLists=( $(grep "\." "${_vparLoad}") )
+                for _loadPath in "${_loadLists[@]}"
+                do
+                  if [ ! -s "${_loadPath}" ] && [[ ! "${_loadPath}" =~ '/sys/' ]]; then
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid ${_loadPath} entry at ${_vparLoad} RC:$EC"
+                    echo -e "ERROR: Invalid ${_loadPath} entry at ${_vparLoad}" >> "${_vparRept}"
+                    _RC="$EC"
+                  else
+                    _RC="$RC"
+                  fi
+                done
+              fi
+            fi
+          fi
+        else
+          rm -f ./"${_vparLoad}";      #Clean-up loadsets with default lines
+        fi
+        if [ "${_RC}" -ne 0 ] && [ -f "${_vparRept}" ]; then
+          sendEMMSG "$(date +%Y%m%d-%H%M%S%z) NFM Failed - ${_vparLoad}" "$(cat "${_vparRept}")"
+        fi
+        #Generate loadset by using .load file
+        if [ -f "${_vparLoad}" ] && [ "${_RC}" -eq 0 ]; then
+          #Setup maketpf.cfg file
+          if [ -f "${LOAD_CFG}" ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_vparLoad} available to use for LOADTPF RC:${_RC}"
+            echo -e "INFO: ${LOAD_CFG} available to use for LOADTPF" &> /dev/null
+          else
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${LOAD_CFG} not found, generating CFG file to use LOADTPF RC:${_RC}"
+            echo -e "INFO: ${LOAD_CFG} not found, generating CFG file to use LOADTPF" &> /dev/null
+            if [[ "${IP_CORE}" == AIR ]] || [[ "${IP_CORE}" == RES ]] || [[ "${IP_CORE}" == OSS ]]; then
+              CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/dl/nonibm/nonibm_conf.git/master_${IP_CORE,,}/maketpf.cfg"
+              getConfig; _RC=$?
+            else                   #All other core except DELTA
+              CFG_URL="${DEV_BIN_RURL}/gitblit/raw/tpf/tp/nonibm/nonibm_conf.git/master_${IP_CORE,,}/maketpf.cfg"
+              getConfig; _RC=$?
+            fi
+          fi
+          #Create loadset using .load and .cfg file
+          if [ "${_RC}" -eq 0 ]; then
+            if [ -f ./active.txt ]; then
+              _RC="$EC";
+              sendLOG "WARNING" "pid[${SPID}]" "${SPNM##*/}:Utility Aborted Nightly maintanance is already running for ${IP_CORE} systems RC:${_RC}"
+            else
+              export TPF_CFG="${LOAD_CFG}";
+              loadtpf "${_vparLoad}" -o "${_vparOldr}" -r "${_vparRept}" &> /dev/null; _RC=$?;
+              export TPF_CFG="maketpf.cfg"
+              if [ "${_RC}" -eq 0 ]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:System ${_vparName} in OLDR created for DSL RC:${_RC}"
+                echo -e "INFO: System ${_vparName} in OLDR created for DSL";
+              else
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:OLDR Creation failed from loadtpf utility RC:$EC"
+                echo -e "ERROR: OLDR Creation failed from loadtpf utility";
+                _RC="$EC"
+                  Err_no=( $(cat "${_vparRept}" | grep -in "Parsing step ended with return code 8") )
+                  if [ -n "${Err_no[*]// /}" ]; then
+                    _No="${Err_no%%:*}"
+                    sed -i "${_No}","$((${_No}+1))d" "${_vparRept}"
+                  fi
+                sendEMMSG "$(date +%Y%m%d-%H%M%S%z) NFM Failed - ${_vparLoad}" "$(cat "${_vparRept}")"
+                sendMail "NFM_FAIL_MAIL" "${IP_CORE}" "Report: ${_vparLoad} OLDR Creation failed from loadtpf utility"
+                mkdir -p "${NFM_TPF_ERR}" &> /dev/null
+                _refDate=$(date +%Y%m%d%H%M%S)
+                cp "${_vparLoad}" "${NFM_TPF_ERR}/${_vparLoad}.${_refDate}"
+                cp "${_vparRept}" "${NFM_TPF_ERR}/${_vparRept}.${_refDate}"
+                [ -f "${_vparOldr}" ] && rm ./"${_vparOldr}"
+                if [ -f "${_vparRept}" ] && [ "${_RC}" -ne 0 ]; then
+                  _errLoadset=( $(cut -f 3 -d ' ' "${_vparRept}") )
+                  for _errLS in "${_errLoadset[@]}"
+                  do
+                    _eL=( $(echo "${_errLS}" | cut -f 4 -d '/') )
+                    _eN=( $(grep -n "${_eL:2}" "${_vparText}" | cut -d : -f 1) )
+                    sed -i "${_eN[*]// /}d" "${_vparText}" #Delete existing files
+                  done
+                  rm "${_vparLoad}"
+                  if [ -f "${_vparText}" ]; then
+                    #Sort vpars text file by date and time
+                    sort -u "${_vparText}" -o "${_vparText}";
+                    sort -k2 "${_vparText}" -o "${_vparText}";
+                    _loadSets=( $(cut -c 1-8 "${_vparText}") );
+                    #Create vpars load file for process
+                    echo -e "@DEFINE" > "${_vparLoad}"; #Line1
+                    sed -i -e "$ a SYSID=BSS" "${_vparLoad}"; #Line2
+                    sed -i -e "$ a DEBUGFILES=YES" "${_vparLoad}" #Line3
+                    for _loadset in "${_loadSets[@]}"
+                    do
+                      _stgPath=$(ls "${STG_TPF_LOD}"/*/"${IP_CORE,,}/${_loadset}.load" 2> /dev/null)
+                      _dvlPath=$(ls "${DVL_TPF_LOD}"/*/"${IP_CORE,,}/${_loadset}.load" 2> /dev/null)
+                      if [ -f "${_stgPath}" ]; then          #STG LOADS Update
+                        sed -n /"${_loadset}"/,\$p "${_stgPath}" >> "${_vparLoad}"
+                      elif [ -f "${_dvlPath}" ]; then        #DVL LOADS Update
+                        sed -n /"${_loadset}"/,\$p "${_dvlPath}" >> "${_vparLoad}"
+                      else
+                        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Requested loadset ${_loadset} not found RC:$EC"
+                      fi
+                    done
+                    #Check Line greter than default lines
+                    if [ "$(wc -l < "${_vparLoad}")" -gt 3 ]; then
+                      #Validate all the loadable file if present or not in the respective path
+                      _loadLists=( $(grep "\." "${_vparLoad}") )
+                      for _loadPath in "${_loadLists[@]}"
+                      do
+                        if [ ! -s "${_loadPath}" ] && [[ ! "${_loadPath}" =~ '/sys/' ]]; then
+                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid ${_loadPath} entry at ${_vparLoad} RC:$EC"
+                          echo -e "ERROR: Invalid ${_loadPath} entry at ${_vparLoad}" >> "${_vparRept}"
+                          _RC="$EC"
+                        else
+                          _RC="$RC"
+                        fi
+                      done
+                    fi
+                  fi
+                fi
+              fi
+            fi
+          else
+            _RC="$EC"
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:OLDR Creation not initated due to maketpf config file error RC:$EC"
+            echo -e "ERROR: OLDR Creation not initated due to maketpf config error";
+          fi
+        else
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_vparLoad} cleaned RC:${_RC}"
+          echo -e "INFO: ${_vparLoad} cleaned OLDR"
+        fi
+      else
+        _RC="$EC"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${_vparText} file not found for ${_vparName} systems RC:${_RC}"
+        echo -e "ERROR: ${_vparText}  file not found for ${_vparName} systems"
+      fi
+    else
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_vparName} systems related data cleared from DSL directory RC:${_RC}"
+      echo -e "INFO: ${_vparName} systems related data cleared from DSL directory"
+    fi
+  fi
+  return "${_RC}";
+}
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  [ ! -d "${NFM_TPF_LOD}" ] && mkdir -p "${NFM_TPF_LOD}"
+  if [ -f "${NFM_TPF_LOD}/active.txt" ]; then
+    RC="$EC";
+    sendLOG "WARNING" "pid[${SPID}]" "${SPNM##*/}:Utility Nightly maintanance is already running RC:${RC}"
+    #sendMail "NFM_ALREADY_RUNNING_MAIL" "${IP_CORE}" "Report: Utility Nightly maintanance is already running"
+  else
+    execDSL; RC=$?;
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${IP_CORE} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

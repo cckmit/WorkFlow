@@ -1,0 +1,38 @@
+<md-dialog aria-label="Reject" style="width:40%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2 style="color:#fff;">
+                    Reason to reject {{rj.impPlanId}}
+                </h2>
+                <span flex></span>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+
+            <div class="md-dialog-content">
+               
+                <label ng-if="rj.currentRole == 'Lead'">Do You Want to delete/deactivate LoadSet?
+                    </label>
+                    <md-input-container ng-if="rj.currentRole == 'Lead'" class="md-icon-float md-block spacingTwo">
+                            <md-radio-group  layout="row" ng-model="rj.deleteLoadSetFlag">
+                                    <md-radio-button value="Yes">Yes </md-radio-button>
+                                    <md-radio-button value="No"  ng-click="keepLoadSetValue()"  >No</md-radio-button>
+                                </md-radio-group>
+                    </md-input-container>
+                </br>
+                <textarea ng-model="rj.rejectMessage" class="form-control" placeholder="Provide Reason for Reject" required></textarea>
+                <span ng-show="rj.showMessageError" class="requiredField">*Required</span>
+            </div>
+        </md-dialog-content>
+        <md-dialog-actions layout="row">
+            <md-button ng-click="cancel()">
+                Cancel
+            </md-button>
+            <md-button class="md-primary" ng-click="proceedReject()">
+                Reject
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

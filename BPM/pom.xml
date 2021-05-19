@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.tsi.workflow</groupId>
+        <artifactId>WorkFlow</artifactId>
+        <version>1.29</version>
+    </parent>
+    <groupId>com.tsi.workflow</groupId>
+    <artifactId>ActivitiBPM</artifactId>
+    <version>1.29</version>
+    <properties>
+        <activiti-version>5.18.0</activiti-version>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.activiti</groupId>
+            <artifactId>activiti-engine</artifactId>
+            <version>${activiti-version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.activiti</groupId>
+            <artifactId>activiti-spring</artifactId>
+            <version>${activiti-version}</version>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>2.3.2</version>
+                <configuration>
+                    <source>${jdk.version}</source>
+                    <target>${jdk.version}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.3</version>
+                <executions>
+                    <execution>
+                        <id>create-bar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <tasks>
+                                <mkdir dir="${project.build.directory}/bar" />
+                                <copy todir="${project.build.directory}/bar">
+                                    <fileset dir="src/main/resources/diagrams" />
+                                    <mapper from="z*.bpmn" to="*.bpmn20.xml" type="glob" />
+                                </copy>
+                                <echo message="Creating bar: ${project.build.directory}/WorkFlow-${project.version}.bar" />
+                                <zip destfile="${project.build.directory}/WorkFlow-${project.version}.bar">
+                                    <fileset dir="${project.build.directory}/bar">
+                                        <include name="**/*.bpmn20.xml" />
+                                    </fileset>
+                                </zip>
+                            </tasks>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

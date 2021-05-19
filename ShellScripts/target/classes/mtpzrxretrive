@@ -1,0 +1,226 @@
+#!/usr/bin/python
+#*****************************************************************************#
+#   SCRIPT NAME: mtpzrxretrive                                                #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to get segment from git repository via JGIT API based on ref    #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - System name       (Examle:  apo)                                 #
+#      $2  - Program name      (Example: acd1.asm)                            #
+#      $3  - Version reference (Example: 0,1,9,8)                             #
+#      $4  - function area     (Example: sys, unk1,put13a)                    #
+#                               0 - online                                    #
+#                               1 - online-1                                  #
+#                               2 - online-2                                  #
+#                               9 - fallback                                  #
+#                               8 - pending                                   #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   03262018    ARUL         Created script                                   #
+#   03262018    THILAK       Updated JSON Support                             #
+#   04172018    PRABHU       Updated with '#' prefix file support             #
+#   08162018    ARUL         Updated direct repo support                      #
+#   09172018    VINOTH       Added check for nonibm and ibm program types     #
+#   09272018    VINOTH       Verification log also need show pending plans    #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+#declare -i _MiIP=4;                    #Expected number of input parms
+#declare -i _ReIP="$#";                 #Received number of input parms
+#
+import sys
+import time
+from httplib import HTTPConnection
+import json
+import urllib, urllib2
+
+systemName=sys.argv[1].strip()
+programName=sys.argv[2].strip()
+versionName=sys.argv[3].strip()
+funcArea=sys.argv[4].strip()
+#typeofProgram=sys.argv[5].strip()
+
+if len(systemName) == 0 :
+  print("Error: System name input is empty")
+  exit(1)
+
+if len(programName) == 0 :
+  print("Error: Program name input is empty")
+  exit(1)
+
+if len(versionName) == 0 :
+  print("Error: Version name input is empty")
+  exit(1)
+
+if len(funcArea) == 0 :
+  print("Error: Functional area input is empty")
+  exit(1)
+
+#if len(typeofProgram) == 0 :
+#  print("Error: TypeofProgram input is empty")
+#  exit(1)
+
+#-----------------------------------------------------------------------------#
+PACKAGES={
+    'tp' : ['apo','pgr','pre','wsp'],
+    'dl' : ['air','res','oss']
+}
+
+CONFIG={
+    'HOST':"vhldvztdt001.tvlport.net",
+    'PORT':8080,
+    'PATH': "/JGitAPI/jgit/SearchAllRepos?",
+    'TEMP_PATH':"/ztpfarch/ztpftemp/verify/"
+}
+
+VERSION_INDICATOR={
+    '0': 'Online',
+    '1': 'Online-1',
+    '2': 'Online-2',
+    '9': 'Fallback',
+    '8': 'Pending'
+}
+
+RESULT_DATA={
+    "COMMIT_ID": "",
+    "FUNC_AREA": "",
+    "TARGET_SYSTEM": ""
+}
+
+typeofProgram = funcArea[ :3]
+
+if typeofProgram.lower() == "put" or typeofProgram.lower() == "rel":
+    FILE_TYPE_TO_BE_SEARCHED=["IBM"]
+else:
+    FILE_TYPE_TO_BE_SEARCHED=["NON_IBM"]
+
+#-----------------------------------------------------------------------------#
+companyName = ''
+for j in PACKAGES:
+    if systemName in PACKAGES[j]:
+        companyName=j
+
+if companyName == '':
+    print("Provide company Name Ex: wsp , air")
+    exit(1)
+#----------------------------------------------------------------------------#
+if versionName == '8':                       #Pending status call with 8
+    apiStatus=1
+else:
+    apiStatus=0
+#----------------------------------------------------------------------------#
+def getJsonObject(json_input):
+    # Provide raw input and get python object
+    return json.loads(json_input)
+
+def getJson(json_input):
+    # Provide python object and get JSON
+    return json.dumps(json_input)
+
+#-----------------------------------------------------------------------------#
+if typeofProgram.lower() == "put" or typeofProgram.lower() == "rel":
+    repoName = "tpf/{}/ibm/ibm_{}.git".format(
+    companyName, funcArea.lower())
+    #print (repoName)
+else:
+    repoName = "tpf/{}/nonibm/nonibm_{}.git".format(
+    companyName, funcArea.lower())
+    #print (repoName)
+
+conn = HTTPConnection(CONFIG['HOST'],CONFIG['PORT'])
+params = urllib.urlencode({'pCompany': companyName, 'pFileFilter': programName, 'pMacroHeader': 'false', 'pStatusReq': apiStatus, 'pReposAllowed': repoName})
+conn.request("GET", CONFIG['PATH']+params)
+RESPONSE = conn.getresponse()
+# print(RESPONSE.status)
+RESPONSE_DATA=RESPONSE.read()
+# print(RESPONSE_DATA)
+PARSED=getJson(getJsonObject(RESPONSE_DATA))
+
+#print(len(getJsonObject(PARSED)))
+if len(getJsonObject(PARSED)) <= 0:
+    print("Failed")
+    exit(1)
+
+if not VERSION_INDICATOR.get(versionName):
+    print("Failed")
+    exit(1)
+
+SEGMENT_EXIST = False
+for i in range(0,len(getJsonObject(PARSED))):
+    # print(getJsonObject(getJson(getJsonObject(PARSED)[i]))['fileHashCode'])
+    fileNameWithPath=getJsonObject(getJson(getJsonObject(PARSED)[i]))['fileName']
+    BRANCHES=getJsonObject(getJson(getJsonObject(PARSED)[i]))['branch']
+    if len(BRANCHES) > 0:
+        # print(len(BRANCHES))
+        for k in range(0,len(BRANCHES)):
+            ITERATION_OBJ=getJsonObject(getJson(BRANCHES[k]))
+            #print("")
+            #print(VERSION_INDICATOR[versionName])
+            #print("======")
+            #print(ITERATION_OBJ['refStatus'])
+            # print(VERSION_INDICATOR[versionName] == 'Online')
+            if systemName in ITERATION_OBJ['targetSystem'] and VERSION_INDICATOR[versionName] == ITERATION_OBJ['refStatus'] and ITERATION_OBJ['fileType'] in FILE_TYPE_TO_BE_SEARCHED:
+                SEGMENT_EXIST = True
+                RESULT_DATA['COMMIT_ID']=ITERATION_OBJ['commitId']
+                RESULT_DATA['FUNC_AREA']=ITERATION_OBJ['funcArea']
+                RESULT_DATA['TARGET_SYSTEM']=ITERATION_OBJ['targetSystem']
+            #else:
+            #    print("NotFound")
+            #    exit(1)
+            # print(getJsonObject(getJson(BRANCHES[k]))['commitId']+" "+getJsonObject(getJson(BRANCHES[k]))['targetSystem']+" "+getJsonObject(getJson(BRANCHES[k]))['refStatus'])
+    # print("----")
+if SEGMENT_EXIST is False:
+    print("Failed")
+    exit(1)
+
+RESULT_DATA_OBJ = getJsonObject(getJson(RESULT_DATA))
+
+if not RESULT_DATA_OBJ['COMMIT_ID'] and len(getJsonObject(PARSED)) <= 0:
+    print("Failed")
+    exit(1)
+
+HOST_URL="http://{}:{}".format(CONFIG['HOST'],CONFIG['PORT'])
+if typeofProgram.lower() == "put" or typeofProgram.lower() == "rel":
+    RESULT_PATH_="/gitblit/raw/tpf/{}/ibm/ibm_{}/{}/{}".format(
+        companyName, RESULT_DATA_OBJ['FUNC_AREA'].lower(),RESULT_DATA_OBJ['COMMIT_ID'],fileNameWithPath)
+else:
+    RESULT_PATH_="/gitblit/raw/tpf/{}/nonibm/nonibm_{}/{}/{}".format(
+        companyName, RESULT_DATA_OBJ['FUNC_AREA'].lower(),RESULT_DATA_OBJ['COMMIT_ID'],fileNameWithPath)
+RESULT_PATH=HOST_URL+urllib.pathname2url(RESULT_PATH_)
+#print(RESULT_PATH)
+#-----------------------------------------------------------------------------#
+attempts = 0
+
+while attempts < 3:
+    try:
+        response = urllib2.urlopen("{}".format(RESULT_PATH), timeout = 5)
+        content = response.read()
+        f = open( CONFIG['TEMP_PATH']+programName, 'w' )
+        f.write( content )
+        f.close()
+        break
+    except urllib2.URLError as e:
+        attempts += 1
+        #print type(e)
+    except IOError as e:
+        attempts += 1
+        #print type(e)
+print("Completed")
+#-----------------------------------------------------------------------------#
+#exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=python

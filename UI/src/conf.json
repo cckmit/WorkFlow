@@ -1,0 +1,11 @@
+{
+	"dev" : {
+		"api" : "https://dev-mtp.tpfsoftware.com:8443/WorkFlowAPI"
+	},
+	"qa" : {
+		"api" : "https://qa-mtp.tpfsoftware.com:8443/WorkFlowAPI"
+	},
+	"default" : {
+		"api" : "http://localhost:8080/WorkFlowAPI"
+	}
+}

@@ -1,0 +1,228 @@
+#!/bin/bash
+# shellcheck disable=SC2207,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpfdvlcompile                                             #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      compile/assemble/link (build) my .asm, .c/cpp, file types              #
+#      in DEVL workspace to produce derived artifacts, so that I              #
+#       can produce object files required for deployment.                     #
+#   INPUT:                                                                    #
+#      $1  - Read Implementation plan with date and core info                 #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   23062017    NARASHIMAN   created the script                               #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+Implementation="$1";
+#
+minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+#
+#-----------------------------------------------------------------------------#
+#
+function processBuild(){
+  cp=( $(find . -type f -name "*\.c") )
+  if [[ "${USR_IMPL_CORE,,}" == "wsp" ]]; then
+    if [ "${cp[0]}" != '' ]; then
+      for((i=0; i<${#cp[*]}; i++));
+      do
+        echo "<<<<<<<<<<"
+        _arSegment=($(grep "${cp[i]^^} " /ztpfrepos/tpfps/data/tpfar.segments | cut -d" " -f1 ))
+        _arNomore=($(grep "${cp[i]^^} " /ztpfrepos/tpfps/data/tpfar.nomore | cut -d" " -f1 ))
+        if [ "${_arSegment[0]}" != '' ] && [ "${_arNomore[0]}" == '' ]; then
+          echo "MTP_INFO: rexec -l ztpfmldr -p doim99 wspvs1.worldspan.com /usr/local/tpf/tpfps/bin/startbind.rexx -P${APP_DVL_IMPL_CWRK}/src/${cp[i]} -L${APP_DVL_IMPL_CWRK}derived -Z${WSP_PATH} -DDB2T -RY -VZZ -FTK"
+# 	  rexec -l ztpfmldr -p doim99 wspvs1.worldspan.com /usr/local/tpf/tpfps/bin/startbind.rexx -P"$APP_DVL_IMPL_CWRK"/src/"${cp[i]}" -L"$APP_DVL_IMPL_CWRK"/derived -Z"$WSP_PATH" -DDB2T -RY -VZZ -FTK
+          echo "MTP_INFO: $APP_DVL_IMPL_CWRK/src/${cp[i]}"
+          echo "MTP_INFO: $APP_DVL_IMPL_CWRK/derived"
+          echo "MTP_INFO: $WSP_PATH"
+          if [ "$RC" == 0 ]; then
+            local seg
+            local seg1
+            seg="${cp[i]##*/}"
+            seg1="${seg%%.*}"
+            echo "MTP_INFO: TPFAR segment compilation - ${APP_DVL_IMPL_CWRK}/dervied/tpfarc/${seg1}.c"
+            maketpf -f "$APP_DVL_IMPL_CWRK/dervied/tpfarc/$seg1".c "$seg1".o
+          fi
+        elif [ "${_arSegment[*]}" == '' ] && [ "${_arNomore[*]}" == '' ]; then
+          local seg
+          local seg1
+          seg="${cp[i]##*/}"
+          seg1="${seg%%.*}"
+          echo "MTP_INFO: C segment compilation - ${seg1}.c"
+          maketpf -f "$seg1".c "$seg1".o
+        elif [ "${_arSegment[0]}" != '' ] && [ "${_arNomore[0]}" != '' ]; then
+          echo "MTP_INFO: ${cp[i]} is included to tpfar no more list"
+        fi
+        echo ">>>>>>>>>>"
+      done
+    fi
+  else
+    #
+    #force complie .C segments
+    #
+    if [ "${cp[0]}" != '' ]; then
+      for((i=0; i<${#cp[*]}; i++));
+      do
+        echo "<<<<<<<<<<"
+        local seg
+        local seg1
+        seg="${cp[i]##*/}"
+        seg1="${seg%%.*}"
+        echo "MTP_INFO: C segment compilation - ${seg1}.c"
+        maketpf -f "$seg1".c "$seg1".o
+        echo ">>>>>>>>>>"
+      done
+    fi
+  fi
+  cpp=( $(find . -type f -name "*.cpp") )
+  asm=( $(find . -type f -name "*.asm") )
+  #
+  #force complie .CPP segments
+  #
+  if [ "${cpp[0]}" != '' ]; then
+    for((i=0; i<${#cpp[*]}; i++));
+    do
+      echo "<<<<<<<<<<"
+      seg="${cpp[i]##*/}"
+      seg1="${seg%%.*}"
+      echo "MTP_INFO: CPP segment compilation - ${seg1}.cpp"
+      maketpf -f "$seg1".cpp "$seg1".o
+      echo ">>>>>>>>>>"
+    done
+  fi
+  #
+  #force complie .ASM Segments
+  #
+  if [ "${asm[0]}" != '' ]; then
+    for((i=0; i<${#asm[*]}; i++));
+    do
+      echo "<<<<<<<<<<"
+      find . -type f -name "*.mak" -exec grep -l "${asm[i]##*/}" {} +; comp=$?;
+      if [ "$comp" -eq 0 ]; then
+        #echo "MAKETPF - maketpf -f ${asm[i]##*/} ${asm[i]}"
+        #maketpf -f "${asm[i]##*/}" "${asm[i]%.*}.o" #For Component ASM
+        echo "maketpf -f ${asm[i]##*/} $(echo "${asm[i]}" | rev | cut -d"/" -f1 | rev | cut -d"." -f1).o"
+        echo "MTP_INFO: ASM segment compilation - ${asm[i]##*/}"
+        maketpf -f "${asm[i]##*/}" "$(echo "${asm[i]}" | rev | cut -d"/" -f1 | rev | cut -d"." -f1).o"
+      else
+        echo "MTP_INFO: ASM generic segment compilation - ${asm[i]##*/}"
+        echo "MAKETPF - maketpf -f ${asm[i]##*/} link"
+        maketpf -f "${asm[i]##*/}" link #For Generic ASM
+      fi
+      echo ">>>>>>>>>>"
+    done
+  fi
+  #
+  #build .mak for workspace
+  #
+  mak=( $(find . -type f -name "*.mak") )
+  if [ "${mak[0]}" != '' ]; then
+    for((i=0; i<${#mak[*]}; i++));
+    do
+      echo "<<<<<<<<<<"
+      echo "MTP_INFO: .MAK link - ${mak[i]##*/}"
+      maketpf "${mak[i]##*/}" link
+      echo ">>>>>>>>>>"
+    done
+  fi
+}
+#
+#-----------------------------------------------------------------------------#
+function generateConfig(){
+  local _RC=0;
+  if [ -d "$APP_DVL_IMPL_CWRK" ]; then
+    cd "$APP_DVL_IMPL_CWRK"
+    processBuild; RC=$?;
+  fi
+  if [ -d "$SYS_DVL_IMPL_CWRK" ]; then
+    cd "$SYS_DVL_IMPL_CWRK"
+    processBuild; RC=$?;
+  fi
+  return "$_RC";
+}
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  startDate="$(date +%Y%m%d%H%M%S)"
+  getParmFromBranch "${Implementation%_*}" "DVL"; RC=$?;
+  #if [ "$RC" -eq 0 ]; then
+    generateConfig; RC=$?;
+  #fi
+  if [ -d "$APP_DVL_IMPL_CWRK" ]; then
+    cd "$APP_DVL_IMPL_CWRK"
+    if [ ! -d "derived" ]; then
+      mkdir derived
+    fi
+    total=$(find -type f -regex ".*/.*\.\(asm\|c\|cpp\|mak\|mac\|h\|bsc\)")
+    tcount=($total)
+    #find all the .err after build process in workspace
+    err=( $(find . -type f -name "*.err") )
+    terr=($err)
+    if [ "${err[0]}" != '' ]; then
+      for((i=0; i<${#err[*]}; i++));
+      do
+        err_cnt+=1;
+        RC=8;
+      done
+    fi
+  fi
+  if [ -d "$SYS_DVL_IMPL_CWRK" ]; then
+    cd "$SYS_DVL_IMPL_CWRK"
+    if [ ! -d "derived" ]; then
+      mkdir derived
+    fi
+    total1=$(find -type f -regex ".*/.*\.\(asm\|c\|cpp\|mak\|mac\|h\|bsc\)")
+    t1count=($total)
+    #find all the .err after build process in workspace
+    err1=( $(find . -type f -name "*.err") )
+    t1err=($err1)
+    if [ "${err1[0]}" != '' ]; then
+      for((i=0; i<${#err[*]}; i++));
+      do
+        err_cnt+=1;
+        RC=8;
+      done
+    fi
+  fi
+  err=("${err[@]}" "${err1[@]}")
+  total=("${#total[@]}" "${#total1[@]}")
+  endDate=$(date +%Y%m%d%H%M%S)
+  #echo "TOTALCOUNT=${#total[@]}"
+  #echo "UNSUCCESSFUL=${#err[@]}"
+  #Collect error segments if any
+  if [ "${err[0]}" != '' ]; then
+    for((i=0; i<${#err[*]}; i++));
+    do
+      a=""
+      if [ -z $a ]; then
+        a=${err[i]##*/}
+      else
+        a="$a, ${err[i]##*/}"
+      fi
+    done
+  fi
+  echo -e "\nJSON RESULT --> { \"totalFiles\" : \"${#total[@]}\", \"failedFiles\" : \"${#err[@]}\", \"failedNames\" : \"[$a]\", \"startTime\" : \"$startDate\", \"endTime\" : \"$endDate\" }\n"
+fi
+#
+#-----------------------------------------------------------------------------#
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,41 @@
+#!/usr/bin/expect
+#*****************************************************************************#
+#   SCRIPT NAME: mtpsshkey                                                    #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Create SSH key for requested user account                              #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process.                                      #
+#      exit with 8, error message.                                            #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   12222017    ARUL    Created the script                                    #
+#*****************************************************************************#
+set timeout 100
+set exp_internal 1
+#
+if {![file exists "~/.ssh/id_rsa.pub"]} {
+  spawn ssh-keygen -t rsa -b 4096
+  expect -re {Enter file in which to save the key}
+  send -- "\r"
+  expect -re {empty for no passphrase}
+  send -- "\r"
+  expect -re {same passphrase again}
+  send -- "\r"
+  expect
+}
+#
+#-----------------------------------------------------------------------------#
+# vim: filetype=expect

@@ -1,0 +1,116 @@
+<!-- Main content -->
+
+<section class="content scrollingFunction" id="scroll_function">
+    <div class="col-md-12 animated slideInLeft">
+        <div class="row">
+            <div class="well well-sm" style="background-color:#fff;min-height:400px">
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="tab-content">
+                            <ul class="nav nav-tabs dataTabs" style="text-align:center;border: 0px;">
+                                <li class="active">
+                                    <a data-target="#app_info" ng-click="currentList('AppInfo')" data-toggle="tab" aria-label="AppInfo">App Info</a>
+                                </li>
+                                <li>
+                                    <a data-target="#System_List" ng-click="currentList('System List')" data-toggle="tab" aria-label="System_List">System List</a>
+                                </li>
+                                <li>
+                                    <a data-target="#System_Vpars_list" ng-click="currentList('System Vpars List')" data-toggle="tab" aria-label="System_Vpars_list">System Vpars List</a>
+                                </li>
+
+                                <li>
+                                    <a data-target="#System_Cpu_List" ng-click="currentList('System Cpu list')" data-toggle="tab" aria-label="System_Cpu_List">System Cpu list</a>
+                                </li>
+                                <li>
+                                    <a data-target="#Role_List" ng-click="currentList('Role_List')" data-toggle="tab" aria-label="Role_List">Role List</a>
+                                </li>
+                            </ul>
+                            <br>
+                            <div class="tab-pane active" id="app_info">
+                                <!-- {{vm.app_info}} -->
+                                <div ng-repeat="(sourceKey, sourceValue) in vm.app_info">
+                                    <div style="width:100%;font-weight:bold;">
+                                        <button type="button" class="btn btn-primary themeButton arrowButton" data-toggle="collapse" style="border:0px;width:100%;text-align: left;" data-target="#{{sourceKey}}">
+                                            <i class="fa fa-arrow-circle-right"></i>&nbsp;
+                                            {{sourceKey}}<span class="pull-right">+/-</span></button>
+                                    </div>
+                                    <div id="{{sourceKey}}" class="collapse in" style="border: 1px solid #ddd;">
+                                        <table class="table" style="border-color:rgba(187, 187, 187, 0.17);width: 100%;margin-bottom:0px;">
+                                            <thead>
+                                                <tr class="tableHeader alignText" style="background: rgba(60, 142, 190, 0.31);color: #1f7bb0;">
+                                                    <th>Key</th>
+                                                    <th>Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody style="background: #fff;">
+                                                <tr class="newRow" ng-repeat="(eachKey, eachValue) in sourceValue">
+                                                    <td>
+                                                        {{eachKey}}
+                                                    </td>
+                                                    <td>
+                                                        {{eachValue}}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <br>
+                                </div>
+
+                            </div>
+                            <div class="tab-pane" id="System_List">
+                                <div ng-include='templatePath+"/systemInformation.html"'></div>
+                            </div>
+                            <div class="tab-pane " id="System_Vpars_list">
+                                <div ng-include='templatePath+"/systemVParsList.html"'></div>
+                            </div>
+                            <div class="tab-pane " id="System_Cpu_List">
+                                <div ng-include='templatePath+"/systemCpuList.html"'></div>
+                            </div>
+                            <div class="tab-pane " id="Role_List">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <table class="table table-bordered">
+                                            <thead>
+                                                <tr class="tableHeader alignText">
+                                                    <th>
+                                                        Role Name
+                                                    </th>
+                                                    <th>List of Users</th>
+                                                    <th>Selected User Id</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr ng-repeat="eachRole in vm.allRoles" class="textCenter hoverCurrentRow">
+                                                    <td>{{eachRole}}</td>
+                                                    <td style="width:30%;">
+                                                        <select ng-model="vm.selectedUserOf[eachRole].id" class="form-control" id="{{eachRole}}">
+                                                                    <option ng-repeat="userObj in vm.usersOf[eachRole]" value="{{userObj.id}}">
+                                                                        {{userObj.displayName}}
+                                                                    </option>
+                                                                </select>
+                                                    </td>
+                                                    <td>
+                                                        {{vm.selectedUserOf[eachRole].id}}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+
+            </div>
+
+        </div>
+    </div>
+</section>
+<!-- /.content -->
+
+
+<!-- /.content

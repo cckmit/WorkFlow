@@ -1,0 +1,112 @@
+<md-dialog aria-label="lc" style="width: 65%;">
+    <!-- <md-toolbar> -->
+        <!-- <div class="md-toolbar-tools"> -->
+            <!-- <label style="color:white;">Update Repository Information ({{vmid.repoInfo.repository.trimmedName}})</label> -->
+        <!-- </div> -->
+    <!-- </md-toolbar> -->
+	<div style="border-bottom: 1px solid #067cab;">
+		<div>
+			<form ng-submit="activityFilterText(activitySearchText)">
+				<div class="input-group margin col-md-3 activityLogFilter" style="float: left!important;margin-top: 10px!important;">
+					<input type="text" ng-model="activitySearchText" class="form-control" placeholder="Filter by File name">
+					<span class="input-group-btn">
+						<button type="submit" class="btn btn-info btn-sm themeButton">Apply</button>
+					</span>
+				</div>
+			</form>
+		</div>
+		<div class="text-right" >
+			<span style="font-weight: 600; font-size: 15px;">Total Count: {{repoNameList.count}}</span>
+			<button ng-click="doExportRepoNameData()" style="background: #ef6c00;color:#fff;border: 0px;margin:5px;" class="btn btn-warning">
+				<span>
+					<i class="fa fa-download"></i> Export </span>
+			</button>
+		</div>
+	</div>
+
+    <md-dialog-content>
+        <div class="row divTableHeader" >
+            <div class="col-md-3 textCenter">
+				<span ng-click="sort('filename')">
+					File path
+				</span>
+				<span class="pull-right">
+					<i class="fa fa-long-arrow-down {{sortColumn['filename'].asc ? '' : 'sortDisabled'}}"></i>
+					<i class="fa fa-long-arrow-up {{sortColumn['filename'].desc ? '' : 'sortDisabled'}}"></i>
+				</span>
+            </div>
+            <div class="col-md-3 textCenter padding-none">
+				<span ng-click="sort('progname')">
+					File name
+				</span>
+				<span class="pull-right">
+					<i class="fa fa-long-arrow-down {{sortColumn['progname'].asc ? '' : 'sortDisabled'}}"></i>
+					<i class="fa fa-long-arrow-up {{sortColumn['progname'].desc ? '' : 'sortDisabled'}}"></i>
+				</span ng-click="">
+            </div>
+			<div class="col-md-3 textCenter padding-none">
+				<span ng-click="sort('targetsystem')">
+					Target system
+				</span>
+				<span class="pull-right">
+					<i class="fa fa-long-arrow-down {{sortColumn['targetsystem'].asc ? '' : 'sortDisabled'}}"></i>
+					<i class="fa fa-long-arrow-up {{sortColumn['targetsystem'].desc ? '' : 'sortDisabled'}}"></i>
+				</span ng-click="">
+            </div>
+            <div class="col-md-3 textCenter">
+				<span ng-click="sort('fileext')">
+					File type
+				</span>
+				<span class="pull-right">
+					<i class="fa fa-long-arrow-down {{sortColumn['fileext'].asc ? '' : 'sortDisabled'}}"></i>
+					<i class="fa fa-long-arrow-up {{sortColumn['fileext'].desc ? '' : 'sortDisabled'}}"></i>
+				</span>
+            </div>
+        </div>
+
+        <div class="modalProgramListing" ng-if="repoNameList.data.length > 0">
+            <div dir-paginate="repoName in repoNameList.data | filter: q | itemsPerPage: tableConfig.pageSize" total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"  pagination-id="tablePagination" >
+                <div class="row margin-none centerItems rowBorderBottom hoverCurrentRow" style="padding:5px;">
+                    <div class="col-md-3 centerItems textCenter flex-justify" style="word-break: break-all;">
+                        {{repoName.filename}}
+                    </div>
+                    <div class="col-md-3 textCenter"  style="word-break: break-all;">
+                        <a href="{{repoName.srcArtifactLink}}" target="_blank">{{repoName.progname | splitMak}}</a>
+                    </div>
+                    <div class="col-md-3 textCenter">
+                        {{repoName.targetsystem}}
+                    </div>
+                    <div class="col-md-3 textCenter">
+                        {{repoName.fileext}}
+                    </div>
+                </div>
+            </div>	
+        </div>
+        
+        <div ng-if="repoNameList <= 0" style="font-size: 20px;text-align: center; padding: 10px;">
+            <b>No Data Found</b>
+        </div>
+        
+
+    </md-dialog-content>
+    <md-dialog-actions layout="row"  style="border-top: 1px solid #eee;">
+	<!--  -->
+	<div flex="100" layout="row">
+        <span flex="25" style="padding: 12px 0 0 0;" >
+            <span style="padding-top: 10px;float:left;width:20%;">Show</span>
+            <select class="form-control" style="padding-top:10px;width: 60%;float:left;" ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                <option value="{{psVal}}" ng-selected ="{{psVal==tableConfig.pageSize}}" ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+            </select>
+            <span style="padding:10px 0 0 10px;float:left;width:20%;">entries</span>
+        </span>
+		<span flex="55">
+			<dir-pagination-controls boundary-links="true" on-page-change="pageChangeHandler(newPageNumber)"  pagination-id="tablePagination"></dir-pagination-controls>
+		</span>
+		<span flex="20" style="text-align: right;padding: 12px 0 0 0;">
+        <md-button ng-click="cancel()" aria-label="cancelFreezeDate_UpdateWindow">
+            Close
+        </md-button>
+		</dpan>
+	</div>
+    </md-dialog-actions>
+</md-dialog>

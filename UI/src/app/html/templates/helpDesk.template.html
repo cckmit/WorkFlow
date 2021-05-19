@@ -1,0 +1,105 @@
+<md-dialog aria-label="helpDesk" style="width:80%;">
+  <form ng-cloak>
+    <style>
+      table,
+      th,
+      td {
+        border: 1px solid black;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 5px;
+      }
+
+      th {
+        text-align: left !important;
+      }
+
+      tbody td {
+        text-align: left !important;
+      }
+    </style>
+    <md-dialog-content>
+      <div class="md-dialog-content">
+        <h2>How to request Toolchain Access</h2>
+        <a href="https://myidentity.travelport.com" aria-label="help_desk_url" target="_blank">My identity Portal
+          URL : myidentity.travelport.com</a>
+        <br>
+        <p>
+          LDAP Roles: Please select required roles from the drop down list. This will be subject to your manager
+          approval.
+        </p>
+        <p>
+          Steps:
+        </p>
+        <p>
+          1. Select "MyIdentity Access" <br>
+          2. Select "Request Access" <br>
+          3. Click Requested Service -> Linux server access option <br>
+          4. Click Access Type -> Permanent Access option <br>
+          5. Select "Development" from the Environment drop-down menu, then it'll display all the existing access group
+          names associated with this LDAP id.
+          Need to have your LDAP id created first (for developer roles, use id that is used to login to GVM/VM3/VM4/DL2
+          eg: e038039) <br>
+          6. Select "Additional Access for Existing Login Request" from the "Linux Request Type" choice <br>
+          7. Select "Full Access" from the "Permission" choice <br>
+          8. Select login shell as "/bin/bash" in selection(default)<br>
+          9. Enter "zTPF" in search filer and then select required roles from the "Role(s)/Group(s)" dropdown menu.<br>
+
+          <table>
+            <tr>
+              <th>LDAP Group Name</th>
+              <th>Remarks</th>
+            </tr>
+            <tr>
+              <td>tpfsys (RA_TP_USERS)</td>
+              <td>Access to Impact Analysis tool and for all Developer activities in Toolchain(Travelport:
+                MUST HAVE for Impact Analysis & zTPFGI)</td>
+            </tr>
+
+            <tr>
+              <td>ztpfdevtools_dev_appsupport (WF_TP_DEVELOPER)</td>
+              <td>Developer Role (Travelport)</td>
+            </tr>
+
+            <tr>
+              <td>ztpfdevtools_dev_developer_lead (WF_TP_LEAD)</td>
+              <td>Lead Role (Travelport)</td>
+            </tr>
+
+            <tr>
+              <td>ztpfdevtools_dev_managers (WF_TP_DEV_MANAGER)</td>
+              <td>Dev Manager Role(Travelport)</td>
+            </tr>
+
+            <tr>
+              <td>ztpfdevtools_dev_peer_review (WF_TP_PEER_REVIEWER)</td>
+              <td>Peer Reviewer Role(Travelport)</td>
+            </tr>
+
+            <tr>
+              <td>ztpfdevtools_dev_qualitymgmt (WF_TP_QA)</td>
+              <td>QA Role(Travelport)</td>
+            </tr>
+
+            <tr>
+              <td>ztpfdevtools_prod_serveraccess (WF_TP/DL_PROD_SERVER_ACCESS)</td>
+              <td>Toolchain Server Access (Travelport & Delta: MUST HAVE for all Toolchain users)</td>
+            </tr>
+          </table>
+          <br>
+          10. Finally, enter "Access Justification" to submit the form. Once it's approved then he'll get the
+          access.<br>
+        </p>
+
+      </div>
+    </md-dialog-content>
+    <md-dialog-actions layout="row">
+      <md-button ng-click="cancel()">
+        Close
+      </md-button>
+    </md-dialog-actions>
+  </form>
+</md-dialog>

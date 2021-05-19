@@ -1,0 +1,5 @@
+{
+    "$schema": "https://vhldvztdt001.tvlport.net/sonar/sonarqube-inject-vsc/master/schemas/sonarlint.json",
+    "serverId": "vhldvtztdt001.tvlport.net",
+    "projectKey": "com.tsi.workflow:WorkFlow"
+}

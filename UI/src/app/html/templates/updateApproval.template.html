@@ -1,0 +1,86 @@
+<md-dialog aria-label="Plan Approval" style="width: 50%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <label style="color:white;">Update Approval Details</label>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content" style="height:15vh;">
+                <form name="vmid.updateData">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label>Approver Name <span class="requiredField">*</span></label>
+                            <md-input-container class="md-icon-float md-block clearMargin">
+                                <input type="text" name="putLevel" aria-label="approvedBy"
+                                    ng-model="vmid.updateData.approvedBy" />
+                            </md-input-container>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label>Comments </label>
+                            <md-input-container class="md-icon-float md-block clearMargin">
+                                <input type="text" name="comments" aria-label="comments"
+                                    ng-model="vmid.updateData.comments" />
+                            </md-input-container>
+                        </div>
+                        <div class="col-md-4">
+                            <label>Email Uploaded </label>
+                            <div>
+                                <div ng-if="vmid.updateData.fileName.name==null">
+                                    <a ng-click="downloadLoadApproverFile(vmid.updateData.planId,vmid.updateData.fileName)"
+                                        ngf-select ng-model="vmid.updateData.fileName"
+                                        style="color: black;text-decoration: underline !important;">{{vmid.updateData.fileName}}</a>
+                                </div>
+                                <div ng-if="vmid.updateData.fileName.name">
+                                    <a ng-click="downloadLoadApproverFile(vmid.updateData.planId,vmid.updateData.fileName)"
+                                        ngf-select ng-model="vmid.updateData.fileName"
+                                        style="color: black;text-decoration: underline !important;">{{vmid.updateData.fileName.name}}</a>
+                                    <div ng-hide="vmid.updateData.fileName.name"
+                                        ng-bind="vmid.updateData.fileName.name"></div>
+                                </div>
+                                <div style="color:#aaa;">
+                                    {{vmid.updateData.createdDt}}
+                                    <span class="pull-right">
+                                        <div style="margin-right: 22px;" ng-if="(vmid.updateData.fileName).length >0 "
+                                            ng-click="vmid.deleteApprvlDocFile(vmid.updateData.fileName)">
+                                            <i style="color: black" class="fa fa-trash"></i>
+                                            <md-tooltip md-direction='right'>
+                                                Delete
+                                            </md-tooltip>
+                                        </div>
+                                        <div>
+                                            <button ng-if="!vmid.updateData.fileName" ngf-select
+                                                ng-model="vmid.updateData.fileName"
+                                                class="btn btn-sm btn-primary themeButton">
+                                                <i class="fa fa-upload"></i>{{vmid.updateData.fileName}}
+                                            </button>
+                                        </div>
+                                    </span>
+                                </div>
+
+                            </div>
+
+                        </div>
+                    </div>
+
+                </form>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <span style="color:red;" ng-show="vmid.forceInsertMsg" flex>Click "Update", if you would like to proceed
+                anyway</span>
+            <md-button ng-click="cancel()" aria-label="cancelApproval_UpdateWindow">
+                Cancel
+            </md-button>
+            <md-button class="md-primary" ng-click="vmid.updateApprover(vmid.updateData)"
+                aria-label="updateApprovalWindow">
+                Update
+            </md-button>
+
+        </md-dialog-actions>
+    </form>
+</md-dialog>

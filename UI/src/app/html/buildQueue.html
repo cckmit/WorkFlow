@@ -1,0 +1,176 @@
+<!-- Main content -->
+<section class="content animated slideInLeft">
+        <div class="col-md-12">
+            <div class="row">
+                <div class="systemTasks">
+                    <div class="tab-content">
+                        <div class="tab-pane active" id="_ETYPE">
+                            <div class="row" style="margin-right: 0px;padding-bottom: 10px;">
+                                <div class="col-md-2">
+                                    <input type="text" class="form-control"
+                                        press-enter-key="searchPlanData(vm.searchPlanData)" ng-model="vm.searchPlanData"
+                                        placeholder="Server Name Search" />
+                                </div>
+                                <div class="col-md-4 padding-none">
+                                    <button type="button" class="btn btn-primary themeButton refreshButton"
+                                        ng-click="searchPlanData(vm.searchPlanData)" aria-label="searchDeploymentChanges">
+                                        <md-tooltip md-direction='bottom'>Server Name Search</md-tooltip>
+                                        <i class="fa fa-search" aria-hidden="true"></i>
+    
+                                    </button>
+                                </div>
+                                <div class="col-md-6 text-right">
+                                    <button type="button" style="margin-right:5px;" class="btn btn-primary themeButton "
+                                        ng-click="refreshBuild()" aria-label="refreshDeploymentChanges">
+                                        <md-tooltip md-direction='bottom'>Refresh</md-tooltip>
+                                        <i class="fa fa-refresh" aria-hidden="true"></i>
+                                    </button>
+                                    <span ng-if="keyLength( vm.buildQueueList) !== 0">
+                                        <span style="margin:0 10px;"> Total number of items: <span
+                                                class="templateCountSize">
+                                                {{vm.totalNumberOfItem}}</span> </span>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div ng-if="keyLength( vm.buildQueueList) !== 0" class="row">
+                                        <div class="col-md-3" style="display: inline-flex;"
+                                            ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                                        <div class="col-md-3" style="display: inline-flex;"
+                                            ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                            <span style="padding: 10px;">Show</span>
+                                            <select class="form-control" style="padding:10px;width: 40%;"
+                                                ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                                <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                                    ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                            </select>
+                                            <span style="padding:10px">entries</span>
+                                        </div>
+                                        <div class="col-md-3"></div>
+                                        <div class="col-md-6">
+                                            <dir-pagination-controls boundary-links="true"
+                                                on-page-change="pageChangeHandler(newPageNumber)"
+                                                pagination-id="tablePagination"></dir-pagination-controls>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div ng-if="keyLength( vm.buildQueueList) == 0"
+                                style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                                <b>No tasks found</b>
+                            </div>
+    
+                            <span ng-init="buildScreenType == 'ONLINE_BUILD' "></span>
+                            <div ng-if="keyLength( vm.buildQueueList) != 0">
+                                <div class="divTableHeader divFlexBody flex textCenter">
+                                    <div class="col-md-1" ></div>
+                                    <div class="col-md-1" style="">
+                                        Plan ID
+                                    </div>
+                                    <div class="col-md-1" style="">
+                                        System
+                                    </div>
+                                    <div class="col-md-2" style="">
+                                        Server Name
+                                    </div>
+    
+                                    <div class="col-md-1" style="">
+                                        Build Type
+                                    </div>
+                                    <div class="col-md-2" style="">
+                                        Build Status
+                                    </div>
+    
+                                    <div class="col-md-2" style="">
+                                        Submit Date/Time
+                                    </div>
+                                    
+                                    <div class="col-md-2" style="">
+                                        Start Date/Time
+                                    </div>
+                                </div>
+                                <div class="vpar-band {{($index%2)==0 ? 'vpar-band-odd' : 'vpar-band-even' }}"
+                                    dir-paginate=" pPlanObj in  vm.buildQueueList | filter: q | itemsPerPage: tableConfig.pageSize"
+                                    total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"
+                                    pagination-id="tablePagination">
+                                    <div class="flex divFlexBody textCenter hoverCurrentRow">
+                                        <div class="fContent col-md-1" >
+                                            <a ng-if="pPlanObj.expanded" ng-click="pPlanObj.expanded = false;"
+                                                aria-label="{{pPlanObj.planid}}">
+                                                <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+                                            </a>
+                                            <a ng-if="!pPlanObj.expanded"
+                                                ng-click="pPlanObj.expanded = true;loadSystemImplApproverList(pPlanObj.plan);"
+                                                aria-label="{{pPlanObj.planid}}">
+                                                <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+                                            </a>
+                                        </div>
+                                        <div class="fContent col-md-1">
+    
+                                            {{pPlanObj.planid}}
+                                        </div>
+                                        <div class="fContent col-md-1">
+    
+                                            {{pPlanObj.targetsystem}}
+                                        </div>
+                                        <div class="fContent col-md-2">
+    
+                                            {{pPlanObj.servername}}
+                                        </div>
+                                        <div class="fContent col-md-1">
+    
+                                            {{pPlanObj.buildtype}}
+                                        </div>
+                                        <div class="fContent col-md-2"
+                                            ng-class="((pPlanObj.buildstatus == 'In progress' )  ? 'inprogressRowColor' : 'pendingRowColor')">
+    
+                                            {{pPlanObj.buildstatus}}
+                                        </div>
+                                        <div class="fContent col-md-2">
+    
+                                            {{pPlanObj.buildtriggerdate | dCheck }}
+                                        </div>
+                                        <div class="fContent col-md-2">
+    
+                                            {{pPlanObj.buildstartdate | dCheck }}
+                                        </div>
+    
+                                    </div>
+                                    <div class="row labelFix" style="margin:0px;" ng-init="pObj=pPlanObj.plan"
+                                        ng-if="pPlanObj.expanded">
+                                        <div ng-include='templatePath+"/impPlan.template.html"'></div>
+                                    </div>
+                                </div>
+                                <div class="row" style="margin: 10px 0px;">
+                                    <div class="col-md-12">
+                                        <div ng-if="keyLength( vm.buildQueueList) !== 0" class="row">
+                                            <div class="col-md-3" style="display: inline-flex;"
+                                                ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                                            <div class="col-md-3" style="display: inline-flex;"
+                                                ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                                <span style="padding: 10px;">Show</span>
+                                                <select class="form-control" style="padding:10px;width: 40%;"
+                                                    ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                                    <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                                        ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                                </select>
+                                                <span style="padding:10px">entries</span>
+                                            </div>
+                                            <div class="col-md-3"></div>
+                                            <div class="col-md-6">
+                                                <dir-pagination-controls boundary-links="true"
+                                                    on-page-change="pageChangeHandler(newPageNumber)"
+                                                    pagination-id="tablePagination"></dir-pagination-controls>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- /.content -->

@@ -1,0 +1,194 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcreateprodrepo                                         #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to create production repositories at gitblit applications       #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Technology domain name (Ex: tpf)                                 #
+#      $2  - Company short code     (Ex: tp or dl)                            #
+#      $3  - Packages Type          (Ex: ibm or nonibm)                       #
+#      $4  - Name of the Package    (Ex: demo)                                #
+#      $5  - Package description    (Ex: demo)                                #
+#      $6  - Package Owner          (Ex: user)                                #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   15072016    GIRI    Created the script                                    #
+#   15092016    ARUL    Updated for creare repo and TPF Project structure     #
+#   29032017    ARUL    Code refactor as per new SCM structure                #
+#   19092017    ARUL    Updated for create derived artifact repo              #
+#   06102017    ARUL    Updated for invlaid certificate check                 #
+#   04252019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=6;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+TechDomain="$1";                       #Read tech domain from input
+CompShortCode="$2";                    #Read company short code from input
+PackageType="$3";                      #Read package type from input
+PackageName="$4";                      #Read package name from input
+PackageDesc="$5";                      #Read package desc from input
+PackageOwner="$6,$MTP_SUSR";           #Read package owner from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${TechDomain} ${CompShortCode} ${PackageType} ${PackageName} ${PackageDesc} ${PackageOwner} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function repoPathAssebmle {
+  local _tmp;
+  local _RC;
+  _tmp=$(echo "$PackageName" | tr -cd '[!@#$%^&*()_+]' );
+  if [ ${#_tmp} -eq 0 ]; then
+    PackageName=$(echo "$PackageName" | tr '[:upper:]' '[:lower:]' );
+    SrcRepoName="${PackageType}_${PackageName}.git";
+    BinRepoName="derived_${PackageName}.git";
+    SrcProdRepo="${TechDomain}/${CompShortCode}/${PackageType}/${SrcRepoName}";
+    BinProdRepo="${TechDomain}/${CompShortCode}/${PackageType}/${BinRepoName}";
+    _RC="$RC";
+  else
+    _RC="$EC";
+  fi
+  return "$_RC";
+}
+#
+#-----------------------------------------------------------------------------#
+# Source artifact repository
+#
+function createSrcProdRepo {
+  local _RC;
+# echo "${PRD_BIN_RURL}/gitblit/r/${SrcProdRepo}"  #DEBUG Purpose
+  GIT_SSL_NO_VERIFY=true git ls-remote "${PRD_BIN_RURL}/gitblit/r/${SrcProdRepo}" &>/dev/null; _RC=$?;
+  if [ "$_RC" -ne 0 ]; then
+    [ -f "/tmp/${USER}_json.data" ] && rm "/tmp/${USER}_json.data"
+    # authorizationControl : NAMED
+    # authorizationControl : AUTHENTICATED
+    echo "{\"name\": \"$SrcProdRepo\",  \"description\": \"$PackageDesc\",\
+          \"owners\": [\"$PackageOwner\"], \"accessRestriction\": \"PUSH\",\
+          \"authorizationControl\": \"AUTHENTICATED\", \"allowAuthenticated\":\
+          \"true\", \"size\": \"102 KB\"}">/tmp/"${USER}_json.data";
+
+    curl -k -X POST -H "Content-Type: application/json"\
+                 -H "Authorization: Basic $MTP_SSAL"\
+                 -H "Cache-Control: no-cache"\
+  -d@/tmp/"${USER}_json.data" "${PRD_BIN_RURL}/gitblit/rpc/?req=CREATE_REPOSITORY"
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Repository creation verify over secured protocol RC:$_RC"
+    echo -e "\nINFO: Repository creation verify over secured protocol.";
+    GIT_SSL_NO_VERIFY=true git ls-remote "${PRD_BIN_RURL}/gitblit/r/${SrcProdRepo}" &>/dev/null; _RC=$?;
+    if [ "$_RC" -ne 0 ]; then
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Repository creation failed to verify over secured protocol RC:$_RC"
+      echo -e "\nINFO: Repository creation failed to verify over secured protocol.";
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Repository creation verify over insecured protocol RC:$_RC"
+      echo -e "\nINFO: Repository creation verify over insecured protocol.";
+      #git -c http.sslVerify=false ls-remote "${PRD_BIN_RURL}/gitblit/r/${SrcProdRepo}" &>/dev/null; _RC=$?;
+      GIT_SSL_NO_VERIFY=true git ls-remote "${PRD_BIN_RURL}/gitblit/r/${SrcProdRepo}" &>/dev/null; _RC=$?;
+      if [ "$_RC" -ne 0 ]; then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Repository creation failed to verify over insecured protocol RC:$_RC"
+        echo -e "\nINFO: Repository creation failed to verify over insecured protocol.";
+        _RC="$EC";
+      fi
+    fi
+  else
+    _RC="$FC";
+  fi
+  return "$_RC";
+}
+#
+#-----------------------------------------------------------------------------#
+# Derived artifact repository
+#
+function createBinProdRepo {
+  local _RC;
+# echo "${PRD_BIN_RURL}/gitblit/r/${BinProdRepo}"  #DEBUG Purpose
+  GIT_SSL_NO_VERIFY=true git ls-remote "${PRD_BIN_RURL}/gitblit/r/${BinProdRepo}" &>/dev/null; _RC=$?;
+  if [ "$_RC" -ne 0 ]; then
+    [ -f "/tmp/${USER}_json.data" ] && rm "/tmp/${USER}_json.data"
+    echo "{\"name\": \"$BinProdRepo\",  \"description\": \"$PackageDesc\",\
+          \"owners\": [\"$PackageOwner\"], \"accessRestriction\": \"PUSH\",\
+          \"authorizationControl\": \"AUTHENTICATED\", \"allowAuthenticated\":\
+          \"true\", \"size\": \"102 KB\"}">/tmp/"${USER}_json.data";
+
+    curl -k -X POST -H "Content-Type: application/json"\
+                 -H "Authorization: Basic $MTP_SSAL"\
+                 -H "Cache-Control: no-cache"\
+  -d@/tmp/"${USER}_json.data" "${PRD_BIN_RURL}/gitblit/rpc/?req=CREATE_REPOSITORY"
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Repository creation verify over secured protocol RC:$_RC"
+    echo -e "\nINFO: Repository creation verify over secured protocol.";
+    GIT_SSL_NO_VERIFY=true git ls-remote "${PRD_BIN_RURL}/gitblit/r/${BinProdRepo}" &>/dev/null; _RC=$?;
+    if [ "$_RC" -ne 0 ]; then
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Repository creation failed to verify over secured protocol RC:$_RC"
+      echo -e "\nINFO: Repository creation failed to verify over secured protocol.";
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Repository creation verify over insecured protocol RC:$_RC"
+      echo -e "\nINFO: Repository creation verify over insecured protocol.";
+      #git -c http.sslVerify=false ls-remote "${PRD_BIN_RURL}/gitblit/r/${BinProdRepo}" &>/dev/null; _RC=$?;
+      GIT_SSL_NO_VERIFY=true git ls-remote "${PRD_BIN_RURL}/gitblit/r/${BinProdRepo}" &>/dev/null; _RC=$?;
+      if [ "$_RC" -ne 0 ]; then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Repository creation failed to verify over insecured protocol RC:$_RC"
+        echo -e "\nINFO: Repository creation failed to verify over insecured protocol.";
+        _RC="$EC";
+      fi
+    fi
+  else
+    _RC="$FC";
+  fi
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  repoPathAssebmle; RC=$?;
+  if [ "$RC" -eq 0 ]; then
+    createSrcProdRepo; RC=$?;
+    if [ "$RC" -eq 0 ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Production source repository ${SrcProdRepo} has been created RC:$RC"
+      echo -e "\nINFO: Production source repository ${SrcProdRepo} has been created.";
+      createBinProdRepo; RC=$?;
+      if [ "$RC" -eq 0 ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Production derived repository ${BinProdRepo} has been created RC:$RC"
+        echo -e "\nINFO: Production derived repository ${BinProdRepo} has been created.";
+      elif [ "$RC" -eq 1 ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Repository ${BinProdRepo} already available RC:$RC"
+        echo -e "\nINFO: Repository ${BinProdRepo} already available"; RC=0;
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Production repository ${BinProdRepo} creation failed RC:$EC"
+        echo -e "\nERROR: Production repository ${BinProdRepo} creation failed."; RC="$EC";
+      fi
+    elif [ "$RC" -eq 1 ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Repository ${SrcProdRepo} already available RC:$RC"
+      echo -e "\nINFO: Repository ${SrcProdRepo} already available"; RC=0;
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Production repository ${SrcProdRepo} creation failed RC:$EC"
+      echo -e "\nERROR: Production repository ${SrcProdRepo} creation failed."; RC="$EC";
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Package Name contain special char RC:$EC"
+    echo -e "\nERROR: Package Name contain special char"; RC="$EC";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${TechDomain} ${CompShortCode} ${PackageType} ${PackageName} ${PackageDesc} ${PackageOwner} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

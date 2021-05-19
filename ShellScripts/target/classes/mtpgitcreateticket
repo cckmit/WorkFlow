@@ -1,0 +1,97 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcreateticket                                           #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to create ticket for the Implementation                         #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Remote implementation plan repo Url                              #
+#      $2  - Implementation ID                                                #
+#      $3  - Reviewer Name                                                    #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   04052017    UVAIS   Created the script                                    #
+#   05212018    ARUL    Re-try added to git operations                        #
+#   08152018    ARUL    Git gc support incorporated                           #
+#   04252019    GOWTHAM Updated with logger support                           #
+#   02052019    VINOTH  Retry method changed with curl                        #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+Repo_Url="$1";                         #Read repo Url from input
+USR_IMPL_PLAN="$2";                    #Read Implementation from input
+Reviewer_Name="$3";                    #Read Reviewer Name from Input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${Repo_Url} ${USR_IMPL_PLAN} ${Reviewer_Name} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ $RC -eq 0 ]; then
+  GIT_TKT="${USR_IMPL_PLAN}_$RANDOM";
+  mkdir -p "${HOME}/TICKET";
+  if [[ "$Repo_Url" =~ /tp/ ]]; then
+    CompanyCode="tp";
+  elif [[ "$Repo_Url" =~ /dl/ ]]; then
+    CompanyCode="dl";
+  fi
+  tempName="${Repo_Url##*/}";
+  RepoName="${tempName%%.*}";
+  pushd "${HOME}/TICKET" &> /dev/null;
+    rm -rf "${USR_IMPL_PLAN}_"*;
+    retryCMD "git clone ${Repo_Url} ${GIT_TKT}" "${GIT_TKT}" "N" "Company=${CompanyCode}&pRepoName=${RepoName}&pisSource=true"; RC=$?;
+    if [ "$RC" -eq 0 ]; then
+      pushd "${GIT_TKT}" &> /dev/null;
+        retryCMD "git fetch --all" "N" "N" "Company=${CompanyCode}&pRepoName=${RepoName}&pisSource=true"; RC=$?;
+        if [ "${RC}" -eq 0 ]; then
+          git checkout -b myticket &> /dev/null;
+          echo "reviewTicket" >> .gitignore;
+          git commit -am "Review Ticket - ${USR_IMPL_PLAN}" &> /dev/null;
+          retryCMD "git push origin HEAD:refs/for/new%t=${USR_IMPL_PLAN},r=${Reviewer_Name} 2>&1 | grep http | cut -d '=' -f 3" "N" "Y" "Company=${CompanyCode}&pRepoName=${RepoName}&pisSource=true"; RC=$?;
+          if [ "$RC" -ne 0 ]; then
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Ticket creation failed for ${USR_IMPL_PLAN} RC:$RC"
+            echo -e "ERROR: Ticket creation failed for ${USR_IMPL_PLAN}"; #CONSOLE
+            RC="$EC"
+          fi
+          git checkout master &> /dev/null;
+          git branch -D myticket &> /dev/null;
+        fi
+      popd &> /dev/null;
+      rm -rf "${GIT_TKT}";
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${Repo_Url} is not a valid repository RC:$EC"
+      echo -e "ERROR: ${Repo_Url} is not a valid repository"; #CONSOLE
+      RC="$EC";
+    fi
+  popd &> /dev/null
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${Repo_Url} ${USR_IMPL_PLAN} ${Reviewer_Name} RC:$RC"
+exit "$RC";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

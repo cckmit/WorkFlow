@@ -1,0 +1,86 @@
+#!/bin/bash
+# shellcheck disable=2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdpull                                                #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to Pull from the requested repository                           #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Destination Project Path                                         #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull Pull process                                  #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   13072016    UVAIS   Created the script                                    #
+#   18082017    Uvais   Code refactor as per new SCM structure                #
+#   04252019    GOWTHAM Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+Proj_Dest_path="$1";                   #Read Local Dest path from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${Proj_Dest_path} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ -d "${Proj_Dest_path}" ]; then
+    pushd "${Proj_Dest_path}" &> /dev/null
+      git status &> /dev/null; RC=$?;
+      if [ "$RC" -eq 0 ]; then
+        git ls-remote --exit-code -h &> /dev/null; RC=$?;
+        if [ "$RC" -eq 0 ]; then
+          git pull origin &> /dev/null; RC=$?;
+          if [ "$RC" -eq 0 ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Pull process is successfully RC:$RC"
+            echo "Pull process is successfully";                       #CONSOLE
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Pull process failed RC:$RC"
+            echo "ERROR: Pull process failed";                         #CONSOLE
+            RC="$EC";
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Not able to read from remote repository RC:$RC"
+          echo "ERROR: Not able to read from remote repository";       #CONSOLE
+          RC="$EC";
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${Proj_Dest_path} is not a valid GIT Directory RC:$RC"
+        echo "ERROR: ${Proj_Dest_path} is not a valid GIT Directory";  #CONSOLE
+        RC="$EC";
+      fi
+    popd &> /dev/null
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${Proj_Dest_path} is not a valid Directory RC:$EC"
+    echo "ERROR: ${Proj_Dest_path} is not a valid Directory";          #CONSOLE
+    RC="$EC";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${Proj_Dest_path} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,309 @@
+#!/bin/bash
+#shellcheck disable=2029
+#*****************************************************************************#
+#   SCRIPT NAME: mtpzgilibrary                                                #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to search and get segment commit list in git repository         #
+#      from remote git repository using SSH                                   #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Actual project path                                              #
+#      $2  - Core                                                             #
+#      $3  - Segment name                                                     #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   09182017    ARUL         Created script                                   #
+#   03262018    ARUL         Updated custom SSH Port support                  #
+#   09042018    VINOTH       Updated API Response                             #
+#   09062018    ARUL         Updated API LF handling                          #
+#   11272018    ARUL         Updated GI Library support                       #
+#   03142019    VINOTH       Online rank issue                                #
+#   04292019    GOWTHAM      Updated with logger support                      #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ProjectDir="$1";                       #Read project dir path from input
+CoreName="$2";                         #Read core name from input
+SegmentName="$3";                      #Read segment name from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ProjectDir} ${CoreName} ${SegmentName} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function writeToFile {
+  local i="$1";
+  local _remoteSys;
+  local arrayref;
+  local sshResponse;
+  local derivedFlag=0;
+  if [[ "$i" != "NOT FOUND" ]]; then
+    IFS=','
+    read -r -a arrayref <<< "${i[@]}"
+    Arrayseg="${arrayref[0]}";         #Segment name
+    ArrayHisOri="${arrayref[1]}";      #Online status
+    ArrayPlan="${arrayref[2]}";        #Planname
+    ArrayDate="${arrayref[3]}";        #Load Date
+    ArrayPath="${arrayref[4]}";        #Source Path
+    ArraySource="${arrayref[5]}";
+    ArraySourceURL="${PRD_API_RURL_SMOD_JGIT}/gitblit/raw$ArraySource";
+    ArrayFun="${arrayref[6]}";
+    Arraygit="${ArrayFun%%.*}";
+    sourceName="${Arrayseg%.*}";
+    Arraypackage="${Arraygit#*_}";     #Repo fun name
+    ArrayHis="${ArrayHisOri%%-*}";
+    if [[ ${ArraySource} =~ \/source\/ ]]; then  #NON-PROD Repo listing files
+      ArrayDerived="${ArraySource//\/source\///derived/}";
+      ArrayDerived="${ArrayDerived/${ArrayPath}/}";
+      if [[ "${ArrayPath%%/*}" == src ]]; then
+        derivedPath="lst";
+        derivedFile="${ArrayPath##*/}";
+        if [[ "${ArrayPath}" =~ \.mak ]]; then
+          derivedFile="${derivedFile%%.*}";
+          derivedFile="${derivedFile^^}";
+          derivedPath="${derivedPath}/${derivedFile}.map";
+        else
+          derivedFile="${derivedFile%%.*}";
+          derivedFile="${derivedFile}.lst";
+          derivedPath="${derivedPath}/${derivedFile}";
+        fi
+      else
+        derivedPathPrefix="${ArrayPath%/*}";
+        derivedPathSuffix="${derivedPathPrefix##*/}";
+        derivedDataPath="${ArrayDerived%%.git*}.git";
+        derivedDataPath="${DEV_GIT_DATA}${derivedDataPath}";
+        if [[ "${derivedPathSuffix}" == rt ]]; then
+          derivedPath="${derivedPathPrefix%/*}/lst";
+        fi
+        read -r -a _remoteSys <<< "${PRD_LBH_NODE}"
+        for rs in "${_remoteSys[@]}"
+        do
+          sshStatus=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${rs}" echo ok 2>&1);
+          if [[ "${sshStatus}" == ok ]]; then
+            rs="${rs}.${PRD_LBH_SUFX}"
+            if [[ "${ArrayPath}" =~ \.mak ]]; then
+              sshResponse=$(ssh "${rs}" "cd ${derivedDataPath}; git ls-tree --name-only -r master_${CoreName} | grep '\.map' | grep ${sourceName^^}")
+              if [ -n "${sshResponse}" ] && [[ "${sshResponse}" =~ \.map ]]; then
+                derivedFile="${sshResponse}"
+                derivedPath="${derivedFile}"
+                break;
+              else
+                derivedFlag=1;
+              fi
+            else
+              sshResponse=$(ssh "${rs}" "cd ${derivedDataPath}; git ls-tree --name-only -r master_${CoreName} | grep ${sourceName}.lst")
+              if [ -n "${sshResponse}" ] && [[ "${sshResponse}" =~ \.lst ]]; then
+                derivedFile="${sshResponse}"
+                derivedPath="${derivedFile}"
+                break;
+              else
+                derivedFlag=1;
+              fi
+            fi
+          else
+            if [ ${derivedFlag} -eq 1 ]; then
+              sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Permission denied to retrive ${Arrayseg} in listing file RC:$RC"
+              echo -e "WARNING: Permission denied to retrive ${Arrayseg} in listing file"
+              break;
+            else
+              derivedFlag=1;
+            fi
+          fi
+        done
+      fi
+      ArrayDerived="${ArrayDerived}${derivedPath}"
+      ArrayDerivedURL="${PRD_API_RURL_SMOD_JGIT}/gitblit/raw$ArrayDerived"
+    else                               #PROD repo listing files
+      if [[ ${ArraySource} =~ \/nonibm\/ ]]; then #NON-IBM Repo listing files
+        ArrayDerived="${ArraySource//nonibm_/derived_}"
+        ArrayDerived="${ArrayDerived/${ArrayPath}/}"
+        derivedPathPrefix="${ArrayPath%/*}"
+        derivedPathSuffix="${derivedPathPrefix##*/}"
+        derivedDataPath="${ArrayDerived%%.git*}.git"
+        derivedDataPath="${DEV_GIT_DATA}${derivedDataPath}"
+        read -r -a _remoteSys <<< "${PRD_LBH_NODE}"
+        for rs in "${_remoteSys[@]}"
+        do
+          sshStatus=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${rs}" echo ok 2>&1)
+          if [[ "${sshStatus}" == ok ]]; then
+            rs="${rs}.${PRD_LBH_SUFX}"
+            if [[ "${ArrayPath}" =~ \.mak ]]; then
+              derivedFile=$(ssh "${rs}" "cd ${derivedDataPath}; git ls-tree --name-only -r master_${CoreName} | grep '\.map' | grep ${sourceName^^}")
+              if [ -n "${derivedFile}" ] && [[ "${derivedFile}" =~ \.map ]]; then
+                sshResponse=$(ssh "${rs}" "cd ${derivedDataPath}; git log --pretty='%h %d %s' --decorate=full master_${CoreName} -- ${derivedFile} | grep grep ${ArrayPlan} | grep ${ArrayHis,,}")
+                if [[ "${sshResponse}" =~ ${ArrayPlan} ]] && [[ "${sshResponse}" =~ \/${ArrayHis,,} ]]; then
+                  derivedHash="${sshResponse%% *}"
+                  derivedPath="${derivedHash}/${derivedFile}"
+                  break;
+                fi
+              else
+                derivedFlag=1;
+              fi
+            else
+              derivedFile=$(ssh "${rs}" "cd ${derivedDataPath}; git ls-tree --name-only -r master_${CoreName} | grep ${sourceName}.lst")
+              if [ -n "${derivedFile}" ] && [[ "${derivedFile}" =~ \.lst ]]; then
+                sshResponse=$(ssh "${rs}" "cd ${derivedDataPath}; git log --pretty='%h %d %s' --decorate=full master_${CoreName} -- ${derivedFile} | grep ${ArrayPlan} | grep ${ArrayHis,,}")
+                if [[ "${sshResponse}" =~ ${ArrayPlan} ]] && [[ "${sshResponse}" =~ \/${ArrayHis,,} ]]; then
+                  derivedHash="${sshResponse%% *}"
+                  derivedPath="${derivedHash}/${derivedFile}"
+                  break;
+                fi
+              else
+                derivedFlag=1;
+              fi
+            fi
+          else
+            if [ ${derivedFlag} -eq 1 ]; then
+              sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Permission denied to retrive ${Arrayseg} in listing file RC:$RC"
+              echo -e "WARNING: Permission denied to retrive ${Arrayseg} in listing file"
+              break;
+            else
+              derivedFlag=1;
+            fi
+          fi
+        done
+      else                             #IBM Repo listing files
+        ArrayDerived="${ArraySource//ibm_/derived_}"
+        ArrayDerived="${ArrayDerived/${ArrayPath}/}"
+        derivedPathPrefix="${ArrayPath%/*}"
+        derivedPathSuffix="${derivedPathPrefix##*/}"
+        derivedDataPath="${ArrayDerived%%.git*}.git"
+        derivedDataPath="${DEV_GIT_DATA}${derivedDataPath}"
+        read -r -a _remoteSys <<< "${PRD_LBH_NODE}"
+        for rs in "${_remoteSys[@]}"
+        do
+          sshStatus=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "${rs}" echo ok 2>&1)
+          if [[ "${sshStatus}" == ok ]]; then
+            rs="${rs}.${PRD_LBH_SUFX}"
+            if [[ "${ArrayPath}" =~ \.mak ]]; then
+              derivedFile=$(ssh "${rs}" "cd ${derivedDataPath}; git ls-tree --name-only -r master_${CoreName} | grep '\.map' | grep ${sourceName^^}")
+              if [ -n "${derivedFile}" ] && [[ "${derivedFile}" =~ \.map ]]; then
+                sshResponse=$(ssh "${rs}" "cd ${derivedDataPath}; git log --pretty='%h %d %s' --decorate=full master_${CoreName} -- ${derivedFile} | grep ${ArrayPlan} | grep ${ArrayHis,,}")
+                if [[ "${sshResponse}" =~ ${ArrayPlan} ]] && [[ "${sshResponse}" =~ \/${ArrayHis,,} ]]; then
+                  derivedHash="${sshResponse%% *}"
+                  derivedPath="${derivedHash}/${derivedFile}"
+                  break;
+                fi
+              else
+                derivedFlag=1;
+              fi
+            else
+              derivedFile=$(ssh "${rs}" "cd ${derivedDataPath}; git ls-tree --name-only -r master_${CoreName} | grep ${sourceName}.lst")
+              if [ -n "${derivedFile}" ] && [[ "${derivedFile}" =~ \.lst ]]; then
+                sshResponse=$(ssh "${rs}" "cd ${derivedDataPath}; git log --pretty='%h %d %s' --decorate=full master_${CoreName} -- ${derivedFile} | grep ${ArrayPlan} | grep ${ArrayHis,,}")
+                if [[ "${sshResponse}" =~ ${ArrayPlan} ]] && [[ "${sshResponse}" =~ \/${ArrayHis,,} ]]; then
+                  derivedHash="${sshResponse%% *}"
+                  derivedPath="${derivedHash}/${derivedFile}"
+                  break;
+                fi
+              else
+                derivedFlag=1;
+              fi
+            fi
+          else
+            if [ ${derivedFlag} -eq 1 ]; then
+              sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Permission denied to retrive ${Arrayseg} in listing file RC:$RC"
+              echo -e "WARNING: Permission denied to retrive ${Arrayseg} in listing file"
+              break;
+            else
+              derivedFlag=1;
+            fi
+          fi
+        done
+      fi
+      ArrayDerived="${ArrayDerived%%.git*}.git"
+      ArrayDerived="${ArrayDerived}/${derivedPath}"
+      ArrayDerivedURL="${PRD_API_RURL_SMOD_JGIT}/gitblit/raw$ArrayDerived"
+    fi
+    unset IFS
+    if [ ${derivedFlag} -eq 0 ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:$Arrayseg,$ArrayHisOri,$ArrayPlan,$ArrayDate,$ArrayPath,${ArraySourceURL//COMMIT_ID/master_$CoreName},$Arraypackage,${ArrayDerivedURL//COMMIT_ID/master_$CoreName} >> $ProjectDir/.mtpgitref RC:$RC"
+      echo -e "$Arrayseg,$ArrayHisOri,$ArrayPlan,$ArrayDate,$ArrayPath,${ArraySourceURL//COMMIT_ID/master_$CoreName},$Arraypackage,${ArrayDerivedURL//COMMIT_ID/master_$CoreName}" >> "$ProjectDir/.mtpgitref"
+    else
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:$Arrayseg,$ArrayHisOri,$ArrayPlan,$ArrayDate,$ArrayPath,${ArraySourceURL//COMMIT_ID/master_$CoreName},$Arraypackage,NO_LISTING >> $ProjectDir/.mtpgitref RC:$RC"
+      echo -e "$Arrayseg,$ArrayHisOri,$ArrayPlan,$ArrayDate,$ArrayPath,${ArraySourceURL//COMMIT_ID/master_$CoreName},$Arraypackage,NO_LISTING" >> "$ProjectDir/.mtpgitref"
+    fi
+  fi
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ -d "$ProjectDir" ]; then
+    PRD_REF=$(readlink -f "${PRD_TPF_IBM}")
+    if [[ ${CoreName} == "apo" ]] || [[ ${CoreName} == "pgr" ]] || [[ ${CoreName} == "pre" ]] || [[ ${CoreName} == "wsp" ]]; then
+      pCompany="tp"
+    elif [[ ${CoreName} == "air" ]] || [[ ${CoreName} == "res" ]] || [[ ${CoreName} == "oss" ]]; then
+      pCompany="dl"
+    fi
+    # Don't alter below the line that'll impact API LF reference
+IFS='
+'
+    #shellcheck disable=SC2207
+    filehistory=( $(curl -s -k "${PRD_API_RURL_SMOD}/${PRD_API_WKF}/common/FindAllProdRepos?pCompany=$pCompany&pFileFilter=$SegmentName&pBranch=$CoreName") )
+    for i in "${filehistory[@]}"
+    do
+      unset IFS
+      if [[ "$i" =~ _put|_rel ]]; then
+        if [[ "$i" =~ ${PRD_REF##*/} ]]; then
+          writeToFile "$i"
+        fi
+      else
+        writeToFile "$i"
+      fi
+    done
+unset IFS
+    # Don't alter below the line that'll impact API LF reference
+IFS='
+'
+    #shellcheck disable=SC2207,SC2178
+    filehistory=( $(curl -s -k "${PRD_API_RURL_SMOD}/${PRD_API_WKF}/common/FindAllRepos?pCompany=$pCompany&pFileFilter=$SegmentName&pBranch=$CoreName") )
+    for i in "${filehistory[@]}"
+    do
+      unset IFS
+      if [[ "$i" =~ _put|_rel ]]; then
+        if [[ "$i" =~ ${PRD_REF##*/} ]]; then
+          writeToFile "$i"
+        fi
+      else
+        writeToFile "$i"
+      fi
+    done
+unset IFS
+    #shellcheck disable=SC2029
+    if [ -f "$ProjectDir/.mtpgitref" ]; then
+      sort -u "$ProjectDir/.mtpgitref" -o "$ProjectDir/.mtpgitref"
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:$ProjectDir - Not found RC:$EC"
+    echo -e "\\nError: $ProjectDir - Not found.";
+    RC="$EC";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ProjectDir} ${CoreName} ${SegmentName} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

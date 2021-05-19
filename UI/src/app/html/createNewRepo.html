@@ -1,0 +1,83 @@
+<section class="content scrollingFunction" id="scroll_function">
+    <div class="col-md-12 animated slideInLeft">
+        <div class="row">
+            <div class="well well-sm" style="background-color:#fff;">
+                <div class="row margin-none height-100">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label>Company<span class="requiredField">*</span></label>
+                                <md-input-container class="md-icon-float md-block spacingTwo">
+                                    <md-radio-group layout="row" ng-model="vm.inputRepoInfo.company">
+                                        <md-radio-button ng-click="clearRepoName()" value="{{pValue.nickName}}" ng-repeat="pValue in vm.pList" ng-init="$index==0?(vm.inputRepoInfo.company=pValue.nickName):''" md-autofocus="true" aria-label="company" >
+                                            {{pValue.name}}
+                                        </md-radio-button>
+                                    </md-radio-group>
+                                </md-input-container>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="spacingFour">Repository Name
+                                    <span class="requiredField">*</span>
+                                </label>
+                                <md-input-container class="md-icon-float md-block clearMargin">
+                                    <input alpha-numeric-lower-case-without-space aria-label="repoName" name="repoName" ng-model="vm.inputRepoInfo.repoName" ng-change="vm.repoResponseReceived=false"/>
+                                </md-input-container>
+                            </div>
+                            <div class="col-md-5">
+                                <md-button style="background-color:lightseagreen;margin-top: 30px;" class="md-raised md-primary" ng-click="vm.checkRepoExistence(vm.inputRepoInfo.company, vm.inputRepoInfo.repoName)" aria-label="createNewRepo">
+                                    Check existence
+                                </md-button> 
+                            </div>
+                        </div>
+                        <div ng-show="vm.repoResponseReceived">
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <label class="spacingFour">Target Systems
+                                        <span class="requiredField">*</span>
+                                    </label>
+                                    <md-input-container class="md-icon-float md-block spacingTwo">
+                                        <div layout="row">
+                                            <md-checkbox ng-model="vm.inputRepoInfo.targetSystems[system.id]" ng-value="system.id" ng-disabled="vm.branchExistedTargetSystems.indexOf(system.name) >= 0" ng-change="vm.selectSystems(system.id, system.name, vm.inputRepoInfo.targetSystems[system.id], vm.inputRepoInfo.targetSystems)"  name="{{system.id}}" class="check_{{system.name}} custom" data-id="{{system.id}}" 
+                                                    ng-repeat="system in vm.systemsList" ng-class="vm.branchExistedTargetSystems.indexOf(system.name) >= 0 ? 'md-checked' : ''" aria-label="systems_{{system.id}}">
+                                                    {{system.name}}
+                                            </md-checkbox>
+                                        </div>
+                                    </md-input-container>                                    
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <label class="spacingFour">Description
+                                        <span class="requiredField">*</span>
+                                    </label>
+                                    <md-input-container class="md-icon-float md-block clearMargin">
+                                        <textarea ng-model="vm.inputRepoInfo.repoDesc" ng-disabled="vm.repoExistsAlready" aria-label="repoDesc" name="repoDesc"></textarea>
+                                    </md-input-container>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <label class="spacingFour">Repository Owners
+                                        <span class="requiredField">*</span>
+                                    </label>
+                                    <md-input-container class="md-icon-float md-block multipleSelect2">
+                                        <select select2 name="repositoryOwners" id="repositoryOwners" ng-model="vm.inputRepoInfo.repoOwners" ng-disabled="vm.repoExistsAlready" class="form-control" multiple="multiple" aria-label="selectRepoOwners">
+                                            <option ng-value="dm.id"  ng-repeat="dm in repoOwnersList | orderBy:'displayName'">
+                                                {{ dm.displayName }}
+                                            </option>
+                                        </select>
+                                    </md-input-container>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <md-button ng-show="vm.showCreateButton" style="background-color:lightseagreen;" class="md-raised md-primary padding-left-none" ng-click="submitRepoInfo(vm.inputRepoInfo)" aria-label="createNewRepo">
+                                        Create
+                                    </md-button>                            
+                                </div>
+                            </div>
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

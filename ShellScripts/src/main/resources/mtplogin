@@ -1,0 +1,112 @@
+#!/bin/bash
+#shellcheck disable=SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtplogin                                                     #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to perform the user SSH mapping with gitblit server             #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Git Host name                                                    #
+#      $2  - User name                                                        #
+#      $3  - User password - this will use if MTP_GIT_PASS set in env.        #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   16052017    ARUL    Created the script                                    #
+#   04102017    ARUL    Updated with workflow application support             #
+#   21032017    ARUL    Updated SSH Key path                                  #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/.mtpconfig"
+#source "${MTP_ENV:=$PWD}/mtplibrary"
+WFW_ENV="/opt/workflow"                #Set workflow environment
+#-----------------------------------------------------------------------------#
+#declare -i _ExIP=3;                    #Expected number of input parms
+#declare -i _ReIP="$#";                 #Received number of input parms
+#
+GitHost="$1";                           #Read Gitblit server name
+GitPort="$2";                           #Read Gitblit SSH port number
+UserName="$3";                          #Read user name
+UserPass="${MTP_GIT_PASS:=$4}";         #Get user password from env or input
+#
+RC=0;
+EC=8;
+#-----------------------------------------------------------------------------#
+# Credential handling with expect script process
+function expectCall {
+local _RC=0;
+/bin/expect << EOF
+set timeout 100
+set exp_internal 1
+spawn sh -c "cat $pubKey | ssh -l $UserName -p $GitPort $GitHost keys add"
+expect {
+  "connecting (yes/no)?" {
+    send "yes\\r"
+    exp_continue
+  }
+  "Password:" {
+    send "$UserPass\\r"
+    interact
+    exp_continue
+  }
+  "Password:" {
+    send "$UserPass\\r"
+    interact
+    exit 0
+  }
+}
+EOF
+_RC=$?;
+if [ "$_RC" -ne 0 ]; then
+ echo -e "\\nERROR: ${tdh} - Failed to bind with Gitblit server."
+ _RC="$EC"
+fi
+return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ -d "${WFW_ENV}/sshkeys/${GitHost}/${UserName}" ]; then
+  pushd "${WFW_ENV}/sshkeys/${GitHost}/${UserName}" &> /dev/null
+    #pushd "$UserName" &> /dev/null
+      UserPass="${UserPass//\$/\\$}"   #Append prefix with escape char for '$'
+      #shellcheck disable=SC2207
+      tdHosts=( $(find ./* -type d) )
+      for td in "${tdHosts[@]}"
+      do
+        tdh="${td##*/}"
+        if [ -n "${tdh[*]}" ]; then
+          pubKey="${WFW_ENV}/sshkeys/${GitHost}/${UserName}/${tdh}/id_rsa.pub"
+          #Check if the keys already available
+          grep -f "${pubKey}" "${PRD_GIT_SSHK}/${UserName}.keys" &> /dev/null; RC=$?;
+          if [ "$RC" -ne 0 ]; then
+            if [ -f "${pubKey}" ]; then
+              expectCall; RC=$?;
+            fi
+          fi
+        fi
+      done
+      #popd &> /dev/null
+  popd &> /dev/null
+else
+  echo -e "ERROR: $UserName - SSH Key store dir not found"
+  RC="$EC"
+fi
+#-----------------------------------------------------------------------------#
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

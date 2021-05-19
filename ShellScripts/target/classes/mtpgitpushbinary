@@ -1,0 +1,189 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164,SC2007,SC1090
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitpushbinary                                             #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to store binary to gitblit server                               #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Git path workspace                                               #
+#      $2  - Git reference                                                    #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   16052017    ARUL    Created the script                                    #
+#   04102017    ARUL    Updated with workflow application support             #
+#   04252019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+#declare -i _ExIP=2;                    #Expected number of input parms
+#declare -i _ReIP="$#";                 #Received number of input parms
+#
+GitPath="$1";                          #Read User workspace path
+GitReference="$2";                     #Read Git reference array
+#Convert input to array
+GitRef="${GitReference//;/ }"
+GitRef=($(echo "${GitRef[@]}" | tr ' ' '\n'))
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+#minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${GitPath} ${GitReference} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+RC=0;
+EC=8;
+#-----------------------------------------------------------------------------#
+# This function used to re-try command
+#  mtpgitpushbinary - script needs to update
+function retryCMD {
+  local _RC;
+  local _exeCMD="${1}";                #Input to execute code
+  local _exeRMI="${2}";                #Optional input to remove instructions
+  local _exeOUT="${3}";                #Optional input to print output
+  local i="";
+  for i in {0..2}                      #Retry if it's failed
+  do
+    if [[ "${_exeOUT}" == Y ]]; then
+      bash -c "${_exeCMD}"; _RC=$?;
+    else
+      bash -c "${_exeCMD}" &> /dev/null; _RC=$?;
+    fi
+    if [ "${_RC}" -eq 0 ]; then
+      break;
+    elif [ "${_RC}" -eq 128 ]; then
+      sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Re-try command to succeed - $i RC:$_RC"
+      echo -e "$(date +"%Y-%m-%d %H:%M:%S") WARNING: Re-try command to succeed - $i" &> /dev/null; #DEBUG
+      if [[ "${_exeRMI:=N}" != N ]]; then
+        rm -rf "${_exeRMI}" &> /dev/null
+      fi
+      sleep 3;
+      _RC="$EC";
+    else
+      _RC="$EC";
+    fi
+  done
+  return "${_RC}"
+}
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ] ; then
+  execDate=$(date +%-S)
+  FLAG=0;
+  log="/tmp/gitlog_${GitPath##*_}.out";
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git operation log > ${log} RC:$RC";
+  echo -e "INFO: Git operation log" > "${log}";
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Directory path - $GitPath >> ${log} RC:$RC";
+  echo -e "INFO: Directory path - $GitPath" >> "${log}";
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Total number of operation call - ${#GitRef[@]} >> ${log} RC:$RC";
+  echo -e "INFO: Total number of operation call - ${#GitRef[@]}" >> "${log}";
+  #tempRef="${GitRef[*]}"
+  #shellcheck disable=SC2116
+  tempRef=($(echo "${GitRef[*]}"))
+  for y in "${tempRef[@]}"
+  do
+    if [[ "${y}" =~ gitref ]]; then
+      GitRefer="${GitRefer} ${y}"
+    else
+      GitRefer="${GitRefer} ${y}"
+    fi
+  done
+  #shellcheck disable=SC2116
+  gitReferarry=($(echo "${GitRefer[*]}"))
+  for y in "${gitReferarry[@]}"
+  do
+    taskDate=$(date +%-S)
+    GitRefPath="${y%,*}";
+    GitRefBranch="${y##*,}";
+    GitRefRepo="${GitRefPath##*/}"
+    if [[ "${GitRefRepo}" =~ BIN ]]; then
+      GitRefRepo="${GitRefRepo%_*}";
+    fi
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Process - $y >> ${log} RC:$RC";
+    echo -e "INFO: Process - $y" >> "${log}";
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:PATH-${GitRefPath} and BRANCH-${GitRefBranch} >> ${log} RC:$RC";
+    echo -e "INFO: PATH-${GitRefPath} and BRANCH-${GitRefBranch}" >> "${log}";
+    if [ -d "${GitRefPath}" ]; then
+      pushd "${GitRefPath}" &> /dev/null
+        submDate=$(date +%-S)
+        if [[ "${GitRefPath}" =~ derived ]]; then
+          remoteURL=$(git remote -v | grep origin | grep push | grep derived_ | grep "ibm\|GITREPO")
+          RC=$?
+        fi
+        echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git derived ${GitRefRepo} repository in availablity validated with Gitblit application - $(($(date +%-S)-submDate))s"
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git validation for the path ${GitRefPath} >> ${log} RC:$RC";
+        echo -e "INFO: Git validation for the path ${GitRefPath} - RC-$RC" >> "${log}";
+        if [ "$RC" -eq 0 ]; then
+          submDate=$(date +%-S)
+          git checkout "${GitRefBranch}" &> /dev/null;
+          retryCMD "GIT_SSL_NO_VERIFY=true git push -u origin ${GitRefBranch}" "N" "N"; RC=$?;
+          if [ "${RC}" -ne 0 ]; then
+            echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git derived artefacts push to remote ${GitRefRepo} repository failed - $(($(date +%-S)-submDate))s"
+            subnDate=$(date +%-S)
+            curl -k -s --request GET --url "${PRD_BIN_CHNL}://${PRD_RHOST}:${PRD_BIN_PORT}/${PRD_API_GIT}/doGC?pCompany=${REF_COMPANY}&pRepoName=${GitRefRepo}&pisSource=false"; RC=$?;
+            if [ "${RC}" -eq 0 ]; then
+              retryCMD "GIT_SSL_NO_VERIFY=true git push -u origin ${GitRefBranch}" "N" "N"; RC=$?;
+              if [ "${RC}" -eq 0 ]; then
+                echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git derived artefacts push to remote ${GitRefRepo} repository re-try succeeded - $(($(date +%-S)-subnDate))s"
+              else
+                if [[ "${remoteURL}" =~ nonibm ]] || [[ "${remoteURL}" =~ derived/|source/ ]]; then
+                  RC="$EC";
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git derived artefacts push to remote ${GitRefRepo} repository re-try failed - $(($(date +%-S)-subnDate))s"
+                else
+                  echo -e "$(date +"%Y-%m-%d %H:%M:%S") ERROR: Git push to local cache ${GitRefRepo} repository re-try failed - $(($(date +%-S)-subnDate))s"
+                  sendEMMSG "$(date +%Y%m%d-%H%M%S%z) ${GitRefBranch} - Git push to local cache zTPF repository failed" "$(git push -u origin "${GitRefBranch}")"
+                fi
+              fi
+            else
+              RC="$EC"
+              echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git GC to derived ${GitRefRepo} remote repository failed - $(($(date +%-S)-submDate))s"
+            fi
+          fi
+          echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git derived artefacts push to remote ${GitRefRepo} repository - $(($(date +%-S)-submDate))s"
+        fi
+        if [ "$RC" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin ${GitRefBranch} >> ${log} RC:$RC";
+          echo -e "INFO: Git push origin ${GitRefBranch} - RC-$RC" >> "${log}";
+          FLAG=$((FLAG+1));
+        else
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin ${GitRefBranch} >> ${log} RC:$RC";
+          echo -e "INFO: Git push origin ${GitRefBranch} - RC-$RC" >> "${log}";
+        fi
+      popd &> /dev/null
+    fi
+    echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git derived artefacts related with ${GitRefRepo} repository completed - $(($(date +%-S)-taskDate))s"
+  done
+  if [ "${#gitReferarry[@]}" -eq "${FLAG}" ]; then
+    #echo -e "INFO: Git remote push operation - OK"
+    rm -rf "${GitPath}";
+    rm "${log}";
+  else
+    #echo -e "ERROR: Git remote push operation - FAIL"
+    RC="$EC";
+  fi
+  echo -e "$(date +"%Y-%m-%d %H:%M:%S") INFO: Git store derived artefacts into remote repository completed - $(($(date +%-S)-execDate))s"
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${GitPath} ${GitReference} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

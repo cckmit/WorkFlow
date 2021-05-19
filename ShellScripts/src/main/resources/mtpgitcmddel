@@ -1,0 +1,232 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164,SC2236,SC2046
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmddel                                                 #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to perform the file delete at local workspace and remore sync   #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation ID                                                #
+#      $2  - Core or system                                                   #
+#      $3  - Segment full path                                                #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   16052017    ARUL    Created the script                                    #
+#   05212018    ARUL    Re-try added to git operations                        #
+#   11012018    VINOTH  support INC DELETE REX call to improve performance    #
+#   04222019    VINOTH  Remove cache file when file getting deleted.          #
+#   04222019    GOWTHAM Updated with logger support                           #
+#   07022019    GOWTHAM Remove derived artifacts from local workspace         #
+#   08282019    ARUL    Update to support auto comment in .mak file with impl #
+#   11062019    ARUL    Clean-up unused submodules from the plan              #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ImplId="$1";                           #Read Implementation name
+ImplCore="$2";                         #Read Implementation core
+SrcPath="$3";                          #Read source with path
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplId} ${ImplCore} ${SrcPath} RC:${RC}"
+#-----------------------------------------------------------------------------#
+# Send SabreTalk Includes delete command to z/OS
+function sendSabreTalkDelete {
+  local _sabreFile="${SrcPath##*/}";
+  local _prefDir="${SrcPath%/*}";
+  local _RC=0;
+  #shellcheck disable=SC2153
+  if [[ "${USR_IMPL_CORE}" == "${REF_DL_CORE}" ]] || [[ "${USR_IMPL_CORE}" == "${REF_WS_CORE}" ]]; then
+    if [ ! -z "${_sabreFile[*]// /}" ] && [[ "${_sabreFile}" =~ \.inc ]]; then
+      "${SAB_DEV_INC}" "${USR_IMPL_CORE}" "${USR_IMPL_CWRK}/${_prefDir}" "DELETE" "${_sabreFile}" ; _RC=$?
+      if [ "${_RC}" -ne 0 ]; then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Deleting include ${_sabreFile} to the REXX worker machine failed RC:${_RC}"
+        echo -e "ERROR: Deleting include ${_sabreFile} to the REXX worker machine failed."; #CONSOLE
+        _RC="${EC}";
+      fi
+    fi
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+function derivedCleanup {
+  local _fileStem="${SrcPath##*/}";
+  _fileStem="${_fileStem%.*}";
+  derFile=( $(find . -type f -iname "${_fileStem}\.*" -not -path "./.git*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -not -name "*.inc" -not -name "*.mac" -not -name "*.h" 2> /dev/null) )
+  if [ ! -z "${derFile[*]// /}" ]; then
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: ${derFile[*]} - Derived objects to remove RC:${RC}"
+    find . -type f -iname "${_fileStem}\.*" -not -path "./.git*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -not -name "*.inc" -not -name "*.mac" -not -name "*.h" -exec rm -f {} \;
+  else
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:No Derived objects to remove RC:${RC}"
+    echo -e "INFO: No Derived objects to remove";
+  fi
+}
+#-----------------------------------------------------------------------------#
+# Remove unused submoduled from the implementation
+function detachSubmodule {
+  local _RC=0;
+  local _srcPath="${1}";
+  local _submRepo;
+  local _submFile;
+  local _submList;
+  local _delmList;
+  local _delmName;
+  local _submPASS=0;
+  local _submFAIL=0;
+  if [ -d .gitref ]; then
+    pushd ".gitref" &> /dev/null
+      # Analyze all submodule reference with implementation source
+      for _submRepo in *
+      do
+        if [ -d "${_submRepo}" ]; then
+          pushd "${_submRepo}" &> /dev/null
+            git remote -v | grep -q "${_submRepo}" &> /dev/null; _RC=$?;
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule analyze with implementation source RC:${_RC}";
+            if [ "${_RC}" -eq 0 ]; then
+              git reset --hard &> /dev/null
+              git checkout "${USR_PLAN_CORE}" &> /dev/null; _RC=$?;
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} force to switch ${USR_PLAN_CORE} branch RC:${_RC}"
+              if [ "${_RC}" -eq 0 ]; then
+                #if [ -f "${_srcPath}" ]; then
+                  _submList=( $(find . -type f -not -name "README.md" -a -not -name ".git") )
+                  for _submFile in "${_submList[@]}"
+                  do
+                    # Validate source with implementation and then set FLAGS
+                    if [ -f "${USR_IMPL_CWRK}/${_submFile#*/}" ]; then
+                      _submPASS=1;
+                    else
+                      _submFAIL=1;
+                    fi
+                  done
+                #fi
+              fi
+            fi
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule analyze with implementation source completed RC:${_RC}"
+          popd &> /dev/null
+        fi
+        # Add unused segments in submodule repo to delete module list
+        if [ "${_submPASS}" -eq 0 ] && [ "${_submFAIL}" -eq 1 ]; then
+          _delmList+=("${_submRepo}")
+        fi
+        _submPASS=0;
+        _submFAIL=0;
+      done
+    popd &> /dev/null
+    # Remove unused submodules from the implementation
+    if [ -n "${_delmList[*]// /}" ]; then
+      for _delmName in "${_delmList[@]}"
+      do
+        _delmName=".gitref/${_delmName// /}"
+        git submodule deinit "${_delmName}" &> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule deinit from implementation RC:$?"
+        rm -rf "${_delmName}" &> /dev/null
+        git rm -f "${_delmName}" &> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule directory removed from implementation RC:$?"
+        git config -f .gitmodules --remove-section submodule."${_delmName}" &> /dev/null
+        git remote remove "${_delmName#*/}" &> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule config reference removed from implementation RC:$?"
+        git commit -m "${USR_ACT_BRANCH} - ${_delmName#*/} production repo detached" ".gitmodules" "${_delmName}" &> /dev/null
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_submRepo} submodule detached from implementation RC:$?"
+      done
+    fi
+  fi
+  return "${_RC}";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  USR_IMPL_CWRK="${USR_TPF_PROJ}/${ImplId}/${ImplCore}";
+  getParmFromBranch "${ImplId}_${ImplCore}"
+  if [ -d "${USR_IMPL_CWRK}" ]; then
+    pushd "${USR_IMPL_CWRK}" &> /dev/null;
+      git status &> /dev/null; RC=$?;
+      if [ "$RC" -ne 0 ];  then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_IMPL_CWRK} is not a valid GIT Directory RC:${RC}"
+        echo -e "ERROR: ${USR_IMPL_CWRK} is not a valid GIT Directory"; #CONSOLE
+        RC="${EC}";
+      else
+        #Add all changes before commit
+        #shellcheck disable=2197
+        USR_ACT_BRANCH=$( ( git branch | fgrep -F '*' | cut -d ' ' -f2 ) );
+        if [[ "${USR_ACT_BRANCH}" == "${ImplId}_${ImplCore}" ]]; then
+          IFS=',' read -r -a filePath <<< "${SrcPath[@]}"; #Read source as array
+          for SrcPath in "${filePath[@]}"
+          do
+            if [ -f "${SrcPath}" ]; then
+              rm "${SrcPath}";
+              git rm "${SrcPath}" &> /dev/null;
+              #MAK file Auto-comment restore line from prod checkout
+              if [[ "${SrcPath}" =~ \.asm|\.c ]] && [[ "${SrcPath%%/*}" =~ src ]]; then
+                makRestore=( $(grep -HEn "\#${USR_IMPL_PLAN}" src/*.mak | grep -w "${SrcPath##*/}" | tr -d ' ') )
+                if [ ! -z "${makRestore[*]}" ]; then
+                  for resData in "${makRestore[@]}"
+                  do
+                    makRestoreComment "${resData}";    #Auto-comment Restore for .mak
+                  done
+                fi
+              fi
+              #makChk=$(find ./src -type f -iname "*.mak" -not -path "./.git*")
+              #if [ ! -z "${makChk[*]}" ]; then
+              #  git commit -m "${SrcPath} removed by ${USER}" "${SrcPath}" ./src/*.mak &> /dev/null
+              #else
+                sendLOG "INFO" "pid[${SPID}]" "${USR_ACT_BRANCH} - ${SrcPath} removed by ${USER} ${SrcPath} $(git status --porcelain | sed s/^...// | grep .gitref) RC:${RC}"
+                git commit -m "${USR_ACT_BRANCH} - ${SrcPath} removed by ${USER}" "${SrcPath}" $(git status --porcelain | sed s/^...// | grep .gitref) &> /dev/null; RC=$?; #NOTE: Don't put double quotes
+                if [ "${RC}" -ne 0 ]; then
+                  git commit -m "${USR_ACT_BRANCH} - ${SrcPath} removed by ${USER}" "${SrcPath}" $(git status --porcelain | sed s/^...// | grep .gitref) &> /dev/null;
+                  sendLOG "WARN" "pid[${SPID}]" "${USR_ACT_BRANCH} - ${SrcPath} removed by ${USER} ${SrcPath} - Previous commit with .gitref failed trying without .gitref RC:$?"
+                fi
+                detachSubmodule "${SrcPath}"; RC=$?;
+              #fi
+              retryCMD "git push origin ${USR_ACT_BRANCH}" "N" "N" "Company=${REF_COMPANY}&pRepoName=${USR_IMPL_PLAN}&pisSource=true"; RC=$?;
+              if [ "${RC}" -eq 0 ]; then
+                find "${SrcPath%%/*}" -type d -empty -delete &> /dev/null
+                derivedCleanup;
+                sendSabreTalkDelete; RC=$?;
+              else
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File deletion push to remote failed RC:${RC}"
+                echo -e "ERROR: File deletion push to remote failed";    #CONSOLE
+                RC="${EC}";
+              fi
+            fi
+          done
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Local workspace branch differ - failed RC:${RC}"
+          echo -e "ERROR: Local workspace branch differ - failed";     #CONSOLE
+          RC="${EC}";
+        fi
+      fi
+    popd &> /dev/null
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Workspace not found - ${USR_IMPL_CWRK} RC:${EC}"
+    echo -e "ERROR: Workspace not found - ${USR_IMPL_CWRK}";         #CONSOLE
+    RC="${EC}";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:${RC}"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplId} ${ImplCore} ${SrcPath} RC:${RC}"
+exit "${RC}";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

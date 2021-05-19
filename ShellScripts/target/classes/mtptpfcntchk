@@ -1,0 +1,107 @@
+#!/bin/bash
+# shellcheck disable=SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpfcntchk                                                 #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to delete STG workspace on rejection                            #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation plan name with core                               #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY  INIT      COMMENT                                               #
+#   --------  --------  ------------------------------------------------------#
+#   07032017  ARUL      Created the script                                    #
+#   12092017  ARUL      Updated IBM Segments exclude                          #
+#   12152017  ARUL      Code optimized                                        #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=SC1090            #Exclude this rule for env.var
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+Implementation="$1";                   #Read implementation plan id
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${Implementation} RC:$RC"
+#-----------------------------------------------------------------------------#
+# Compiler Table Check to ignore warning or not
+function compilerTableCheck {
+  local _RC=0
+  local _workDir="$1"
+  local _makList;
+  local _lineNo;
+  local _makLine;
+  local _flagFound;
+  pushd "${_workDir}" &> /dev/null
+    rm ./.temp &> /dev/null            #Remove existing .temp ref if any
+    if [ ! -f "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt" ]; then
+      touch .temp
+      echo -e "Warning ${USR_IMPL_CORE}_compiler_control_table.txt is not found at /home/loader/ztpf/" > .temp #Reserved format
+      echo -e "$(<.temp)"
+      _RC="$EC";
+    fi
+    #
+    if [ "$_RC" -eq 0 ]; then
+      #Get list of .mak file from the project
+      # shellcheck disable=SC2207      #Exclude this rule for array string
+      _makList=( $(find . -type f -name '*.mak' | sed "s|^\\./||" | sort -u) )
+      for((i=0; i<${#_makList[@]}; i++));
+      do
+        #Get list of FLAGS line number file from the .mak file
+        # shellcheck disable=SC2207    #Exclude this rule for array string
+        _lineNo=( $(grep -n "FLAGS_" "${_makList[i]}" | cut -d : -f 1) )
+        for((j=0; j<${#_lineNo[@]}; j++));
+        do
+          #Read FLAGS lines from the .mak file
+          _makLine=$(sed -n "${_lineNo[j]}"p "${_makList[i]}")
+          if [ "${_makLine:0:1}" != "#" ]; then #Go if it's not commented
+            #Verify FLAGS with compiler control table
+            _flagFound=$(grep "${_makLine}" "/home/loader/ztpf/${USR_IMPL_CORE}_compiler_control_table.txt")
+            if [ "${_flagFound}" == '' ]; then #Write .mak file if FLAG not reserve
+              echo -e "${_makList[i]##*/}" >> .temp
+              #echo -e "${_makList[i]##*/} ${_makLine}"; #DEBUG
+              _RC="$EC";               #Return Error code
+            fi
+          fi
+        done                           #Exit from FLAGS Loop
+      done                             #Exit from .mak Loop
+      if [ -f "${_workDir}.temp" ]; then #Remove duplicates
+        sort -u "${_workDir}.temp" -o "${_workDir}.temp"
+        _RC="$EC";
+        echo -e "$(<.temp)"            #Print warning .mak files
+      fi
+    fi
+  popd &> /dev/null
+  return "$_RC"
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  getParmFromBranch "${Implementation}" "DVL";
+  if [ -d "${APP_DVL_IMPL_CWRK}" ]; then #NON-IBM Segments
+    compilerTableCheck "${APP_DVL_IMPL_CWRK}"; RC=$?;
+  fi
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${Implementation} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

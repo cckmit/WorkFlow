@@ -1,0 +1,60 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitreconsilejob                                           #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Reconsile Git repository vs Git database records                       #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process.                                      #
+#      exit with 8, error message.                                            #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   12052018    PRABHU  Created the script                                    #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+#source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+LOGPATH="${MTP_ENV}/log/workflow_recon.log"
+if [ ! -e "${MTP_ENV}/RepoReconsile.jar" ]; then
+  echo -e "ERROR: reconsile Application does not exist"                #CONSOLE
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Reconsile application does not exist RC:54"
+  exit 54
+else
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:EXEC:RepoReconsile.jar >> ${LOGPATH} RC:0"
+  nohup java -jar "${MTP_ENV}/RepoReconsile.jar" >> "${LOGPATH}" 2>&1 &
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Reconsile task initialized at background RC:$RC"
+fi
+#
+function sendLOG {
+  local _RC=0;
+  local _flag="$1"
+  local _procId="$2"
+  local _message="$3"
+  logger -i -p local5."${_flag}" "${_procId} ${_message}"; _RC=$?;
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END RepoReconsile.jar RC:$RC"
+exit 0
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

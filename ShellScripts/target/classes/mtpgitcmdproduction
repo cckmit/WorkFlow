@@ -1,0 +1,2169 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdproduction                                          #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to update production repositories and zLinux prod path          #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation name                                              #
+#      $2  - Online reference(ONLINE_ACCEPT or ONLINE_REVERT or ONLINE_REVERT)#
+#                                                                             #
+#   EXAMPLE:                                                                  #
+#      $MTP_ENV/mtpgitcmdproduction "t1700098_001_apo_201709190000" \         #
+#                                   "ONLINE_ACCEPT"                           #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   09222017    ARUL    Created the script                                    #
+#   02092017    ARUL    Updated with plan level tag reference                 #
+#   05212018    ARUL    Re-try added to git operations                        #
+#   09222018    ARUL    Mail alert enabled if this process failed             #
+#   12012018    VINOTH  GIT optimization                                      #
+#   02182019    VINOTH  Lock using process id and Tag ONLINE/FALLBACK         #
+#   03202019    VINOTH  Existing plan clean stopped due to multiple system    #
+#   05082019    VINOTH  Excluding out named files taken care                  #
+#   04292019    GOWTHAM Updated with logger support                           #
+#   11112019    VINOTH  remove duplicate submodules entry                     #
+#   11282019    VINOTH  random number fix                                     #
+#   12022019    VINOTH  API get data to file and avoid duplicate creation     #
+#   12232019    VINOTH  Git ssl no verify added validation                    #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+RemoteBranchName="$1";                 #Read tech domain from input
+OnlineRef="$2";                        #Read company short code from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+startDate=$(date +%Y%m%d%H%M%S);
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${RemoteBranchName} ${OnlineRef} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+function sabreInc {
+  local incFiles;
+  if [ -d "${GIT_SURL}" ]; then
+    pushd "${GIT_SURL}" &> /dev/null;
+      incFiles=($(find . -maxdepth 2 -type f -name "*.inc*"))
+      if [ -n  "${incFiles[0]// /}" ]; then
+        "${SAB_DEV_PROD}" "${USR_IMPL_CORE}" "${USR_IMPL_PLAN}" ; RC=$?
+        if [ ${RC} -ne 0 ]; then
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Sabre talk Inc files failed to copy to zOS production PDS. RC:$EC"
+          echo -e "ERROR: Sabre talk Inc files failed to copy to zOS production PDS"
+        fi
+      fi
+    popd &> /dev/null;
+  fi
+}
+#-----------------------------------------------------------------------------#
+function codeSync {
+  local _RC=0;
+  local _wd;
+  local _submoduleDirs;
+  local _sm;
+  local _devFiles;
+  local _df;
+  local _devSeg;
+  local _prodFiles;
+  local _pf;
+  local _copyCount=0;
+  local _devLastHash;
+  local _lnxseg;
+  local _prodPlanHash;
+  local _mergFiles;
+  local _mf;
+  local _prodNewHash;
+  local _prodOldHash;
+  local _tempHash;
+  local _onlineOldHash;
+  local _fallbkOldHash;
+  local _flag;
+  local _gitStatus;
+  local _gitModules;
+  local _tempPlanStr;
+  local _onlinePlanStr;
+  local _onlinePreRef;
+  local _getOnlineCommmit;
+  local _getOnlineFile;
+  local _execDate;
+  local i;
+  local j;
+  local k;
+  local _uniqueList;
+  if [[ "${OnlineRef}" == FALLBACK_ACCEPT ]]; then
+    PROD_MRG_SCRP="FALLBACK_ACCEPT"
+  else                                 #key for hooks utility check mtplibrary for more
+    PROD_MRG_SCRP=""
+  fi
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Switching directory to - ${HOME}/PRODSYNC RC:$_RC"
+  echo -e "\nINFO: Switching directory to - ${HOME}/PRODSYNC";
+  for _wd in "${GIT_SURL}" "${GIT_BURL}"
+  do
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Switching directory to - ${_wd} RC:$_RC"
+    echo -e "INFO: Switching directory to - ${_wd}";
+    pushd "${_wd}" &> /dev/null;       #Enter /home/mtpservice/PRODSYNC/t1700001_SRC
+      #---------------------------------------------------------------------#
+      #  Submodules update                                                  #
+      #---------------------------------------------------------------------#
+      _execDate=$(date +%Y%m%d%H%M%S)
+      if [ -f ".gitmodules" ]; then
+        if grep -q @ .gitmodules       #Don't alter this line
+        then
+          # shellcheck disable=SC2002
+          _gitModules=( $( cat .gitmodules | grep "url" |awk '{print $3}'| tr '\n' ',' | sed 's/,$/\n/') );
+          IFS=',' read -r -a _gitssh <<< "${_gitModules[@]}"
+          for _git in "${_gitssh[@]}"
+          do
+            _giturl="${_git#*@}";       #Get URL
+            _gitmod=ssh://"${_giturl}"; #Modify URL
+            _gitfol="${_gitmod##*/}";   #Get repo name alone
+            _gitfolder="${_gitfol%.*}"; #Get dir name from the repo
+            i="";
+            for i in {0..2}            #Retry if it's failed
+            do
+              if [ -d ".gitref/${_gitfolder}" ]; then
+                git submodule deinit ".gitref/${_gitfolder}" &> /dev/null; _RC=$?;
+                if [ "${_RC}" -eq 0 ]; then
+                  rm -rf ".gitref/${_gitfolder}";
+                  git rm -f ".gitref/${_gitfolder}" &> /dev/null;
+                  git config -f .gitmodules --remove-section submodule.".gitref/${_gitfolder}" &> /dev/null;
+                  break;
+                elif [ "${_RC}" -eq 128 ]; then
+                  echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                  sleep 3;
+                  _RC="$EC";
+                else
+                  _RC="$EC";
+                fi
+              else
+                break;
+              fi
+            done
+            i="";
+            for i in {0..2}            #Retry if it's failed
+            do
+              git submodule add -f "${_gitmod}" ".gitref/${_gitfolder}" &> /dev/null _RC=$?;
+              if [ "${_RC}" -eq 0 ]; then
+                break;
+              elif [ "${_RC}" -eq 128 ]; then
+                sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:git remote re-try - $i RC:$_RC"
+                echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                rm -rf ".gitref/${_gitfolder}"
+                sleep 3;
+                _RC="$EC";
+              else
+                _RC="$EC";
+              fi
+            done
+            if [ "${_RC}" -ne 0 ]; then
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Submodule re-init failed - .gitref/${_gitfolder} RC:$EC"
+              echo -e "ERROR: Submodule re-init failed - .gitref/${_gitfolder}";
+              _RC="${EC}";
+            fi
+          done
+          i="";
+          for i in {0..2}              #Retry if it's failed
+          do
+            GIT_SSL_NO_VERIFY=true git submodule update --init &> /dev/null; _RC=$?;
+            if [ "${_RC}" -eq 0 ]; then
+              break;
+            elif [ "${_RC}" -eq 128 ]; then
+              sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$_RC"
+              echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+              sleep 3;
+              _RC="$EC";
+            else
+              _RC="$EC";
+            fi
+          done
+        else
+          i="";
+          for i in {0..2}              #Retry if it's failed
+          do
+            GIT_SSL_NO_VERIFY=true git submodule update --init &> /dev/null; _RC=$?;
+            if [ "${_RC}" -eq 0 ]; then
+              break;
+            elif [ "${_RC}" -eq 128 ]; then
+              sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$_RC"
+              echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+              sleep 3;
+              _RC="$EC";
+            else
+              git commit -am "PROD Reference updated"
+              git status | grep -e "nothing to commit" &> /dev/null; _RC=$?
+              if [ "${_RC}" -ne 0 ]; then
+                _RC="$EC";
+              fi
+            fi
+          done
+        fi
+      fi
+      echo -e "INFO:$(date +%Y%m%d%H%M%S) Submoduled updation completed - $(($(date +%Y%m%d%H%M%S)-_execDate))s"
+      #
+      #Submodule update reference deletion at prod..
+      #
+      _execDate=$(date +%Y%m%d%H%M%S)
+      _prodFolds=( $(find .gitref/ -maxdepth 1 -type d -not -path "./.*" -not -name .gitref) ); #Prod .gitref Folders
+      for _pg in "${_prodFolds[@]}"
+      do
+        pushd "${_pg}" &> /dev/null;
+          git checkout "${USR_PLAN_CORE}"; #implemention branch
+          SubFile=( $(find . -type f -name "*" -not -name ".git*" -not -name "README.md") ); #Prod Folder files with func.pack files
+        popd &> /dev/null;
+        if [ -n "${SubFile[0]// /}" ]; then
+          for _sf in "${SubFile[@]}"
+          do
+            _sfo="${_sf%/*}";          #submodule folder
+            _sff="${_sf##*/}";         #sibmodule file to check
+            _cmpDev=( $(find "${_sfo}" -type f -name "${_sff}") ); #comparing files from dev work space
+            if [ -z "${_cmpDev[0]}" ]; then #Array to check first element
+              pushd "${_pg}" &> /dev/null;
+                git checkout "${USR_PLAN_CORE}";
+                rm -f "${_sf}";
+                git commit -am "${_sf#./*} removed from ${USR_PLAN_CORE}";
+                i="";
+                for i in {0..2}        #Retry if it's failed
+                do
+                  GIT_SSL_NO_VERIFY=true git push origin "${USR_PLAN_CORE}";
+                  if [ "${_RC}" -eq 0 ]; then
+                    break;
+                  elif [ "${_RC}" -eq 128 ]; then
+                    sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$_RC"
+                    echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                    sleep 3;
+                    _RC="$EC";
+                  else
+                    _RC="$EC";
+                  fi
+                done
+                SubFile1=( $(find . -type f -name "*" -not -name ".git*" -not -name "README.md") );
+              popd &> /dev/null;
+              if [ -z "${SubFile1[0]}" ]; then
+                i="";
+                for i in {0..2}        #Retry if it's failed
+                do
+                  git submodule deinit "${_pg}" &> /dev/null; _RC=$?; #PG CHANGE
+                  if [ "${_RC}" -eq 0 ]; then
+                    break;
+                  elif [ "${_RC}" -eq 128 ]; then
+                    sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$_RC"
+                    echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                    sleep 3;
+                    _RC="$EC";
+                  else
+                    _RC="$EC";
+                  fi
+                done
+                rm -rf "${_pg}";
+                git rm -f "${_pg}" &> /dev/null;
+                git config -f .gitmodules --remove-section submodule."${_pg}" &> /dev/null;
+                if [ ! -f "${_pg}" ]; then
+                  _RC="$RC"
+                fi
+              fi
+            fi
+          done
+        else
+          i="";
+          for i in {0..2}              #Retry if it's failed
+          do
+            git submodule deinit "${_pg}" &> /dev/null; _RC=$?;
+            if [ "${_RC}" -eq 0 ]; then
+              break;
+            elif [ "${_RC}" -eq 128 ]; then
+              sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:git remote re-try - $i RC:$_RC"
+              echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+              sleep 3;
+              _RC="$EC";
+            else
+              _RC="$EC";
+            fi
+          done
+          rm -rf "${_pg}";
+          git rm -f "${_pg}" &> /dev/null;
+          git config -f .gitmodules --remove-section submodule."${_pg}" &> /dev/null;
+          if [ ! -f "${_pg}" ]; then
+            _RC="$RC"
+          fi
+        fi
+      done
+      echo -e "INFO:$(date +%Y%m%d%H%M%S) Removed unused submoduled reference completed - $(($(date +%Y%m%d%H%M%S)-_execDate))s"
+      #-----------------------------------------------------------------------#
+      #---------------submodule avoid new duplicate files creation------------#
+      #-----------------------------------------------------------------------#
+      _uniqueList=$(curl -s -k "${PRD_API_RURL_SMOD_USR}/${PRD_API_WKF}/common/getSegListwithFunArea?planId=${USR_IMPL_PLAN^^}&pSystem=${USR_IMPL_CORE^^}")
+      if [ -n "${_uniqueList[0]// /}" ]; then
+        _submodGitDirs=( $(find .gitref/* -maxdepth 0 -type d | grep .gitref/) );
+        while IFS= read -r line
+        do
+          _nameFile="${line%%,*}";               #file name
+          _prodgitRepo="${line##*,}";            # prod server prod repo.
+          _prodRepo="${_prodgitRepo%%.*}"        # remove .git
+          for _modules in "${_submodGitDirs[@]}"
+          do
+            if [[ "${_modules}" =~ "gitref" ]]; then
+              pushd "${_modules}" &> /dev/null
+                git checkout "${USR_IMPL_PLAN}_${USR_IMPL_CORE}" &> /dev/null; _RC=$?
+                if [ -f "${_nameFile}" ]; then
+                  if [[ "${_modules}" == ".gitref/${_prodRepo}" ]]; then
+                    echo -e "INFO:$(date +%Y%m%d%H%M%S) API:${_modules} GITREF:${_prodRepo} api data and gitref directory are same - $(($(date +%Y%m%d%H%M%S)-_execDate))s"
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/} INFO:$(date +%Y%m%d%H%M%S) API:${_modules} GITREF:${_prodRepo} same - $(($(date +%Y%m%d%H%M%S)-_execDate))s"
+                  else
+                    git rm "${_nameFile}" &> /dev/null
+                    rm -f "${_nameFile}";
+                    git commit -am "${_nameFile} removed from ${USR_IMPL_PLAN}_${USR_IMPL_CORE}";
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/} ${_nameFile} removed from ${USR_IMPL_PLAN}_${USR_IMPL_CORE} wrong non workflow duplicate entry."
+                    i="";
+                    for i in {0..2}              #Retry if it's failed
+                    do
+                      GIT_SSL_NO_VERIFY=true git push origin "${USR_IMPL_PLAN}_${USR_IMPL_CORE}" &> /dev/null; _RC=$?;
+                      if [ "${_RC}" -eq 0 ]; then
+                        break;
+                      elif [ "${_RC}" -eq 128 ]; then
+                        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:git remote re-try - $i RC:$_RC"
+                        echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                        sleep 3;
+                        _RC="$EC";
+                      else
+                        _RC="$EC";
+                      fi
+                    done
+                  fi
+                fi
+              popd &> /dev/null
+            fi
+          done
+        done < <(printf '%s\n' "$_uniqueList")
+      fi
+      #-----------------------------------------------------------------------#
+      if [ "$_RC" -eq 0 ]; then
+        _execDate=$(date +%Y%m%d%H%M%S)
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Get list of submodules - ${_wd} RC:$_RC"
+        echo -e "INFO: Get list of submodules - ${_wd}";
+        _submoduleDirs=( $(find .gitref/* -maxdepth 0 -type d | grep .gitref/) );
+        #Turn all submodules from the ImplPlan_Core branch to current branch
+        for _sm in "${_submoduleDirs[@]}"
+        do
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Switching directory to - ${_sm} RC:$_RC"
+          echo -e "INFO: Switching directory to - ${_sm}";
+          pushd "${_sm}" &> /dev/null; #Enter .gitref/derived_gilk
+            git branch -a | grep "${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_}" &> /dev/null; _RC=$?;
+            if [ "$_RC" -eq 0 ]; then
+              git checkout "${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_}" &> /dev/null; _RC=$?
+              if [ "$_RC" -ne 0 ]; then
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to checkout branch ${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_} - ${_sm} RC:$EC"
+                echo -e "\\nERROR: Failed to checkout branch ${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_} - ${_sm}.";
+                _RC="$EC";
+                break;
+              else
+                i="";
+                for i in {0..2}        #Retry if it's failed
+                do
+                  GIT_SSL_NO_VERIFY=true git pull origin "${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_}" --tags &> /dev/null; _RC=$?;
+                  if [ "${_RC}" -eq 0 ]; then
+                    break;
+                  elif [ "${_RC}" -eq 128 ]; then
+                    echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                    sleep 3;
+                    _RC="$EC";
+                  else
+                    GIT_SSL_NO_VERIFY=true git pull origin "${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_}" --tags -f &> /dev/null; _RC=$?;
+                    _RC="$EC";
+                  fi
+                done
+                if [ "$_RC" -ne 0 ]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to update branch ${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_} - ${_sm} RC:$EC"
+                  echo -e "\\nERROR: Failed to update branch ${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_} - ${_sm}.";
+                  _RC="$EC";
+                  break;
+                fi
+              fi
+            else
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Checkout branch ${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_} not found- ${_sm} RC:$EC"
+              echo -e "\\nERROR: Checkout branch ${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_} not found- ${_sm}.";
+              _RC="$EC";
+              break;
+            fi
+          popd &> /dev/null;           #Exit .gitref/derived_gilk
+          echo -e "INFO: Exit directory from - ${_sm}";
+        done
+        echo -e "INFO:$(date +%Y%m%d%H%M%S) Checkout implementation core branch in all the submodules - $(($(date +%Y%m%d%H%M%S)-_execDate))s"
+        #Parent Loop exit process for failed return code
+        if [ "$_RC" -ne 0 ]; then
+          _RC="$EC";
+          break;
+        fi
+        #File copy from ImplPlan dir to submodules
+        if [ "$_RC" -eq 0 ]; then
+          _execDate=$(date +%Y%m%d%H%M%S)
+          #Reset files and directory permission
+          find . -not -path "./.*" -exec chmod 775 {} +;
+          #Get list of ImplPlan_Source to copy production ImplPlan_Core branch
+          _devFiles=( $(find . -type f -not -path "./.*") );
+          for _df in "${_devFiles[@]}"
+          do
+            #Format string to workable for file copy
+            _devSeg="${_df#*./}";
+            #Get list of production ImplPlan_Source path for a ImplPlan_Source
+            _prodFiles=( $( find .gitref/ -type f -not -path "./.*" | grep "${_devSeg}" ) );
+            for _pf in "${_prodFiles[@]}"
+            do
+              # shellcheck disable=SC2076
+              if [[ "${_pf}" =~ "${_devSeg}" ]]; then
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File copy ${_devSeg} ${_pf} - ${_wd} RC:$RC"
+                echo -e "\nINFO: File copy ${_devSeg} ${_pf} - ${_wd}";
+                cp -fr --preserve=all "${_devSeg}" "${_pf}" &> /dev/null; _RC=$?; #From DevRepo to ProdRepo copy
+                if [ "$_RC" -eq 0 ]; then
+                  _copyCount="$((_copyCount+1))";
+                else
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${_devSeg} Failed to copy to submodules - ${_wd} RC:$EC"
+                  echo -e "\nERROR: ${_devSeg} Failed to copy to submodules - ${_wd}.";
+                  _RC="$EC";
+                  break;
+                fi
+              fi
+            done
+            #Parent Loop exit process for failed return code
+            if [ "$_RC" -ne 0 ]; then
+              _RC="$EC";
+              break;
+            fi
+          done
+          echo -e "INFO:$(date +%Y%m%d%H%M%S) Copy files from implementation repo into production repo - $(($(date +%Y%m%d%H%M%S)-_execDate))s"
+          #Parent Loop exit process for failed return code
+          if [ "$_RC" -ne 0 ]; then
+            _RC="$EC";
+            break;
+          fi
+          #Production git operation to make ONLINE or FALLBACK
+          #Git commit operation to ImplPlan_Core branch
+          if [ "$_RC" -eq 0 ]; then
+            for _sm in "${_submoduleDirs[@]}"
+            do
+              _execDate=$(date +%Y%m%d%H%M%S)
+              _devLastHash="$(git log -1 --pretty=%h)";
+              master_path="";
+              if [[ "${_sm}" =~ derived_put ]]; then
+                putlev="${_sm#*_}";
+                master_path="${GIT_CLONE}${putlev}/${USR_MASTER_CORE}";
+                if [ ! -d "${master_path}" ]; then #If master repo is not available
+                  pushd "${GIT_CLONE}${putlev}" &> /dev/null;
+                    if [[ "${DEV_GIT_SRC}" =~ "tpf/tp" ]]; then
+                      i="";
+                      for i in {0..2}  #Retry if it's failed
+                      do
+                        GIT_SSL_NO_VERIFY=true git clone -b "${USR_MASTER_CORE}" "${DEV_SRC_RURL_SMOD}"/tpf/tp/ibm/derived_"${putlev}".git "${master_path}"; _RC=$?;
+                        if [ "${_RC}" -eq 0 ]; then
+                          break;
+                        elif [ "${_RC}" -eq 128 ]; then
+                          echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                          rm -rf "${master_path}";
+                          sleep 3;
+                          _RC="$EC";
+                        else
+                          _RC="$EC";
+                        fi
+                      done
+                    elif [[ "${DEV_GIT_SRC}" =~ "tpf/dl" ]]; then
+                      i="";
+                      for i in {0..2}  #Retry if it's failed
+                      do
+                        GIT_SSL_NO_VERIFY=true git clone -b "${USR_MASTER_CORE}" "${DEV_SRC_RURL_SMOD}"/tpf/dl/ibm/derived_"${putlev}".git "${master_path}"; _RC=$?;
+                        if [ "${_RC}" -eq 0 ]; then
+                          break;
+                        elif [ "${_RC}" -eq 128 ]; then
+                          echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                          rm -rf "${master_path}";
+                          sleep 3;
+                          _RC="$EC";
+                        else
+                          _RC="$EC";
+                        fi
+                      done
+                    fi
+                    master_path="${GIT_CLONE}${putlev}/${USR_MASTER_CORE}";
+                    pushd  "${master_path}" &> /dev/null;
+                      git branch -r | grep -v '\->' | while read -r remote; do git branch --track "${remote#origin/}" "$remote"; done
+                    popd &> /dev/null;
+                  popd &> /dev/null;
+                fi
+                pushd "${master_path}" &> /dev/null; #To delete exisiting unwanted tags
+                  _execDate=$(date +%Y%m%d%H%M%S)
+                  GIT_SSL_NO_VERIFY=true git fetch --all --tags
+                  i="";
+                  for i in {0..2}      #Retry if it's failed
+                  do
+                    GIT_SSL_NO_VERIFY=true git fetch --prune origin 'refs/tags/*:refs/tags/*' '+refs/heads/*:refs/remotes/origin/*'; _RC=$?;
+                    if [ "${_RC}" -eq 0 ]; then
+                      break;
+                    elif [ "${_RC}" -eq 128 ]; then
+                      echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                      sleep 3;
+                      _RC="$EC";
+                    else
+                      _RC="$EC";
+                    fi
+                  done
+                  echo -e "INFO:$(date +%Y%m%d%H%M%S) Sync local and remote repository tags - $(($(date +%Y%m%d%H%M%S)-_execDate))s"
+                popd &> /dev/null
+              fi
+              echo -e "\nINFO: Switching directory to - ${_sm}";
+              pushd "${_sm}" &> /dev/null;
+                #TODO include file attribute to README.md file
+                git add . &> /dev/null;
+                #Implementation plan status commits
+                  if [[ "$OnlineRef" == ONLINE_ACCEPT ]]; then
+                    git status | grep -e "nothing to commit" &> /dev/null; _RC=$?
+                    if [ "${_RC}" -eq 0 ]; then
+                      echo -e "${LoadDate} ${USR_IMPL_PLAN}_${_devLastHash}_online - NO SOURCE CHANGED : $(date +%Y%m%d%H%M%S-%Z)" >> README.md;
+                      sort -u README.md -o README.md;
+                      git add . &> /dev/null;
+                    else
+                      _RC="$RC";
+                    fi
+                    git commit -am "Date:${LoadDate}, Type:Load, PlanID:${USR_IMPL_PLAN}, PlanOwner:${MTP_SUSR}, SourceRef:${_devLastHash}, Status:online" &> /dev/null; _RC=$?;
+                    if [ "${_RC}" -eq 0 ]; then
+                      git tag -a "online-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" -m "online-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)"; _TRC=$?;
+                    fi
+                  elif [[ "$OnlineRef" == ONLINE_REVERT ]] || [[ "$OnlineRef" == FALLBACK_ACCEPT ]]; then
+                    git status | grep -e "nothing to commit" &> /dev/null; _RC=$?;
+                    if [ "${_RC}" -eq 0 ]; then
+                      echo -e "${LoadDate} ${USR_IMPL_PLAN}_${_devLastHash}_online - NO SOURCE CHANGED : $(date +%Y%m%d%H%M%S-%Z)" >> README.md;
+                      sort -u README.md -o README.md;
+                      git add . &> /dev/null;
+                    else
+                      _RC="$RC";
+                    fi
+                    git commit -am "Date:${LoadDate}, Type:Load, PlanID:${USR_IMPL_PLAN}, PlanOwner:${MTP_SUSR}, SourceRef:${_devLastHash}, Status:fallback" &> /dev/null; _RC=$?;
+                    if [ "${_RC}" -eq 0 ]; then
+                      _onlinePreRef=( $(git log --pretty="%s,%h %d" | grep -e "${USR_IMPL_PLAN}" | grep -e "online-" | awk '{print $6}') );
+                      # shellcheck disable=SC2128
+                      if [ -z "${_onlinePreRef}" ]; then
+                        git tag -a "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" -m "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)"; _TRC=$?;
+                      else
+                      for ((i=0; i<${#_onlinePreRef[@]}; i++));
+                      do
+                        delTag=( $(git describe --contains "${_onlinePreRef[i]##*,}") );
+                        if [[ "${delTag}" =~ online ]]; then
+                          git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" &> /dev/null;
+                          j="";
+                          for j in {0..2} #Retry if it's failed
+                          do
+                            GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?;
+                            if [ "${_RC}" -eq 0 ]; then
+                              break;
+                            elif [ "${_RC}" -eq 128 ]; then
+                              echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                              sleep 3;
+                              _RC="$EC";
+                            else
+                              _RC="$EC";
+                            fi
+                          done
+                          #------------Deleting Tag in local repo
+                          if [[ "${_wd}" =~ BIN ]]; then
+                            _putdir="${_sm#*/}";
+                            if [ -d "${GIT_CLONE}${putlev}/${_putdir}" ]; then
+                              pushd "${GIT_CLONE}${putlev}/${_putdir}" &> /dev/null;
+                                git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" &> /dev/null;
+                                j="";
+                                for j in {0..2} #Retry if it's failed
+                                do
+                                  GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?;
+                                  if [ "${_RC}" -eq 0 ]; then
+                                    break;
+                                  elif [ "${_RC}" -eq 128 ]; then
+                                    echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                                    sleep 3;
+                                    _RC="$EC";
+                                  else
+                                    _RC="$EC";
+                                  fi
+                                done
+                              popd  &> /dev/null;
+                            fi
+                            if [ -d "${master_path}" ]; then
+                              pushd "${master_path}" &> /dev/null;
+                                GIT_SSL_NO_VERIFY=true git fetch --all --tags;
+                                git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null;
+                                k="";
+                                for k in {0..2}  #Retry if it's failed
+                                do
+                                  GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?;
+                                  if [ "${_RC}" -eq 0 ]; then
+                                    break;
+                                  elif [ "${_RC}" -eq 128 ]; then
+                                    echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                                    sleep 3;
+                                    _RC="$EC";
+                                  else
+                                    _RC="$EC";
+                                  fi
+                                done
+                              popd &> /dev/null;
+                            fi
+                          fi
+                          #------------Put levels
+                        fi
+                        git tag -a "fallback-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" -m "fallback-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" "${_onlinePreRef[i]##*,}"; _TRC=$?;
+                      done
+                      git tag -a "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" -m "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)"; _TRC=$?;
+                    fi
+                    if [ "${_TRC}" -eq 0 ]; then
+                      git tag -l | grep "online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null; _RC=$?;
+                      if [ "${_RC}" -eq 0 ]; then
+                        git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null;
+                        i="";
+                        for i in {0..2} #Retry if it's failed
+                        do
+                          GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null; _RC=$?;
+                          if [ "${_RC}" -eq 0 ]; then
+                            break;
+                          elif [ "${_RC}" -eq 128 ]; then
+                            echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                            sleep 3;
+                            _RC="$EC";
+                          else
+                            _RC="$EC";
+                          fi
+                        done
+                        #------------Deleting Tag in local repo
+                        if [[ "${_wd}" =~ BIN ]]; then
+                          if [ -d "${GIT_CLONE}${putlev}/${_putdir}" ]; then
+                            pushd "${GIT_CLONE}${putlev}/${_putdir}" &> /dev/null;
+                              git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" &> /dev/null;
+                              i="";
+                              for i in {0..2} #Retry if it's failed
+                              do
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  break;
+                                elif [ "${_RC}" -eq 128 ]; then
+                                  echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                                  sleep 3;
+                                  _RC="$EC";
+                                else
+                                  _RC="$EC";
+                                fi
+                              done
+                            popd  &> /dev/null;
+                          fi
+                          if [ -d "${master_path}" ]; then
+                            pushd "${master_path}" &> /dev/null;
+                              GIT_SSL_NO_VERIFY=true git fetch --all --tags;
+                              git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null;
+                              i="";
+                              for i in {0..2} #Retry if it's failed
+                              do
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  break;
+                                elif [ "${_RC}" -eq 128 ]; then
+                                  echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                                  sleep 3;
+                                  _RC="$EC";
+                                else
+                                  _RC="$EC";
+                                fi
+                              done
+                            popd &> /dev/null;
+                          fi
+                        fi
+                      else
+                        _RC="$RC";
+                      fi
+                    fi
+                  fi
+                fi
+                if [ "${_RC}" -ne 0 ]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Commit failed - ${USR_IMPL_PLAN} RC:$EC"
+                  echo -e "\\nERROR: Commit failed - ${USR_IMPL_PLAN}.";
+                  _RC="${EC}";
+                elif [ "${_TRC}" -ne 0 ]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Tag failed - ${USR_IMPL_PLAN} RC:$EC"
+                  echo -e "\\nERROR: Tag failed - ${USR_IMPL_PLAN}.";
+                  _RC="${EC}";
+                else
+                  _prodPlanHash="$(git log -1 --pretty=%h)";
+                  _mergFiles=( $(git ls-files) );
+                  i="";
+                  for i in {0..2}      #Retry if it's failed
+                  do
+                    GIT_SSL_NO_VERIFY=true git push -u origin "${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_}" --tags &> /dev/null; _RC=$?; #Init to support submodules
+                    if [ "${_RC}" -eq 0 ]; then
+                      break;
+                    elif [ "${_RC}" -eq 128 ]; then
+                      echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                      sleep 3;
+                      _RC="$EC";
+                    else
+                      _RC="$EC";
+                    fi
+                  done
+                  if [ "$_RC" -ne 0 ]; then
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Branch ${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_} failed to push production - ${_sm} RC:$EC"
+                    echo -e "\nERROR: Branch ${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_} failed to push production - ${_sm}.";
+                    popd &> /dev/null;
+                    _RC="$EC";
+                    break;
+                  fi
+                  #--------------------------------------------------------------------------------------------------#-->Adding masterrepo
+                  if [ -n "${master_path}" ] && [[ "${_sm}" =~ derived_put ]] ;then
+                    #--------------------------------------------------------------Pusing to remote branch gitblit
+                    if [[ "${_wd}" =~ BIN ]] && [[ "${_sm}" =~ derived_put ]] ; then
+                      _putdir="${_sm#*/}"
+                      if [ -d "${GIT_CLONE}${putlev}/${_putdir}" ]; then
+                        pushd "${GIT_CLONE}${putlev}/${_putdir}" &>/dev/null;
+                          GIT_SSL_NO_VERIFY=true git fetch --all --tags;
+                          GIT_SSL_NO_VERIFY=true git checkout "$USR_PLAN_CORE";
+                          i="";
+                          for i in {0..2} #Retry if it's failed
+                          do
+                            GIT_SSL_NO_VERIFY=true git pull origin "$USR_PLAN_CORE"; _RC=$?; #Init to support submodules
+                            if [ "${_RC}" -eq 0 ]; then
+                              break;
+                            elif [ "${_RC}" -eq 128 ]; then
+                              echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                              sleep 3;
+                              _RC="$EC";
+                            else
+                              _RC="$EC";
+                            fi
+                          done
+                          i="";
+                          for i in {0..2} #Retry if it's failed
+                          do
+                            GIT_SSL_NO_VERIFY=true git push origin "$USR_PLAN_CORE" --tags; _RC=$?; #Init to support submodules
+                            if [ "${_RC}" -eq 0 ]; then
+                              break;
+                            elif [ "${_RC}" -eq 128 ]; then
+                              echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                              sleep 3;
+                              _RC="$EC";
+                            else
+                              _RC="$EC";
+                            fi
+                          done
+                          GIT_SSL_NO_VERIFY=true git checkout master
+                        popd &>/dev/null
+                      fi
+                    fi
+                    #--------------------------------------------------------------Sync up the remote repo
+                    pushd "${master_path}" &> /dev/null
+                      git branch --track "${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_}"
+                      GIT_SSL_NO_VERIFY=true git fetch origin "${USR_IMPL_PLAN}_${USR_MASTER_CORE#*_}" &> /dev/null;
+                      git checkout "${USR_MASTER_CORE}" &> /dev/null; _RC=$?;
+                      if [ "$_RC" -ne 0 ]; then
+                        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Branch ${USR_MASTER_CORE} failed to checkout from production - ${master_path} RC:$EC"
+                        echo -e "\nERROR: Branch ${USR_MASTER_CORE} failed to checkout from production - ${master_path}."
+                        popd &> /dev/null
+                        _RC="$EC";
+                        break
+                      else
+                        i="";
+                        for i in {0..2} #Retry if it's failed
+                        do
+                          GIT_SSL_NO_VERIFY=true git pull origin "${USR_MASTER_CORE}" --tags &> /dev/null; _RC=$?; #Init to support submodules
+                          if [ "${_RC}" -eq 0 ]; then
+                            break;
+                          elif [ "${_RC}" -eq 128 ]; then
+                            echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                            sleep 3;
+                            _RC="$EC";
+                          else
+                            _RC="$EC";
+                          fi
+                        done
+                        if [ "$_RC" -ne 0 ]; then
+                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Branch ${USR_MASTER_CORE} failed to pull from production - ${master_path} RC:$EC"
+                          echo -e "\nERROR: Branch ${USR_MASTER_CORE} failed to pull from production - ${master_path}."
+                          popd &> /dev/null
+                          _RC="$EC";
+                          break
+                        fi
+                      fi
+                      for _mf in "${_mergFiles[@]}"
+                      do
+                        #shellcheck disable=SC1073,SC1072,SC1009
+                        if [[ "$_mf" =~ ^(.git|.out|README)$ ]]; then
+                          echo -e "\nINFO: ${_mf} - File SKIP for GIT" &> /dev/null
+                        else
+                          git checkout "${_prodPlanHash}" "${_mf}"; _RC=$?
+                        fi
+                        if [ "$_RC" -ne 0 ]; then
+                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File ${_mf} failed to checkout from ${_prodPlanHash} - ${master_path} RC:$EC"
+                          echo -e "\nERROR: File ${_mf} failed to checkout from ${_prodPlanHash} - ${master_path}."
+                          _RC="$EC";
+                          break
+                        fi
+                      done
+                      #Parent Loop exit process for failed return code
+                      if [ "$_RC" -ne 0 ]; then
+                        _RC="$EC";
+                        break
+                      fi
+                      #Production master_core branch changed file operations
+                      if [[ "$OnlineRef" == ONLINE_ACCEPT ]]; then
+                        git status | grep -e "nothing to commit" &> /dev/null; _RC=$?
+                        if [ "${_RC}" -eq 0 ]; then
+                          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${LoadDate} ${USR_IMPL_PLAN}_${_prodPlanHash}_online - NO SOURCE CHANGED : $(date +%Y%m%d%H%M%S-%Z) >> README.md RC:$_RC"
+                          echo -e "${LoadDate} ${USR_IMPL_PLAN}_${_prodPlanHash}_online - NO SOURCE CHANGED : $(date +%Y%m%d%H%M%S-%Z)" >> README.md
+                          sort -u README.md -o README.md
+                        else
+                          _RC="$RC"
+                        fi
+                        git add . &> /dev/null
+                        git commit -am "Date:${LoadDate}, Type:Load, PlanID:${USR_IMPL_PLAN}, PlanOwner:${MTP_SUSR}, SourceRef:${_prodPlanHash}, Status:online" &> /dev/null; _RC=$?
+                        if [ "${_RC}" -eq 0 ]; then
+                          git tag -a "online-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" -m "online-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)"; _TRC=$?
+                          if [[ "${_wd}" =~ SRC ]]; then
+                            getGitData "SRC" "${_wd}/${_sm}" "${USR_IMPL_PLAN}" "${LoadDate}" "false" ; _RC=$?;
+                            if [ "${_RC}" -eq 0 ]; then
+                              sendGitData "${USR_IMPL_CORE}" "false";
+                            fi
+                          fi
+                        fi
+                      elif [[ "$OnlineRef" == ONLINE_REVERT ]] || [[ "$OnlineRef" == FALLBACK_ACCEPT ]]; then
+                        git status | grep -e "nothing to commit" &> /dev/null; _RC=$?
+                        if [ "${_RC}" -eq 0 ]; then
+                          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${LoadDate} ${USR_IMPL_PLAN}_${_prodPlanHash}_fallback - NO SOURCE CHANGED : $(date +%Y%m%d%H%M%S-%Z) >> README.md RC:$_RC"
+                          echo -e "${LoadDate} ${USR_IMPL_PLAN}_${_prodPlanHash}_fallback - NO SOURCE CHANGED : $(date +%Y%m%d%H%M%S-%Z)" >> README.md
+                          sort -u README.md -o README.md
+                        else
+                          _RC="$RC"
+                        fi
+                        git add . &> /dev/null
+                        git commit -am "Date:${LoadDate}, Type:Load, PlanID:${USR_IMPL_PLAN}, PlanOwner:${MTP_SUSR}, SourceRef:${_prodPlanHash}, Status:fallback" &> /dev/null; _RC=$?
+                        if [ "${_RC}" -eq 0 ]; then
+                          _onlinePreRef=( $(git log --pretty="%s,%h %d" | grep -e "${USR_IMPL_PLAN}" | grep -e "online-" | awk '{print $6}') )
+                          # shellcheck disable=SC2128
+                          if [ -z "${_onlinePreRef}" ]; then
+                            git tag -a "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" -m "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)"; _TRC=$?
+                          else
+                            for ((i=0; i<${#_onlinePreRef[@]}; i++));
+                            do
+                              # shellcheck disable=SC2086
+                              delTag=( $(git describe --contains ${_onlinePreRef[i]##*,}) )
+                              if [[ "${delTag}" =~ online ]]; then
+                                git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" &> /dev/null
+                                j="";
+                                for j in {0..2}  #Retry if it's failed
+                                do
+                                  GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?; #Init to support submodules
+                                  if [ "${_RC}" -eq 0 ]; then
+                                    break;
+                                  elif [ "${_RC}" -eq 128 ]; then
+                                    echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                    sleep 3;
+                                    _RC="$EC";
+                                  else
+                                    _RC="$EC";
+                                  fi
+                                done
+                                #------------Deleting Tag in local repo
+                                if [[ "${_wd}" =~ BIN ]]; then
+                                  if [ -d "${GIT_CLONE}${putlev}/${_putdir}" ]; then
+                                    pushd "${GIT_CLONE}${putlev}/${_putdir}" &> /dev/null
+                                      git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" &> /dev/null
+                                      j="";
+                                      for j in {0..2} #Retry if it's failed
+                                      do
+                                        GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?; #Init to support submodules
+                                        if [ "${_RC}" -eq 0 ]; then
+                                          break;
+                                        elif [ "${_RC}" -eq 128 ]; then
+                                          echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                          sleep 3;
+                                          _RC="$EC";
+                                        else
+                                          _RC="$EC";
+                                        fi
+                                      done
+                                    popd  &> /dev/null
+                                  fi
+                                  if [ -d "${master_path}" ]; then
+                                    pushd "${master_path}" &> /dev/null
+                                      GIT_SSL_NO_VERIFY=true git fetch --all --tags
+                                      git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" &> /dev/null
+                                      j="";
+                                      for j in {0..2} #Retry if it's failed
+                                      do
+                                        GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?; #Init to support submodules
+                                        if [ "${_RC}" -eq 0 ]; then
+                                          break;
+                                        elif [ "${_RC}" -eq 128 ]; then
+                                          echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                          sleep 3;
+                                          _RC="$EC";
+                                        else
+                                          _RC="$EC";
+                                        fi
+                                      done
+                                    popd &> /dev/null
+                                  fi
+                                fi
+                                #------------Put levels
+                              fi
+                              git tag -a "fallback-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" -m "fallback-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" "${_onlinePreRef[i]##*,}"; _TRC=$?
+                              if [[ "${_wd}" =~ SRC ]] && [[ "$OnlineRef" == FALLBACK_ACCEPT ]]; then
+                                getGitData "SRC" "${_wd}/${_sm}" "${USR_IMPL_PLAN}" "${LoadDate}" "true" ; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  sendGitData "${USR_IMPL_CORE}" "true";
+                                fi
+                              fi       #Online update to fallback
+                            done
+                            git tag -a "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" -m "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)"; _TRC=$?
+                            if [[ "${_wd}" =~ SRC ]] && [[ "$OnlineRef" == ONLINE_REVERT ]]; then
+                              getGitData "SRC" "${_wd}/${_sm}" "${USR_IMPL_PLAN}" "${LoadDate}" "false" ; _RC=$?;
+                              if [ "${_RC}" -eq 0 ]; then
+                                sendGitData "${USR_IMPL_CORE}" "false";
+                              fi
+                            fi
+                          fi
+                          if [ "${_TRC}" -eq 0 ]; then
+                            git tag -l | grep "online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null; _RC=$?;
+                            if [ "${_RC}" -eq 0 ]; then
+                              git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null
+                              j="";
+                              for j in {0..2} #Retry if it's failed
+                              do
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null; _RC=$? #Init to support submodules
+                                if [ "${_RC}" -eq 0 ]; then
+                                  break;
+                                elif [ "${_RC}" -eq 128 ]; then
+                                  echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                  sleep 3;
+                                  _RC="$EC";
+                                else
+                                  _RC="$EC";
+                                fi
+                              done
+                              #------------Deleting Tag in local repo
+                              if [[ "${_wd}" =~ BIN ]]; then
+                                if [ -d "${GIT_CLONE}${putlev}/${_putdir}" ]; then
+                                  pushd "${GIT_CLONE}${putlev}/${_putdir}" &> /dev/null
+                                    git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" &> /dev/null
+                                    j="";
+                                    for j in {0..2} #Retry if it's failed
+                                    do
+                                      GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$? #Init to support submodules
+                                      if [ "${_RC}" -eq 0 ]; then
+                                        break;
+                                      elif [ "${_RC}" -eq 128 ]; then
+                                        echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                        sleep 3;
+                                        _RC="$EC";
+                                      else
+                                        _RC="$EC";
+                                      fi
+                                    done
+                                  popd  &> /dev/null
+                                fi
+                                if [ -d "${master_path}" ]; then
+                                  pushd "${master_path}" &> /dev/null
+                                    GIT_SSL_NO_VERIFY=true git fetch --all --tags
+                                    git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null
+                                    j="";
+                                    for j in {0..2} #Retry if it's failed
+                                    do
+                                      GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$? #Init to support submodules
+                                      if [ "${_RC}" -eq 0 ]; then
+                                        break;
+                                      elif [ "${_RC}" -eq 128 ]; then
+                                        echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                        sleep 3;
+                                        _RC="$EC";
+                                      else
+                                        _RC="$EC";
+                                      fi
+                                    done
+                                  popd &> /dev/null
+                                fi
+                              fi
+                            else
+                              _RC="$RC"
+                            fi
+                          fi
+                        fi
+                      fi
+                      if [ "${_RC}" -ne 0 ]; then
+                        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Remote repository not accessible. RC:$EC"
+                        echo -e "\\nERROR: Commit failed - ${USR_IMPL_PLAN}."
+                        _RC="${EC}"
+                      elif [ "${_TRC}" -ne 0 ]; then
+                        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Remote repository not accessible. RC:$EC"
+                        echo -e "\\nERROR: Tag failed - ${USR_IMPL_PLAN}."
+                        _RC="${EC}"
+                      fi
+                      _prodNewHash="$(git log -1 --pretty=%h)"
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Prod new Hash - ${_prodNewHash} RC:$RC"
+                      echo -e "Prod new Hash - ${_prodNewHash}"
+                      _prodOldHash="$(git log --skip=1 -1 --pretty=%h)"
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Prod old Hash - ${_prodOldHash} RC:$RC"
+                      echo -e "Prod old Hash - ${_prodOldHash}"
+                      _tempHash="$(git log --pretty=%h,%s,%d | grep online- | grep -v "${USR_IMPL_PLAN}" | head -1)"
+                      _tempPlanStr="${_tempHash##*PlanID\:}"
+                      _onlinePlanStr="${_tempPlanStr%%,*}" #Get fallback online implemenation plan id
+                      _onlineOldHash="${_tempHash%%,*}"
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Online old Hash - ${_onlineOldHash} RC:$RC"
+                      echo -e "Online old Hash - ${_onlineOldHash}"
+                      _tempHash="$(git log --pretty=%h,%s,%d | grep fallback- | grep -v "${USR_IMPL_PLAN}" | head -1)"
+                      _fallbkOldHash="${_tempHash%%,*}"
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Fallbk old Hash - ${_fallbkOldHash} RC:$RC"
+                      echo -e "Fallbk old Hash - ${_fallbkOldHash}"
+                      git remote -v | grep nonibm &> /dev/null; _flag=$?;
+                      if [[ "$OnlineRef" == ONLINE_ACCEPT ]]; then
+                        #Rule1 - Copy and update to production git and then mark as online
+                        #Rule2 - Copy from git current online file to Linux
+                        i="";
+                        for i in {0..2}          #Retry if it's failed
+                        do
+                          GIT_SSL_NO_VERIFY=true git push -u origin "${USR_MASTER_CORE}" --tags &> /dev/null; _RC=$?; #Init to support submodules
+                          if [ "${_RC}" -eq 0 ]; then
+                            break;
+                          elif [ "${_RC}" -eq 128 ]; then
+                            echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                            sleep 3;
+                            _RC="$EC";
+                          else
+                            _RC="$EC";
+                          fi
+                        done
+                        if [ "$_RC" -ne 0 ]; then
+                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Branch ${USR_MASTER_CORE} failed to push production - ${master_path} RC:$EC"
+                          echo -e "\nERROR: Branch ${USR_MASTER_CORE} failed to push production - ${master_path}."
+                          popd &> /dev/null
+                          _RC="$EC";
+                          break;
+                        fi
+                        #Linux file copy
+                        for _mf in "${_mergFiles[@]}"
+                        do
+                          if [[ "$_mf" =~ (\.git|\.out|README) ]]; then
+                            echo -e "\nINFO: ${_mf} - File SKIP for Linux" &> /dev/null
+                          elif [ -f "${_mf}" ]; then
+                            if [ "${_flag}" -eq 0 ]; then
+                              if [[ "${_mf}" =~ src ]]; then #/ztpfrepos/wsp/i/indj.asm Legacy process path support
+                                _temp1Seg="${PRD_TPF_APP}/${_mf}"
+                                _temp2Seg="${_temp1Seg##*/}"
+                                _lnxSeg="${PRD_TPF_APP}/src/${_temp2Seg:0:1}/${_temp2Seg}"
+                              elif [[ "${_wd}" =~ BIN ]]; then #/ztpfrepos/wsp/derived/obj/indj.o Legacy process path support
+                                _lnxSeg="${PRD_TPF_APP}/derived/${_mf}"
+                              else
+                                _lnxSeg="${PRD_TPF_APP}/${_mf}" #Modernization Project process
+                              fi
+                              echo -e "\nINFO: File ${_mf} copy to ${_lnxSeg}"
+                              if [ ! -d "${_lnxSeg%/*}" ]; then
+                                mkdir -p "${_lnxSeg%/*}"; _RC=$?;
+                                if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:New directory creating with super user permission ${_lnxSeg%/*} RC:$_RC"
+                                  echo -e "INFO: New directory creating with super user permission ${_lnxSeg%/*}"
+                                  sudo mkdir -p "${_lnxSeg%/*}"
+                                  sudo chown "${MTP_SUSR}.${MTP_SUSR}" "${_lnxSeg%/*}"
+                                fi
+                              fi
+                              if [ -f "${_lnxSeg}" ]; then
+                                mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                                if [ ${_RC} -ne 0 ]; then
+                                  echo -e "INFO: File move with super user permission ${_lnxSeg} to ${_lnxSeg}_${USR_IMPL_PLAN}"
+                                  sudo mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                                fi
+                              fi
+                              cp -rf --preserve=all "${_mf}" "${_lnxSeg}"; _RC=$?; #To zLinux non-ibm file copy for ONLINE_ACCEPT
+                              if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:File copy with super user permission ${_mf} to ${_lnxSeg} RC:$_RC"
+                                echo -e "INFO: File copy with super user permission ${_mf} to ${_lnxSeg}"
+                                sudo cp -rf --preserve=all "${_mf}" "${_lnxSeg}" &> /dev/null; _RC=$?; #To zLinux non-ibm file sudo copy for ONLINE_ACCEPT
+                              fi
+                              #if [ -f macro/dlmcrnms.mac ]; then
+                              #  NEW_MACRO="Y";
+                              #fi
+                              #Timestamp apply from STG
+                              if [ "${_RC}" -eq 0 ]; then
+                                if [ -f "${APP_STG_IMPL_CWRK%/*}/${_mf}" ]; then
+                                  touch -r "${APP_STG_IMPL_CWRK%/*}/${_mf}" "${_lnxSeg}"
+                                fi
+                              else
+                                echo -e "ERROR: File copy ${_mf} to ${_lnxSeg} - failed."
+                              fi
+                            else
+                              if [[ "${_wd}" =~ BIN ]]; then #/ztpfrepos/wsp/derived/obj/indj.o Legacy process path support
+                                _lnxSeg="${PRD_TPF_SYS}/prod/derived/${_mf}" #Legacy local_mod support Project process
+                              else
+                                _lnxSeg="${PRD_TPF_SYS}/prod/local_mod/${_mf}" #Legacy local_mod support Project process
+                              fi
+                              echo -e "\nINFO: File ${_mf} copy to ${_lnxSeg}"
+                              if [ ! -d "${_lnxSeg%/*}" ]; then
+                                mkdir -p "${_lnxSeg%/*}"; _RC=$?;
+                                if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                  echo -e "INFO: New directory creating with super user permission ${_lnxSeg%/*}"
+                                  sudo mkdir -p "${_lnxSeg%/*}"
+                                  sudo chown "${MTP_SUSR}.${MTP_SUSR}" "${_lnxSeg%/*}"
+                                fi
+                              fi
+                              if [ -f "${_lnxSeg}" ]; then
+                                mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?;#Backup
+                                if [ "${_RC}" -ne 0 ]; then
+                                  echo -e "INFO: File move with super user permission ${_lnxSeg} to ${_lnxSeg}_${USR_IMPL_PLAN}"
+                                  sudo mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?;#Backup
+                                fi
+                              fi
+                              cp -rf --preserve=all "${_mf}" "${_lnxSeg}"; _RC=$?; #To zLinux ibm path file copy for ONLINE_ACCEPT
+                              if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                echo -e "INFO: File copy with super user permission ${_mf} to ${_lnxSeg}"
+                                sudo cp -rf --preserve=all "${_mf}" "${_lnxSeg}" &> /dev/null; _RC=$?; #To zLinux ibm path file sudo copy for ONLINE_ACCEPT
+                              fi
+                              #if [ -f macro/dlmcrnms.mac ]; then
+                              #  NEW_MACRO="Y";
+                              #fi
+                              #Timestamp apply from STG
+                              if [ "${_RC}" -eq 0 ]; then
+                                if [ -f "${SYS_STG_IMPL_CWRK%/*}/${_mf}" ]; then
+                                  touch -r "${SYS_STG_IMPL_CWRK%/*}/${_mf}" "${_lnxSeg}"
+                                fi
+                              else
+                                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File copy ${_mf} to ${_lnxSeg} - failed RC:$EC"
+                                echo -e "ERROR: File copy ${_mf} to ${_lnxSeg} - failed."
+                              fi
+                            fi
+                            if [ "$_RC" -ne 0 ]; then
+                              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File ${_mf} copy to ${PRD_TPF_APP} - Failed. RC:$EC"
+                              echo -e "\nERROR: File ${_mf} copy to ${PRD_TPF_APP} - Failed."
+                              _RC="$EC";
+                              break
+                            fi
+                          else
+                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File ${_mf} not found for copy from previous version in GIT - Failed RC:$EC"
+                            echo -e "\nERROR: File ${_mf} not found for copy from previous version in GIT - Failed."
+                          fi
+                        done
+                        #Parent Loop exit process for failed return code
+                        if [ "$_RC" -ne 0 ]; then
+                          _RC="$EC";
+                          break
+                        fi
+                      elif [[ "$OnlineRef" == ONLINE_REVERT ]]; then
+                        #Rule1 - Copy and update to production git and then mark as fallback
+                        i="";
+                        for i in {0..2}          #Retry if it's failed
+                        do
+                          GIT_SSL_NO_VERIFY=true git push -u origin "${USR_MASTER_CORE}" --tags &> /dev/null; _RC=$?; #Init to support submodules
+                          if [ "${_RC}" -eq 0 ]; then
+                            break;
+                          elif [ "${_RC}" -eq 128 ]; then
+                            echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                            sleep 3;
+                            _RC="$EC";
+                          else
+                            _RC="$EC";
+                          fi
+                        done
+                        if [ "$_RC" -ne 0 ]; then
+                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Branch ${USR_MASTER_CORE} failed to push production - ${master_path} RC:$EC"
+                          echo -e "\nERROR: Branch ${USR_MASTER_CORE} failed to push production - ${master_path}."
+                          popd &> /dev/null
+                          _RC="$EC";
+                          break
+                        fi
+                      elif [[ "$OnlineRef" == FALLBACK_ACCEPT ]]; then
+                        #Rule1 - Copy and update to production git and then mark as fallback
+                        #Rule2 - Copy from git previous online file to Linux
+                        i="";
+                        for i in {0..2}          #Retry if it's failed
+                        do
+                          GIT_SSL_NO_VERIFY=true git push -u origin "${USR_MASTER_CORE}" --tags &> /dev/null; _RC=$?; #Init to support submodules
+                          if [ "${_RC}" -eq 0 ]; then
+                            break;
+                          elif [ "${_RC}" -eq 128 ]; then
+                            echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                            sleep 3;
+                            _RC="$EC";
+                          else
+                            _RC="$EC";
+                          fi
+                        done
+                        if [ "$_RC" -ne 0 ]; then
+                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Branch ${USR_MASTER_CORE} failed to push production - ${master_path} RC:$EC"
+                          echo -e "\nERROR: Branch ${USR_MASTER_CORE} failed to push production - ${master_path}."
+                          popd &> /dev/null
+                          _RC="$EC";
+                          break
+                        fi
+                        #Linux file copy
+                        for _mf in "${_mergFiles[@]}"
+                        do
+                          if [[ "$_mf" =~ (\.git|\.out|README) ]]; then
+                            echo -e "\nINFO: ${_mf} - File SKIP for Linux" &> /dev/null
+                          elif [ -f "${_mf}" ]; then
+                            if [ "${_flag}" -eq 0 ]; then
+                              if [[ "${_mf}" =~ src ]]; then #/ztpfrepos/wsp/i/indj.asm Legacy process path support
+                                _temp1Seg="${PRD_TPF_APP}/${_mf}"
+                                _temp2Seg="${_temp1Seg##*/}"
+                                _lnxSeg="${PRD_TPF_APP}/src/${_temp2Seg:0:1}/${_temp2Seg}"
+                              elif [[ "${_wd}" =~ BIN ]]; then #/ztpfrepos/wsp/derived/obj/indj.o Legacy process path support
+                                _lnxSeg="${PRD_TPF_APP}/derived/${_mf}"
+                              else
+                                _lnxSeg="${PRD_TPF_APP}/${_mf}" #Modernization Project process
+                              fi
+                              echo -e "\nINFO: File ${_mf} copy to ${_lnxSeg}"
+                              if [ ! -d "${_lnxSeg%/*}" ]; then
+                                mkdir -p "${_lnxSeg%/*}"; _RC=$?;
+                                if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                  echo -e "INFO: New directory creating with super user permission ${_lnxSeg%/*}"
+                                  sudo mkdir -p "${_lnxSeg%/*}"
+                                  sudo chown "${MTP_SUSR}.${MTP_SUSR}" "${_lnxSeg%/*}"
+                                fi
+                              fi
+                              if [ -f "${_lnxSeg}" ]; then
+                                mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                                if [ ${_RC} -ne 0 ]; then
+                                  echo -e "INFO: File move with super user permission ${_lnxSeg} to ${_lnxSeg}_${USR_IMPL_PLAN}"
+                                  sudo mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?;#Backup
+                                fi
+                              fi
+                              _getOnlineFile=( $(git log --oneline --pretty=format:%h,%s,%d "$_mf" | grep -v "${USR_IMPL_PLAN}" | grep online- | awk '{print $1}') )
+                              for ((i=0; i<${#_getOnlineFile[@]}; i++));
+                              do
+                                _getOnlineCommmit="${_getOnlineFile[i]%%,*}";
+                                _tagRef=( $(git describe --contains "${_getOnlineCommmit}") )
+                                # shellcheck disable=SC2128
+                                if [[ "$_tagRef" =~ online ]]; then
+                                  _getOnlineCheckout="$_getOnlineCommmit"
+                                  break;
+                                fi
+                              done
+                              if [ -z "${_getOnlineCheckout}" ]; then
+                                rm -f "${_lnxSeg}";
+                              else
+                                git checkout "${_getOnlineCheckout}" -- "$_mf"; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  cp -rf --preserve=all "${_mf}" "${_lnxSeg}"; _RC=$?; #To zLinux file non-ibm copy
+                                  if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                    echo -e "INFO: File copy with super user permission ${_mf} to ${_lnxSeg}"
+                                    sudo cp -rf --preserve=all "${_mf}" "${_lnxSeg}" &> /dev/null; _RC=$?; #To zLinux file non-ibm copy
+                                  fi
+                                  #Timestamp apply from staging
+                                  if [ "${_RC}" -eq 0 ] && [[ "${_onlinePlanStr:0:1}" == +(t|d) ]]; then
+                                    if [ -f "${STG_TPF_APP}/${_onlinePlanStr}/${USR_IMPL_CORE}/${_mf}" ]; then
+                                      touch -r "${STG_TPF_APP}/${_onlinePlanStr}/${USR_IMPL_CORE}/${_mf}" "${_lnxSeg}"
+                                    fi
+                                  elif [ "${_RC}" -eq 0 ] && [[ $(git remote -v | grep origin | grep push) =~ nonibm ]]; then
+                                    if [ -d "${TPF_APP}/loads/${_onlinePlanStr}" ]; then
+                                      _fallbackPath="$(find "${TPF_APP}/loads/${_onlinePlanStr}" -type f -name "${_mf##*/}" )"
+                                      if [ -f "${_fallbackPath}" ]; then
+                                        touch -r "${_fallbackPath}" "${_lnxSeg}"
+                                      fi
+                                    fi
+                                  elif [ "${_RC}" -ne 0 ]; then
+                                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File ${_mf} copy to ${PRD_TPF_APP} - Failed RC:$EC"
+                                    echo -e "\nERROR: File ${_mf} copy to ${PRD_TPF_APP} - Failed."
+                                    _RC="$EC";
+                                    break
+                                  fi
+                                else
+                                  echo -e "\nINFO: File ${_mf} checkout from git failed"; _RC=0;
+                                fi
+                              fi
+                            else
+                              if [[ "${_wd}" =~ BIN ]]; then #/ztpfrepos/wsp/derived/obj/indj.o Legacy process path support
+                                _lnxSeg="${PRD_TPF_SYS}/prod/derived/${_mf}" #Legacy local_mod support Project process
+                              else
+                                _lnxSeg="${PRD_TPF_SYS}/prod/local_mod/${_mf}" #Legacy local_mod support Project process
+                              fi
+                              echo -e "\nINFO: File ${_mf} copy to ${_lnxSeg}"
+                              if [ ! -d "${_lnxSeg%/*}" ]; then
+                                mkdir -p "${_lnxSeg%/*}"; _RC=$?;
+                                if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                  echo -e "INFO: New directory creating with super user permission ${_lnxSeg%/*}"
+                                  sudo mkdir -p "${_lnxSeg%/*}"
+                                  sudo chown "${MTP_SUSR}.${MTP_SUSR}" "${_lnxSeg%/*}"
+                                fi
+                              fi
+                              if [ -f "${_lnxSeg}" ]; then
+                                mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                                if [ "${_RC}" -ne 0 ]; then
+                                  echo -e "INFO: File move with super user permission ${_lnxSeg} to ${_lnxSeg}_${USR_IMPL_PLAN}"
+                                  sudo mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                                fi
+                              fi
+                              _getOnlineFile=( $(git log --oneline --pretty=format:%h,%s,%d "$_mf" | grep -v "${USR_IMPL_PLAN}" | grep online- | awk '{print $1}') )
+                              for ((i=0; i<${#_getOnlineFile[@]}; i++));
+                              do
+                                _getOnlineCommmit="${_getOnlineFile[i]%%,*}";
+                                _tagRef=( $(git describe --contains "${_getOnlineCommmit}") )
+                                # shellcheck disable=SC2128
+                                if [[ "$_tagRef" =~ online ]]; then
+                                  _getOnlineCheckout="$_getOnlineCommmit"
+                                  break;
+                                fi
+                              done
+                              if [ -z "${_getOnlineCheckout}" ]; then
+                                rm -f "${_lnxSeg}";
+                              else
+                                git checkout "${_getOnlineCheckout}" -- "$_mf"; _RC=$?;
+                                if [ "${_RC}" -eq 0 ]; then
+                                  cp -rf --preserve=all "${_mf}" "${_lnxSeg}"; _RC=$?; #To zLinux file ibm copy
+                                  if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                    echo -e "INFO: File copy with super user permission ${_mf} to ${_lnxSeg}"
+                                    sudo cp -rf --preserve=all "${_mf}" "${_lnxSeg}" &> /dev/null; _RC=$?; #To zLinux file ibm copy
+                                  fi
+                                  #Timestamp apply from staging
+                                  if [ "${_RC}" -eq 0 ] && [[ "${_onlinePlanStr:0:1}" == +(t|d) ]]; then
+                                    if [ -f "${STG_TPF_SYS}/${_onlinePlanStr}/${USR_IMPL_CORE}/${_mf}" ]; then
+                                      touch -r "${STG_TPF_SYS}/${_onlinePlanStr}/${USR_IMPL_CORE}/${_mf}" "${_lnxSeg}"
+                                    fi
+                                  elif [ "${_RC}" -eq 0 ] && [[ $(git remote -v | grep origin | grep push) =~ nonibm ]]; then
+                                    if [ -d "${TPF_SYS}/loads/${_onlinePlanStr}" ]; then
+                                      _fallbackPath="$(find "${TPF_SYS}/loads/${_onlinePlanStr}" -type f -name "${_mf##*/}" )"
+                                      if [ -f "${_fallbackPath}" ]; then
+                                        touch -r "${_fallbackPath}" "${_lnxSeg}"
+                                      fi
+                                    fi
+                                  elif [ "${_RC}" -ne 0 ]; then
+                                    echo -e "\nERROR: File ${_mf} copy to ${PRD_TPF_SYS} - Failed."
+                                    _RC="$EC";
+                                    break
+                                  fi
+                                else
+                                  echo -e "\nINFO: File ${_mf} checkout from git failed"; _RC=0;
+                                fi
+                              fi
+                            fi
+                          else
+                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File ${_mf} not found for copy from previous version in GIT - Failed RC:$EC"
+                            echo -e "\nERROR: File ${_mf} not found for copy from previous version in GIT - Failed."
+                          fi
+                        done
+                        #Parent Loop exit process for failed return code
+                        if [ "$_RC" -ne 0 ]; then
+                          _RC="$EC";
+                          break
+                        fi
+                      fi
+                    popd &> /dev/null
+                  else                 #else part --12.3.18
+                    git checkout "${USR_MASTER_CORE}" &> /dev/null; _RC=$?;
+                    if [ "$_RC" -ne 0 ]; then
+                      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Branch ${USR_MASTER_CORE} failed to checkout from production - ${_sm} RC:$EC"
+                      echo -e "\nERROR: Branch ${USR_MASTER_CORE} failed to checkout from production - ${_sm}."
+                      popd &> /dev/null
+                      _RC="$EC";
+                      break
+                    else
+                      i="";
+                      for i in {0..2}  #Retry if it's failed
+                      do
+                        GIT_SSL_NO_VERIFY=true git pull origin "${USR_MASTER_CORE}" --tags &> /dev/null; _RC=$?; #Init to support submodules
+                        if [ "${_RC}" -eq 0 ]; then
+                          break;
+                        elif [ "${_RC}" -eq 128 ]; then
+                          echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                          sleep 3;
+                          _RC="$EC";
+                        else
+                          _RC="$EC";
+                        fi
+                      done
+                      if [ "$_RC" -ne 0 ]; then
+                        echo -e "\nERROR: Branch ${USR_MASTER_CORE} failed to pull from production - ${_sm}."
+                        popd &> /dev/null
+                        _RC="$EC";
+                        break
+                      fi
+                    fi
+                    for _mf in "${_mergFiles[@]}"
+                    do
+                      #shellcheck disable=SC1073,SC1072,SC1009
+                      if [[ "$_mf" =~ ^(.git|.out|README)$ ]]; then
+                        echo -e "\nINFO: ${_mf} - File SKIP for GIT" &> /dev/null
+                      else
+                        git checkout "${_prodPlanHash}" "${_mf}"; _RC=$?
+                      fi
+                      if [ "$_RC" -ne 0 ]; then
+                        echo -e "\nERROR: File ${_mf} failed to checkout from ${_prodPlanHash} - ${_sm}."
+                        _RC="$EC";
+                        break
+                      fi
+                    done
+                    #Parent Loop exit process for failed return code
+                    if [ "$_RC" -ne 0 ]; then
+                      _RC="$EC";
+                      break
+                    fi
+                    #Production master_core branch changed file operations
+                    if [[ "$OnlineRef" == ONLINE_ACCEPT ]]; then
+                      git status | grep -e "nothing to commit" &> /dev/null; _RC=$?
+                      if [ "${_RC}" -eq 0 ]; then
+                        echo -e "${LoadDate} ${USR_IMPL_PLAN}_${_prodPlanHash}_online - NO SOURCE CHANGED : $(date +%Y%m%d%H%M%S-%Z)" >> README.md
+                        sort -u README.md -o README.md
+                      else
+                        _RC="$RC"
+                      fi
+                      git add . &> /dev/null
+                      git commit -am "Date:${LoadDate}, Type:Load, PlanID:${USR_IMPL_PLAN}, PlanOwner:${MTP_SUSR}, SourceRef:${_prodPlanHash}, Status:online" &> /dev/null; _RC=$?
+                      if [ "${_RC}" -eq 0 ]; then
+                        git tag -a "online-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" -m "online-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)"; _TRC=$?
+                        if [[ "${_wd}" =~ SRC ]]; then
+                          getGitData "SRC" "${_wd}/${_sm}" "${USR_IMPL_PLAN}" "${LoadDate}" "false" ; _RC=$?;
+                          if [ "${_RC}" -eq 0 ]; then
+                            sendGitData "${USR_IMPL_CORE}" "false";
+                          fi
+                        fi
+                      fi
+                    elif [[ "$OnlineRef" == ONLINE_REVERT ]] || [[ "$OnlineRef" == FALLBACK_ACCEPT ]]; then
+                      git status | grep -e "nothing to commit" &> /dev/null; _RC=$?
+                      if [ "${_RC}" -eq 0 ]; then
+                        echo -e "${LoadDate} ${USR_IMPL_PLAN}_${_prodPlanHash}_fallback - NO SOURCE CHANGED : $(date +%Y%m%d%H%M%S-%Z)" >> README.md
+                        sort -u README.md -o README.md
+                      else
+                        _RC="$RC"
+                      fi
+                      git add . &> /dev/null
+                      git commit -am "Date:${LoadDate}, Type:Load, PlanID:${USR_IMPL_PLAN}, PlanOwner:${MTP_SUSR}, SourceRef:${_prodPlanHash}, Status:fallback" &> /dev/null; _RC=$?
+                      if [ "${_RC}" -eq 0 ]; then
+                        _onlinePreRef=( $(git log --pretty="%s,%h %d" | grep -e "${USR_IMPL_PLAN}" | grep -e "online-" | awk '{print $6}') )
+                        # shellcheck disable=SC2128
+                        if [ -z "${_onlinePreRef}" ]; then
+                          git tag -a "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" -m "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)"; _TRC=$?
+                          if [[ "${_wd}" =~ SRC ]]; then
+                            getGitData "SRC" "${_wd}/${_sm}" "${USR_IMPL_PLAN}" "${LoadDate}" "false" ; _RC=$?;
+                            if [ "${_RC}" -eq 0 ]; then
+                              sendGitData "${USR_IMPL_CORE}" "false";
+                            fi
+                          fi
+                        else
+                          for ((i=0; i<${#_onlinePreRef[@]}; i++));
+                          do
+                            # shellcheck disable=SC2086
+                            delTag=( $(git describe --contains ${_onlinePreRef[i]##*,}) )
+                            if [[ "${delTag}" =~ online ]]; then
+                              git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" &> /dev/null
+                              j="";
+                              for j in {0..2}    #Retry if it's failed
+                              do
+                                GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?; #Init to support submodules
+                                if [ "${_RC}" -eq 0 ]; then
+                                  break;
+                                elif [ "${_RC}" -eq 128 ]; then
+                                  echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                  sleep 3;
+                                  _RC="$EC";
+                                else
+                                  _RC="$EC";
+                                fi
+                              done
+                              #------------Deleting Tag in local repo
+                              if [[ "${_wd}" =~ BIN ]]; then
+                                if [ -d "${GIT_CLONE}${putlev}/${_putdir}" ]; then
+                                  pushd "${GIT_CLONE}${putlev}/${_putdir}" &> /dev/null
+                                    j="";
+                                    for j in {0..2}        #Retry if it's failed
+                                    do
+                                      GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?; #Init to support submodules
+                                      if [ "${_RC}" -eq 0 ]; then
+                                        break;
+                                      elif [ "${_RC}" -eq 128 ]; then
+                                        echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                        sleep 3;
+                                        _RC="$EC";
+                                      else
+                                        _RC="$EC";
+                                      fi
+                                    done
+                                  popd  &> /dev/null
+                                fi
+                              fi
+                              #------------Put levels
+                            fi
+                            git tag -a "fallback-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" -m "fallback-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}" "${_onlinePreRef[i]##*,}"; _TRC=$?
+                            if [[ "${_wd}" =~ SRC ]] && [[ "$OnlineRef" == FALLBACK_ACCEPT ]]; then
+                              getGitData "SRC" "${_wd}/${_sm}" "${USR_IMPL_PLAN}" "${LoadDate}" "true" ; _RC=$?;
+                              if [ "${_RC}" -eq 0 ]; then
+                                sendGitData "${USR_IMPL_CORE}" "true";
+                              fi
+                            fi         # Online update to fallback
+                          done
+                          git tag -a "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" -m "fallback-${USR_IMPL_PLAN}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)"; _TRC=$?
+                          if [[ "${_wd}" =~ SRC ]] && [[ "$OnlineRef" == ONLINE_REVERT ]]; then
+                            getGitData "SRC" "${_wd}/${_sm}" "${USR_IMPL_PLAN}" "${LoadDate}" "false" ; _RC=$?;
+                            if [ "${_RC}" -eq 0 ]; then
+                              sendGitData "${USR_IMPL_CORE}" "false";
+                            fi
+                          fi           # Online revert.
+                        fi
+                        if [ "${_TRC}" -eq 0 ]; then
+                          git tag -l | grep "online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null; _RC=$?;
+                          if [ "${_RC}" -eq 0 ]; then
+                            git tag -d "online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null
+                            i="";
+                            for i in {0..2}      #Retry if it's failed
+                            do
+                              GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef##*,}" &> /dev/null; _RC=$? #Init to support submodules
+                              if [ "${_RC}" -eq 0 ]; then
+                                break;
+                              elif [ "${_RC}" -eq 128 ]; then
+                                echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                                sleep 3;
+                                _RC="$EC";
+                              else
+                                _RC="$EC";
+                              fi
+                            done
+                            #------------Deleting Tag in local repo
+                            if [[ "${_wd}" =~ BIN ]]; then
+                              if [ -d "${GIT_CLONE}${putlev}/${_putdir}" ]; then
+                                pushd "${GIT_CLONE}${putlev}/${_putdir}" &> /dev/null
+                                  i="";
+                                  for i in {0..2}          #Retry if it's failed
+                                  do
+                                    GIT_SSL_NO_VERIFY=true git push origin :refs/tags/"online-${USR_IMPL_PLAN}-${_onlinePreRef[i]##*,}"; _RC=$?; #Init to support submodules
+                                    if [ "${_RC}" -eq 0 ]; then
+                                      break;
+                                    elif [ "${_RC}" -eq 128 ]; then
+                                      echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                                      sleep 3;
+                                      _RC="$EC";
+                                    else
+                                      _RC="$EC";
+                                    fi
+                                  done
+                                popd  &> /dev/null
+                              fi
+                            fi
+                          else
+                            _RC="$RC"
+                          fi
+                        fi
+                      fi
+                    fi
+                    if [ "${_RC}" -ne 0 ]; then
+                      echo -e "\\nERROR: Commit failed - ${USR_IMPL_PLAN}."
+                      _RC="${EC}"
+                    elif [ "${_TRC}" -ne 0 ]; then
+                      echo -e "\\nERROR: Tag failed - ${USR_IMPL_PLAN}."
+                      _RC="${EC}"
+                    fi
+                    _prodNewHash="$(git log -1 --pretty=%h)"
+                    echo -e "Prod new Hash - ${_prodNewHash}"
+                    _prodOldHash="$(git log --skip=1 -1 --pretty=%h)"
+                    echo -e "Prod old Hash - ${_prodOldHash}"
+                    _tempHash="$(git log --pretty=%h,%s,%d | grep online- | grep -v "${USR_IMPL_PLAN}" | head -1)"
+                    _tempPlanStr="${_tempHash##*PlanID\:}"
+                    _onlinePlanStr="${_tempPlanStr%%,*}" #Get fallback online implemenation plan id
+                    _onlineOldHash="${_tempHash%%,*}"
+                    echo -e "Online old Hash - ${_onlineOldHash}"
+                    _tempHash="$(git log --pretty=%h,%s,%d | grep fallback- | grep -v "${USR_IMPL_PLAN}" | head -1)"
+                    _fallbkOldHash="${_tempHash%%,*}"
+                    echo -e "Fallbk old Hash - ${_fallbkOldHash}"
+                    git remote -v | grep nonibm &> /dev/null; _flag=$?;
+                    if [[ "$OnlineRef" == ONLINE_ACCEPT ]]; then
+                      i="";
+                      for i in {0..2}  #Retry if it's failed
+                      do
+                        GIT_SSL_NO_VERIFY=true git push -u origin "${USR_MASTER_CORE}" --tags &> /dev/null; _RC=$?; #Init to support submodules
+                        if [ "${_RC}" -eq 0 ]; then
+                          break;
+                        elif [ "${_RC}" -eq 128 ]; then
+                          echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                          sleep 3;
+                          _RC="$EC";
+                        else
+                          _RC="$EC";
+                        fi
+                      done
+                      if [ "$_RC" -ne 0 ]; then
+                        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Branch ${USR_MASTER_CORE} failed to push production - ${_sm} RC:$EC"
+                        echo -e "\nERROR: Branch ${USR_MASTER_CORE} failed to push production - ${_sm}."
+                        popd &> /dev/null
+                        _RC="$EC";
+                        break
+                      fi
+                      #Linux file copy
+                      for _mf in "${_mergFiles[@]}"
+                      do
+                        if [[ "$_mf" =~ (\.git|\.out|README) ]]; then
+                          echo -e "\nINFO: ${_mf} - File SKIP for Linux" &> /dev/null
+                        elif [ -f "${_mf}" ]; then
+                          if [ "${_flag}" -eq 0 ]; then
+                            if [[ "${_mf}" =~ src ]]; then #/ztpfrepos/wsp/i/indj.asm Legacy process path support
+                              _temp1Seg="${PRD_TPF_APP}/${_mf}"
+                              _temp2Seg="${_temp1Seg##*/}"
+                              _lnxSeg="${PRD_TPF_APP}/src/${_temp2Seg:0:1}/${_temp2Seg}"
+                            elif [[ "${_wd}" =~ BIN ]]; then #/ztpfrepos/wsp/derived/obj/indj.o Legacy process path support
+                              _lnxSeg="${PRD_TPF_APP}/derived/${_mf}"
+                            else
+                              _lnxSeg="${PRD_TPF_APP}/${_mf}" #Modernization Project process
+                            fi
+                            echo -e "\nINFO: File ${_mf} copy to ${_lnxSeg}"
+                            if [ ! -d "${_lnxSeg%/*}" ]; then
+                              mkdir -p "${_lnxSeg%/*}"; _RC=$?;
+                              if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                echo -e "INFO: New directory creating with super user permission ${_lnxSeg%/*}"
+                                sudo mkdir -p "${_lnxSeg%/*}"
+                                sudo chown "${MTP_SUSR}.${MTP_SUSR}" "${_lnxSeg%/*}"
+                              fi
+                            fi
+                            if [ -f "${_lnxSeg}" ]; then
+                              mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                              if [ "${_RC}" -ne 0 ]; then
+                                echo -e "INFO: File move with super user permission ${_lnxSeg} to ${_lnxSeg}_${USR_IMPL_PLAN}"
+                                sudo mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                              fi
+                            fi
+                            cp -rf --preserve=all "${_mf}" "${_lnxSeg}"; _RC=$?; #To zLinux non-ibm file copy
+                            if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                              echo -e "INFO: File copy with super user permission ${_mf} to ${_lnxSeg}"
+                              sudo cp -rf --preserve=all "${_mf}" "${_lnxSeg}" &> /dev/null; _RC=$?; #To zLinux non-ibm file copy
+                            fi
+                            #Timestamp apply from STG
+                            if [ "${_RC}" -eq 0 ]; then
+                              if [ -f "${APP_STG_IMPL_CWRK%/*}/${_mf}" ]; then
+                                touch -r "${APP_STG_IMPL_CWRK%/*}/${_mf}" "${_lnxSeg}"
+                              fi
+                            else
+                              echo -e "ERROR: File copy ${_mf} to ${_lnxSeg} - failed."
+                            fi
+                          else
+                            if [[ "${_wd}" =~ BIN ]]; then #/ztpfrepos/wsp/derived/obj/indj.o Legacy process path support
+                              _lnxSeg="${PRD_TPF_SYS}/prod/derived/${_mf}" #Legacy local_mod support Project process
+                            else
+                              _lnxSeg="${PRD_TPF_SYS}/prod/local_mod/${_mf}" #Legacy local_mod support Project process
+                            fi
+                            echo -e "\nINFO: File ${_mf} copy to ${_lnxSeg}"
+                            if [ ! -d "${_lnxSeg%/*}" ]; then
+                              mkdir -p "${_lnxSeg%/*}"; _RC=$?;
+                              if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                echo -e "INFO: New directory creating with super user permission ${_lnxSeg%/*}"
+                                sudo mkdir -p "${_lnxSeg%/*}"
+                                sudo chown "${MTP_SUSR}.${MTP_SUSR}" "${_lnxSeg%/*}"
+                              fi
+                            fi
+                            if [ -f "${_lnxSeg}" ]; then
+                              mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?;#Backup
+                              if [ "${_RC}" -ne 0 ]; then
+                                echo -e "INFO: File move with super user permission ${_lnxSeg} to ${_lnxSeg}_${USR_IMPL_PLAN}"
+                                sudo mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                              fi
+                            fi
+                            cp -rf --preserve=all "${_mf}" "${_lnxSeg}"; _RC=$?; #To zLinux ibm path file copy
+                            if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                              echo -e "INFO: File copy with super user permission ${_mf} to ${_lnxSeg}"
+                              sudo cp -rf --preserve=all "${_mf}" "${_lnxSeg}" &> /dev/null; _RC=$?; #To zLinux ibm path file copy
+                            fi
+                            #Timestamp apply from STG
+                            if [ "${_RC}" -eq 0 ]; then
+                              if [ -f "${SYS_STG_IMPL_CWRK%/*}/${_mf}" ]; then
+                                touch -r "${SYS_STG_IMPL_CWRK%/*}/${_mf}" "${_lnxSeg}"
+                              fi
+                            else
+                              echo -e "ERROR: File copy ${_mf} to ${_lnxSeg} - failed."
+                            fi
+                          fi
+                          #if [ -f macro/dlmcrnms.mac ]; then
+                          #  NEW_MACRO="Y";
+                          #fi
+                          if [ "$_RC" -ne 0 ]; then
+                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File ${_mf} copy to ${PRD_TPF_APP} - Failed RC:$EC"
+                            echo -e "\nERROR: File ${_mf} copy to ${PRD_TPF_APP} - Failed."
+                            _RC="$EC";
+                            break
+                          fi
+                        else
+                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File ${_mf} not found for copy from previous version in GIT - Failed RC:$EC"
+                          echo -e "\nERROR: File ${_mf} not found for copy from previous version in GIT - Failed."
+                        fi
+                      done
+                      #Parent Loop exit process for failed return code
+                      if [ "$_RC" -ne 0 ]; then
+                        _RC="$EC";
+                        break
+                      fi
+                    elif [[ "$OnlineRef" == ONLINE_REVERT ]]; then
+                      i="";
+                      for i in {0..2}  #Retry if it's failed
+                      do
+                        GIT_SSL_NO_VERIFY=true git push -u origin "${USR_MASTER_CORE}" --tags &> /dev/null; _RC=$?; #Init to support submodules
+                        if [ "${_RC}" -eq 0 ]; then
+                          break;
+                        elif [ "${_RC}" -eq 128 ]; then
+                          echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                          sleep 3;
+                          _RC="$EC";
+                        else
+                          _RC="$EC";
+                        fi
+                      done
+                      if [ "$_RC" -ne 0 ]; then
+                        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Branch ${USR_MASTER_CORE} failed to push production - ${_sm} RC:$EC"
+                        echo -e "\nERROR: Branch ${USR_MASTER_CORE} failed to push production - ${_sm}."
+                        popd &> /dev/null
+                        _RC="$EC";
+                        break
+                      fi
+                    elif [[ "$OnlineRef" == FALLBACK_ACCEPT ]]; then
+                      i="";
+                      for i in {0..2}  #Retry if it's failed
+                      do
+                        GIT_SSL_NO_VERIFY=true git push -u origin "${USR_MASTER_CORE}" --tags &> /dev/null; _RC=$?; #Init to support submodules
+                        if [ "${_RC}" -eq 0 ]; then
+                          break;
+                        elif [ "${_RC}" -eq 128 ]; then
+                          echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                          sleep 3;
+                          _RC="$EC";
+                        else
+                          _RC="$EC";
+                        fi
+                      done
+                      if [ "$_RC" -ne 0 ]; then
+                        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Branch ${USR_MASTER_CORE} failed to push production - ${_sm} RC:$EC"
+                        echo -e "\nERROR: Branch ${USR_MASTER_CORE} failed to push production - ${_sm}."
+                        popd &> /dev/null
+                        _RC="$EC";
+                        break
+                      fi
+                      #Linux file copy
+                      for _mf in "${_mergFiles[@]}"
+                      do
+                        if [[ "$_mf" =~ (\.git|\.out|README) ]]; then
+                          echo -e "\nINFO: ${_mf} - File SKIP for Linux" &> /dev/null
+                        elif [ -f "${_mf}" ]; then
+                          if [ "${_flag}" -eq 0 ]; then
+                            if [[ "${_mf}" =~ src ]]; then #/ztpfrepos/wsp/i/indj.asm Legacy process path support
+                              _temp1Seg="${PRD_TPF_APP}/${_mf}"
+                              _temp2Seg="${_temp1Seg##*/}"
+                              _lnxSeg="${PRD_TPF_APP}/src/${_temp2Seg:0:1}/${_temp2Seg}"
+                            elif [[ "${_wd}" =~ BIN ]]; then #/ztpfrepos/wsp/derived/obj/indj.o Legacy process path support
+                              _lnxSeg="${PRD_TPF_APP}/derived/${_mf}"
+                            else
+                              _lnxSeg="${PRD_TPF_APP}/${_mf}" #Modernization Project process
+                            fi
+                            echo -e "\nINFO: File ${_mf} copy to ${_lnxSeg}"
+                            if [ ! -d "${_lnxSeg%/*}" ]; then
+                              mkdir -p "${_lnxSeg%/*}"; _RC=$?;
+                              if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                echo -e "INFO: New directory creating with super user permission ${_lnxSeg%/*}"
+                                sudo mkdir -p "${_lnxSeg%/*}"
+                                sudo chown "${MTP_SUSR}.${MTP_SUSR}" "${_lnxSeg%/*}"
+                              fi
+                            fi
+                            if [ -f "${_lnxSeg}" ]; then
+                              mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                              if [ "${_RC}" -ne 0 ]; then
+                                echo -e "INFO: File move with super user permission ${_lnxSeg} to ${_lnxSeg}_${USR_IMPL_PLAN}"
+                                sudo mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                              fi
+                            fi
+                            _getOnlineFile=( $(git log --oneline --pretty=format:%h,%s,%d "$_mf" | grep -v "${USR_IMPL_PLAN}" | grep online- | awk '{print $1}') )
+                            for ((i=0; i<${#_getOnlineFile[@]}; i++));
+                            do
+                              _getOnlineCommmit="${_getOnlineFile[i]%%,*}";
+                              _tagRef=( $(git describe --contains "${_getOnlineCommmit}") )
+                              # shellcheck disable=SC2128
+                              if [[ "$_tagRef" =~ online ]]; then
+                                _getOnlineCheckout="$_getOnlineCommmit"
+                                break;
+                              fi
+                            done
+                            if [ -z "${_getOnlineCheckout}" ]; then
+                              rm -f "${_lnxSeg}";
+                            else
+                              git checkout "${_getOnlineCheckout}" -- "$_mf"; _RC=$?;
+                              if [ "${_RC}" -eq 0 ]; then
+                                cp -rf --preserve=all "${_mf}" "${_lnxSeg}"; _RC=$?; #To zLinux file non-ibm copy
+                                if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                  echo -e "INFO: File copy with super user permission ${_mf} to ${_lnxSeg}"
+                                  sudo cp -rf --preserve=all "${_mf}" "${_lnxSeg}" &> /dev/null; _RC=$?; #To zLinux file non-ibm copy
+                                fi
+                                #if [ -f macro/dlmcrnms.mac ]; then
+                                #  NEW_MACRO="Y";
+                                #fi
+                                #Timestamp apply from staging
+                                if [ "${_RC}" -eq 0 ] && [[ "${_onlinePlanStr:0:1}" == +(t|d) ]]; then
+                                  if [ -f "${STG_TPF_APP}/${_onlinePlanStr}/${USR_IMPL_CORE}/${_mf}" ]; then
+                                    touch -r "${STG_TPF_APP}/${_onlinePlanStr}/${USR_IMPL_CORE}/${_mf}" "${_lnxSeg}"
+                                  fi
+                                elif [ "${_RC}" -eq 0 ] && [[ $(git remote -v | grep origin | grep push) =~ nonibm ]]; then
+                                  if [ -d "${TPF_APP}/loads/${_onlinePlanStr}" ]; then
+                                    _fallbackPath="$(find "${TPF_APP}/loads/${_onlinePlanStr}" -type f -name "${_mf##*/}" )"
+                                    if [ -f "${_fallbackPath}" ]; then
+                                      touch -r "${_fallbackPath}" "${_lnxSeg}"
+                                    fi
+                                  fi
+                                elif [ "${_RC}" -ne 0 ]; then
+                                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File ${_mf} copy to ${PRD_TPF_APP} - Failed RC:$EC"
+                                  echo -e "\nERROR: File ${_mf} copy to ${PRD_TPF_APP} - Failed."
+                                  _RC="$EC";
+                                  break
+                                fi
+                              else
+                                echo -e "\nINFO: File ${_mf} checkout from git failed"; _RC=0;
+                              fi
+                            fi
+                          else
+                            if [[ "${_wd}" =~ BIN ]]; then #/ztpfrepos/wsp/derived/obj/indj.o Legacy process path support
+                              _lnxSeg="${PRD_TPF_SYS}/prod/derived/${_mf}" #Legacy local_mod support Project process
+                            else
+                              _lnxSeg="${PRD_TPF_SYS}/prod/local_mod/${_mf}" #Legacy local_mod support Project process
+                            fi
+                            echo -e "\nINFO: File ${_mf} copy to ${_lnxSeg}"
+                            if [ ! -d "${_lnxSeg%/*}" ]; then
+                              mkdir -p "${_lnxSeg%/*}"; _RC=$?;
+                              if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                echo -e "INFO: New directory creating with super user permission ${_lnxSeg%/*}"
+                                sudo mkdir -p "${_lnxSeg%/*}"
+                                sudo chown "${MTP_SUSR}.${MTP_SUSR}" "${_lnxSeg%/*}"
+                              fi
+                            fi
+                            if [ -f "${_lnxSeg}" ]; then
+                              mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                              if [ "${_RC}" -ne 0 ]; then
+                                echo -e "INFO: File move with super user permission ${_lnxSeg} to ${_lnxSeg}_${USR_IMPL_PLAN}"
+                                sudo mv -f "${_lnxSeg}" "${_lnxSeg}_${USR_IMPL_PLAN}"; _RC=$?; #Backup
+                              fi
+                            fi
+                            _getOnlineFile=( $(git log --oneline --pretty=format:%h,%s "$_mf" | grep -v "${USR_IMPL_PLAN}" | grep online | awk '{print $1}') )
+                            for ((i=0; i<${#_getOnlineFile[@]}; i++));
+                            do
+                              _getOnlineCommmit="${_getOnlineFile[i]%%,*}";
+                              _tagRef=( $(git describe --contains "${_getOnlineCommmit}") )
+                              # shellcheck disable=SC2128
+                              if [[ "$_tagRef" =~ online ]]; then
+                                _getOnlineCheckout="$_getOnlineCommmit"
+                                break;
+                              fi
+                            done
+                            if [ -z "${_getOnlineCheckout}" ]; then
+                              rm -f "${_lnxSeg}";
+                            else
+                              git checkout "${_getOnlineCheckout}" -- "$_mf"; _RC=$?;
+                              if [ "${_RC}" -eq 0 ]; then
+                                cp -rf --preserve=all "${_mf}" "${_lnxSeg}"; _RC=$?; #To zLinux file ibm copy
+                                if [ "${_RC}" -ne 0 ]; then #Try with super user access
+                                  echo -e "INFO: File copy with super user permission ${_mf} to ${_lnxSeg}"
+                                  sudo cp -rf --preserve=all "${_mf}" "${_lnxSeg}" &> /dev/null; _RC=$?; #To zLinux file ibm copy
+                                fi
+                                #if [ -f macro/dlmcrnms.mac ]; then
+                                #  NEW_MACRO="Y";
+                                #fi
+                                #Timestamp apply from staging
+                                if [ "${_RC}" -eq 0 ] && [[ "${_onlinePlanStr:0:1}" == +(t|d) ]]; then
+                                  if [ -f "${STG_TPF_SYS}/${_onlinePlanStr}/${USR_IMPL_CORE}/${_mf}" ]; then
+                                    touch -r "${STG_TPF_SYS}/${_onlinePlanStr}/${USR_IMPL_CORE}/${_mf}" "${_lnxSeg}"
+                                  fi
+                                elif [ "${_RC}" -eq 0 ] && [[ $(git remote -v | grep origin | grep push) =~ nonibm ]]; then
+                                  if [ -d "${TPF_SYS}/loads/${_onlinePlanStr}" ]; then
+                                    _fallbackPath="$(find "${TPF_SYS}/loads/${_onlinePlanStr}" -type f -name "${_mf##*/}" )"
+                                    if [ -f "${_fallbackPath}" ]; then
+                                      touch -r "${_fallbackPath}" "${_lnxSeg}"
+                                    fi
+                                  fi
+                                elif [ "${_RC}" -ne 0 ]; then
+                                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File ${_mf} copy to ${PRD_TPF_SYS} - Failed RC:$EC"
+                                  echo -e "\nERROR: File ${_mf} copy to ${PRD_TPF_SYS} - Failed."
+                                  _RC="$EC";
+                                  break
+                                fi
+                              else
+                                echo -e "\nINFO: File ${_mf} checkout from git failed"; _RC=0;
+                              fi
+                            fi
+                          fi
+                        else
+                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:File ${_mf} not found for copy from previous version in GIT - Failed RC:$EC"
+                          echo -e "\nERROR: File ${_mf} not found for copy from previous version in GIT - Failed."
+                        fi
+                      done
+                      #Parent Loop exit process for failed return code
+                      if [ "$_RC" -ne 0 ]; then
+                        _RC="$EC";
+                        break
+                      fi
+                    fi
+                  fi
+                fi
+              popd &> /dev/null
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Exit directory from - ${_sm} RC:$RC"
+              echo -e "\nINFO: Exit directory from - ${_sm}"
+              echo -e "INFO:$(date +%Y%m%d%H%M%S) Source and derived related ${_sm} repository synced with zLinux - $(($(date +%Y%m%d%H%M%S)-_execDate))s"
+              #--------------------------------------------------------------Pusing to remote branch gitblit
+              _execDate=$(date +%Y%m%d%H%M%S)
+              if [[ "${_wd}" =~ BIN ]] && [[ "${_sm}" =~ derived_put ]] ; then
+                _putdir="${_sm#*/}"
+                if [ -d "${GIT_CLONE}${putlev}/${_putdir}" ]; then
+                  pushd "${GIT_CLONE}${putlev}/${_putdir}" &>/dev/null
+                    GIT_SSL_NO_VERIFY=true git fetch --all --tags
+                    GIT_SSL_NO_VERIFY=true git checkout "$USR_PLAN_CORE"
+                    i="";
+                    for i in {0..2}    #Retry if it's failed
+                    do
+                      GIT_SSL_NO_VERIFY=true git pull origin "$USR_PLAN_CORE"; _RC=$?; #Init to support submodules
+                      if [ "${_RC}" -eq 0 ]; then
+                        break;
+                      elif [ "${_RC}" -eq 128 ]; then
+                        echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                        sleep 3;
+                        _RC="$EC";
+                      else
+                        _RC="$EC";
+                      fi
+                    done
+                    for i in {0..2}    #Retry if it's failed
+                    do
+                      GIT_SSL_NO_VERIFY=true git push origin "$USR_PLAN_CORE" --tags; _RC=$?; #Init to support submodules
+                      if [ "${_RC}" -eq 0 ]; then
+                        break;
+                      elif [ "${_RC}" -eq 128 ]; then
+                        echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+                        sleep 3;
+                        _RC="$EC";
+                      else
+                        _RC="$EC";
+                      fi
+                    done
+                    GIT_SSL_NO_VERIFY=true git checkout master
+                  popd &>/dev/null
+                fi
+                if [ -d "${master_path}" ]; then
+                  pushd "${master_path}"  &> /dev/null
+                    GIT_SSL_NO_VERIFY=true git stash
+                    GIT_SSL_NO_VERIFY=true git fetch --all
+                  popd &> /dev/null
+                fi
+              fi
+              echo -e "INFO:$(date +%Y%m%d%H%M%S) Git push to source and derived ${_sm} remote repository - $(($(date +%Y%m%d%H%M%S)-_execDate))s"
+              #--------------------------------------------------------------Sync up the remote repo
+            done
+            #Parent Loop exit process for failed return code
+            if [ "$_RC" -ne 0 ]; then
+              _RC="$EC";
+              break
+            fi
+          fi
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Failed to update submodules - ${_wd} RC:$EC"
+        echo -e "\nERROR: Failed to update submodules - ${_wd}."
+        _RC="$EC";
+        break
+      fi
+    popd &> /dev/null
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Exit directory from - ${_wd} RC:$RC"
+    echo -e "\nINFO: Exit directory from - ${_wd}"
+  done
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Exit directory from - ${HOME}/PRODSYNC RC:$RC"
+  echo -e "\nINFO: Exit directory from - ${HOME}/PRODSYNC"
+  return "$_RC"
+}
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  NEW_MACRO="N";                     #Init default win NO flag
+  if [[ "$OnlineRef" == ONLINE_ACCEPT ]] || [[ "$OnlineRef" == ONLINE_REVERT ]] || [[ "$OnlineRef" == FALLBACK_ACCEPT ]]; then
+    ImplPlan="${RemoteBranchName%_*}"
+    loadDate="${RemoteBranchName##*_}"
+    LoadDate="${loadDate:0:14}"        #Limit 14-char date format YYYYMMDDHHMMSS
+    getParmFromBranch "${ImplPlan}" "STG"; #Get workspace parm
+    if [ -d "${APP_STG_IMPL_WRK}" ] || [ -d "${SYS_STG_IMPL_WRK}" ]; then
+      DEV_SURL="${DEV_BIN_RURL_SUSR}/gitblit/r/${DEV_GIT_SRC}"
+      DEV_BURL="${DEV_BIN_RURL_SUSR}/gitblit/r/${DEV_GIT_BIN}"
+      GIT_SURL="${HOME}/PRODSYNC/${USR_IMPL_PLAN}_${USR_IMPL_CORE}_SRC_$RANDOM"
+      GIT_BURL="${HOME}/PRODSYNC/${USR_IMPL_PLAN}_${USR_IMPL_CORE}_BIN_$RANDOM"
+      execDate=$(date +%Y%m%d%H%M%S)
+      i="";
+      for i in {0..2}                  #Retry if it's failed
+      do
+        GIT_SSL_NO_VERIFY=true git clone -b "${USR_MASTER_CORE}" "${DEV_SURL}" "${GIT_SURL}" &> /dev/null; RC=$?; #Init to support submodules
+        if [ "${RC}" -eq 0 ]; then
+          break;
+        elif [ "${RC}" -eq 128 ]; then
+          sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$RC"
+          echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+          rm -rf "${GIT_SURL}";
+          sleep 3;
+          RC="$EC";
+        else
+          RC="$EC";
+        fi
+      done
+      if [ "$RC" -eq 0 ]; then
+        echo -e "INFO:$(date +%Y%m%d%H%M%S) Source repository clone ${GIT_SURL} completed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Source remote repository cloned RC:$RC"
+        echo -e "\nINFO: Source remote repository cloned..."
+        pushd "${GIT_SURL}" &> /dev/null
+          if [[ -f .gitmodules ]]; then
+            if [[ -n "$(sort .gitmodules | uniq -d)" ]]; then
+              cat -n ".gitmodules" | sort -uk2 | sort -nk1 | cut -f2- > ".gitmodules.tmp" && mv -f ".gitmodules.tmp" ".gitmodules";
+              GIT_SSL_NO_VERIFY=true git commit -m "Merge with ${USR_MASTER_CORE} resolved duplicate entries .gitmodules" .gitmodules
+              GIT_SSL_NO_VERIFY=true git push origin "${USR_MASTER_CORE}";
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: .gitmodules duplicate entries fix and merging into online RC:$RC"
+              echo -e "INFO: .gitmodules duplicate entries fix and merging into online";
+            else
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}: .gitmodules no duplicate entries to fix RC:$RC"
+              echo -e "INFO: .gitmodules no duplicate entries to fix";
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}: .gitmodules files isn't available in gitremote repo RC:$EC"
+            echo -e "ERROR: .gitmodules files isn't available in gitremote repo";
+          fi
+        popd &> /dev/null
+        execDate=$(date +%Y%m%d%H%M%S)
+        i="";
+        for i in {0..2}                #Retry if it's failed
+        do
+          GIT_SSL_NO_VERIFY=true git clone -b "${USR_MASTER_CORE}" "${DEV_BURL}" "${GIT_BURL}" &> /dev/null; RC=$?; #Init to support submodules
+          if [ "${RC}" -eq 0 ]; then
+            break;
+          elif [ "${RC}" -eq 128 ]; then
+            sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git remote re-try - $i RC:$RC"
+            echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+            rm -rf "${GIT_SURL}";
+            sleep 3;
+            RC="$EC";
+          else
+            RC="$EC";
+          fi
+        done
+        if [ "$RC" -eq 0 ]; then
+          echo -e "INFO:$(date +%Y%m%d%H%M%S) Derived repository clone ${GIT_SURL} completed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Derived remote repository cloned RC:$RC"
+          echo -e "\nINFO: Derived remote repository cloned."
+          if [ -f "/tmp/feedback_${USR_MASTER_CORE}" ]; then
+            execDate=$(date +%Y%m%d%H%M%S)
+            psaux=$(cat "/tmp/feedback_${USR_MASTER_CORE}")
+            while ls "/tmp/feedback_${USR_MASTER_CORE}"
+            do
+              if [ -n "${psaux[0]// /}" ]; then
+                ps -axu|awk '{print$2}'|grep -x "${psaux}";_RC=$?
+                if [ "${_RC}" -ne 0 ]; then
+                  rm -f "/tmp/feedback_${USR_MASTER_CORE}";
+                else
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Existing Online process in-progress RC:$RC"
+                  echo -e "INFO: Existing Online process in-progress..."
+                fi
+              fi
+              sleep 2;
+            done
+            touch "/tmp/feedback_${USR_MASTER_CORE}"
+            echo $$ >"/tmp/feedback_${USR_MASTER_CORE}";
+            echo -e "INFO:$(date +%Y%m%d%H%M%S) Existing online feedback wait completed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+            execDate=$(date +%Y%m%d%H%M%S)
+            codeSync; RC=$?;
+            echo -e "INFO:$(date +%Y%m%d%H%M%S) Source and derived artefacts sync completed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+            execDate=$(date +%Y%m%d%H%M%S)
+            sabreInc;
+            rm -f "/tmp/feedback_${USR_MASTER_CORE}"
+            echo -e "INFO:$(date +%Y%m%d%H%M%S) Sabre include files synced with z/OS completed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+          else
+            touch "/tmp/feedback_${USR_MASTER_CORE}"
+            echo $$ >"/tmp/feedback_${USR_MASTER_CORE}";
+            execDate=$(date +%Y%m%d%H%M%S)
+            codeSync; RC=$?;
+            echo -e "INFO:$(date +%Y%m%d%H%M%S) Source and derived artefacts sync completed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+            execDate=$(date +%Y%m%d%H%M%S)
+            sabreInc;
+            rm -f "/tmp/feedback_${USR_MASTER_CORE}"
+            echo -e "INFO:$(date +%Y%m%d%H%M%S) Sabre include files synced with z/OS completed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+          fi
+        else
+          echo -e "ERROR:$(date +%Y%m%d%H%M%S) Derived repository clone ${GIT_SURL} failed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Derived repository failed to clone RC:$EC"
+          echo -e "\nERROR: Derived repository failed to clone.";
+          RC="$EC";
+        fi
+      else
+        echo -e "ERROR:$(date +%Y%m%d%H%M%S) Source repository clone ${GIT_SURL} failed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Source repository failed to clone RC:$EC"
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Derived repository skipped to clone RC:$EC"
+        echo -e "\nERROR: Source repository failed to clone.";
+        echo -e "\nERROR: Derived repository skipped to clone.";
+        RC="$EC";
+      fi
+      if [ "$RC" -eq 0 ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Cleanup temp workspace RC:$RC"
+        echo -e "\nINFO: Cleanup temp workspace..."
+        rm -rf "${GIT_SURL}" "${GIT_BURL}" &> /dev/null #Clean-up
+        execDate=$(date +%Y%m%d%H%M%S)
+        if [[ "${OnlineRef}" == FALLBACK_ACCEPT ]] || [[ "${OnlineRef}" == ONLINE_REVERT ]]; then
+           bash "${MTP_ENV}/mtpwfrepotag" FALLBACK "/${DEV_GIT_SRC%%.git*}" "${USR_MASTER_CORE}";
+           if [[ "${OnlineRef}" == FALLBACK_ACCEPT ]]; then
+             bash "${MTP_ENV}/mtpwfrepodeltag" ONLINE "/${DEV_GIT_SRC%%.git*}"
+           fi
+        elif [ "${OnlineRef}" == ONLINE_ACCEPT ]; then
+           bash "${MTP_ENV}/mtpwfrepotag" ONLINE "/${DEV_GIT_SRC%%.git*}" "${USR_MASTER_CORE}";
+        fi
+        echo -e "INFO:$(date +%Y%m%d%H%M%S) Apply online tags to implementation repository completed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+        if [[ "$OnlineRef" == ONLINE_ACCEPT ]] || [[ "$OnlineRef" == ONLINE_REVERT ]]; then
+          execDate=$(date +%Y%m%d%H%M%S)
+          getParmFromBranch "${ImplPlan}" "DVL"; #Get workspace parm
+          if [ -d "${APP_DVL_IMPL_WRK}" ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Cleanup Dvl work space RC:$RC"
+            echo -e "\nINFO: Cleanup Dvl work space"
+            rm "${APP_DVL_IMPL_WRK}" -rvf
+          fi
+          if [ -d "${DVL_TPF_LOD}/${USR_IMPL_PLAN}" ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Cleanup Dvl loader space RC:$RC"
+            echo -e "\nINFO: Cleanup Dvl loader space"
+            #shellcheck disable=SC2115
+            rm "${DVL_TPF_LOD}/${USR_IMPL_PLAN}/" -rvf
+          fi
+          if [ -d "${SYS_DVL_IMPL_WRK}" ]; then
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Cleanup Dvl work space RC:$RC"
+            echo -e "\nINFO: Cleanup Dvl work space"
+            rm "${SYS_DVL_IMPL_WRK}" -rvf
+          fi
+          echo -e "INFO:$(date +%Y%m%d%H%M%S) DVL workspace and loadset clean-up completed - $(($(date +%Y%m%d%H%M%S)-execDate))s"
+        fi
+      fi
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Stagging workspace not available RC:$EC"
+      echo -e "\nERROR: Stagging workspace not available.";
+      RC="$EC";
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid production tag - $OnlineRef. RC:$EC"
+    echo -e "\nERROR: Invalid production tag - $OnlineRef.";
+    RC="$EC";
+  fi
+  #If Delta specific implementation having any new macros then poke to z/OS JCL
+  #if [[ "${USR_IMPL_PLAN}" =~ "d" ]] && [[ "${NEW_MACRO}" == Y ]]; then
+  #  #results=($(rexec -l "${NFM_DSL_USER}" -p "${NFM_DSL_SSAL}" "${NFM_DSL_HOST}" "${SUP_DSL_DJC}"))
+  #  results=($(bash "${SUP_DSL_DJC}"))
+  #  if [[ ! "${results}" =~ 'MAXCC=0016' ]]; then
+  #    echo -e "Requested to re-run the ${SUP_DSL_DJC} utility by manual\n\nError result:\n${results}" | mail -s "UTILJCLZ - ${USR_IMPL_PLAN} in ${USR_IMPL_CORE} system ONLINE FEEDBACK process failed" "${DCT_FEED}"
+  #  fi
+  #fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:INPUT:invalid inputs RC:$RC"
+fi
+echo -e "\\nLOG { \"startTime\" : \"$startDate\" , \"endTime\" : \"$(date +%Y%m%d%H%M%S)\"}\n"
+if [ "$RC" -ne 0 ]; then               #Send mail to Support team if it's fail
+  sendEMMSG "${OnlineRef}-FAIL for ${RemoteBranchName} from $(hostname)" \
+            "${OnlineRef}-FAIL for ${RemoteBranchName} from $(hostname)"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${RemoteBranchName} ${OnlineRef} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

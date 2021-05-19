@@ -1,0 +1,229 @@
+<section class="content-header">
+
+    </section>
+    <!-- Main content -->
+    <section class="content scrollingFunction" id="scroll_function">
+        <div class="col-md-12 animated slideInLeft">
+            <div class="row">
+                <div class="well well-sm" style="background-color:#fff;min-height:400px">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <select class="form-control" ng-model="vm.searchData.searchField"
+                                ng-change="changeSearchData()">
+                                <option value="">Search Field</option>
+                                <option value="{{key}}" ng-repeat="(key,value) in vm.searchFieldOptions">{{value}}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3" ng-if="vm.searchData.searchField != 'managerName'">
+                            <input type="text" ng-disabled="vm.searchData.searchField == ''" class="form-control"
+                                ng-model="vm.searchData.searchTextDTN" placeholder="Search Text*" />
+                        </div>
+    
+                        <div class="col-md-3" ng-if="vm.searchData.searchField == 'managerName'">
+                            <select name="name" select2single ng-model="vm.searchData.searchTextDTN" class="form-control"
+                                multiple="multiple" aria-label="managerApprover">
+                                <option value="" ng-if=""></option>
+                                <option ng-value="dv.displayName"
+                                    ng-repeat="dv in projectManagersMapList  | orderBy :'displayName'">
+                                    {{ dv.displayName }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <button type="button" class="btn refreshButton" ng-click="searchDTN(vm.searchData)"
+                                aria-label="searchBtn"><i class="fa fa-search"></i>
+                                Search
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="button" class="btn pull-right insertButton" ng-click="showInsertDTNDialog($event)"
+                                aria-label="insertDTN"><i class="fa fa-save"></i>
+                                Insert
+                            </button>
+                        </div>
+                        <div class="col-md-1">
+                            <button type="button" class="btn pull-right refreshButton" ng-click="refresh()"
+                                aria-label="refreshDTN"><i class="fa fa-refresh"></i>
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12 leadTotalCount">
+                            <span > Total number of items: <span class="templateCountSize"> {{vm.totalNumberOfItem}}</span> </span>
+                        </div>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;" ng-if="vm.dtnList.length !== 0">
+                        <div class="col-md-12">
+                            <div ng-if="vm.dtnList.length !== 0" class="row">
+                                <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                                <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}" ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination">
+                                    </dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div ng-if="vm.dtnList.length == 0"
+                                style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                                <b>No data found</b>
+                            </div>
+                            <table id="dtnTable" class="table" ng-if="vm.dtnList.length > 0"
+                                style="border-color:rgba(187, 187, 187, 0.17);">
+                                <thead>
+                                    <tr class="tableHeader alignText">
+                                        <th>
+                                            <span class="noClickProp" ng-click="sort('projectNumber')">
+                                                Project Number
+                                            </span>
+                                            <span class="pull-right">
+                                                <i
+                                                    class="fa fa-long-arrow-down {{sortColumn['projectNumber'].asc ? '' : 'sortDisabled'}}"></i>
+                                                <i
+                                                    class="fa fa-long-arrow-up {{sortColumn['projectNumber'].desc ? '' : 'sortDisabled'}}"></i>
+                                            </span>
+                                        </th>
+                                        <th>
+                                            <span class="noClickProp" ng-click="sort('managerId')">
+                                                Project Manager
+                                            </span>
+                                            <span class="pull-right">
+                                                <i
+                                                    class="fa fa-long-arrow-down {{sortColumn['managerId'].asc ? '' : 'sortDisabled'}}"></i>
+                                                <i
+                                                    class="fa fa-long-arrow-up {{sortColumn['managerId'].desc ? '' : 'sortDisabled'}}"></i>
+                                            </span>
+                                        </th>
+                                        <th>
+                                            <span class="noClickProp" ng-click="sort('projectName')">
+                                                Project Title
+                                            </span>
+                                            <span class="pull-right">
+                                                <i
+                                                    class="fa fa-long-arrow-down {{sortColumn['projectName'].asc ? '' : 'sortDisabled'}}"></i>
+                                                <i
+                                                    class="fa fa-long-arrow-up {{sortColumn['projectName'].desc ? '' : 'sortDisabled'}}"></i>
+                                            </span>
+                                        </th>
+                                        <th>
+                                            <span class="noClickProp" ng-click="sort('lineOfBusiness')">
+                                                Line of Business
+                                            </span>
+                                            <span class="pull-right">
+                                                <i
+                                                    class="fa fa-long-arrow-down {{sortColumn['lineOfBusiness'].asc ? '' : 'sortDisabled'}}"></i>
+                                                <i
+                                                    class="fa fa-long-arrow-up {{sortColumn['lineOfBusiness'].desc ? '' : 'sortDisabled'}}"></i>
+                                            </span>
+                                        </th>
+                                        <th>
+                                            <span class="noClickProp" ng-click="sort('sponsorId')">
+                                                Project Sponsor
+                                            </span>
+                                            <span class="pull-right">
+                                                <i
+                                                    class="fa fa-long-arrow-down {{sortColumn['sponsorId'].asc ? '' : 'sortDisabled'}}"></i>
+                                                <i
+                                                    class="fa fa-long-arrow-up {{sortColumn['sponsorId'].desc ? '' : 'sortDisabled'}}"></i>
+                                            </span>
+                                        </th>
+                                        <th>
+                                            Actions
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="frzDate">
+                                    <tr dir-paginate="dtnObj in vm.dtnList | filter: q | itemsPerPage: tableConfig.pageSize"
+                                        total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"
+                                        pagination-id="tablePagination" class="hoverCurrentRow" style="text-align:center;">
+                                        <td>
+                                            <span
+                                                ng-if="dtnObj.projectNumber && dtnObj.projectNumber.length >0">{{dtnObj.projectNumber}}</span>
+                                            <span ng-if="!(dtnObj.projectNumber && dtnObj.projectNumber.length >0)">-</span>
+                                        </td>
+                                        <td>
+    
+                                            <span
+                                                ng-if="dtnObj.managerId && dtnObj.managerId.length >0 && projectManagersMapList[dtnObj.managerId]">
+                                                {{dtnObj.managerName}}</span>
+                                            <span ng-if="!(dtnObj.managerId && dtnObj.managerId.length >0)">-</span>
+                                        </td>
+                                        <td>
+                                            <span
+                                                ng-if="dtnObj.projectName && dtnObj.projectName.length >0">{{dtnObj.projectName}}</span>
+                                            <span ng-if="!(dtnObj.projectName && dtnObj.projectName.length >0)">-</span>
+                                        </td>
+                                        <td>
+                                            <span
+                                                ng-if="dtnObj.lineOfBusiness && dtnObj.lineOfBusiness.length >0">{{dtnObj.lineOfBusiness}}</span>
+                                            <span
+                                                ng-if="!(dtnObj.lineOfBusiness && dtnObj.lineOfBusiness.length >0)">-</span>
+                                        </td>
+                                        <td>
+                                            <span
+                                                ng-if="dtnObj.sponsorId && dtnObj.sponsorId.length >0">{{dtnObj.sponsorId}}</span>
+                                            <span ng-if="!(dtnObj.sponsorId && dtnObj.sponsorId.length >0)">-</span>
+                                        </td>
+                                        <td>
+                                            <div class="btn-group">
+                                                <button type="button" class="btn btn-default btn-sm themeButton"
+                                                    ng-click="showUpdateDTNDialog($event,dtnObj)"
+                                                    aria-label="updateDTN_{{dtnObj.dtn}}_{{dtnObj.dtnTitle}}">
+                                                    <i class="fa fa-edit"></i>
+                                                    <md-tooltip md-direction='top'>Update</md-tooltip>
+                                                </button>
+                                                <button type="button" class="btn btn-default btn-sm themeButton"
+                                                    ng-click="confirmDeleteDTNDetails($event, dtnObj)"
+                                                    aria-label="deleteDTN_{{dtnObj.dtn}}_{{dtnObj.dtnTitle}}">
+                                                    <i class="fa fa-trash"></i>
+                                                    <md-tooltip md-direction='top'>Delete</md-tooltip>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+    
+                    </div>
+                    <div class="row" style="margin: 10px 0px;" ng-if="vm.dtnList.length !== 0">
+                        <div class="col-md-12">
+                            <div ng-if="vm.dtnList.length !== 0" class="row">
+                                <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                                <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}" ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)" pagination-id="tablePagination">
+                                    </dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+    
+    
+                </div>
+    
+            </div>
+        </div>
+    </section>
+    <!-- /.content -->

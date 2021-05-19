@@ -1,0 +1,43 @@
+<md-dialog aria-label="Cpu List" style="width:30%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2 style="color:#fff;">
+                    Choose CPU
+                </h2>
+                <span flex></span>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content">
+                <div class="row">
+                    <div class="col-md-6 textCenter" style="padding:10px;">
+                        Select CPU
+                    </div>
+                    <div class="col-md-6">
+                        <select ng-model="selectedCPU" class="form-control">
+                                <option value="empty"></option>
+                            <option value="{{cpuObj.id}}" ng-repeat="cpuObj in cpuList">
+                                    {{cpuObj.displayName}}
+                            </option>
+                        </select>
+                        <div ng-if="showSelectionError" class="requiredField">
+                            *Required
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <md-button ng-click="cancel()">
+                Close
+            </md-button>
+            <md-button class="md-accent md-raised" ng-click="save()">
+                Save
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

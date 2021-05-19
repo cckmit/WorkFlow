@@ -1,0 +1,67 @@
+<md-dialog aria-label="lc" style="width: 65%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <label style="color:white;">Update Repository Information ({{vmid.repoInfo.repository.trimmedName}})</label>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content" style="height:35vh;">
+                <div class="row">
+                    <div class="col-md-12">
+                        <label class="spacingFour">Description
+                            <span class="requiredField">*</span>
+                        </label>
+                        <md-input-container class="md-icon-float md-block clearMargin">
+                            <textarea tabindex="1" aria-label="desc" name="desc" ng-model="vmid.repoInfo.repository.description"></textarea>
+                        </md-input-container>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <label class="spacingFour">Repository Owners
+                            <span class="requiredField">*</span>
+                            <span ng-if="vmid.defaultUserList.length > 0">
+                                (Default -
+                                <span class="text-danger" ng-repeat="defaultId in vmid.defaultUserList">
+                                        {{defaultId}}<span ng-if="(vmid.defaultUserList.length-1) != $index">,</span>
+                                </span>
+                                )
+                            </span>
+                        </label>
+                        <md-input-container class="md-icon-float md-block multipleSelect2">
+                            <select tabindex="3" name="repositoryOwners" id="repositoryOwners" ng-model="vmid.repoInfo.repository.owners" class="form-control" multiple="multiple" aria-label="selectRepoOwners">
+                                <option ng-value="dm.id"  ng-repeat="dm in vmid.repoOwnersList | orderBy:'displayName'">
+                                    {{ dm.displayName }}
+                                </option>
+                            </select>
+                        </md-input-container>
+                    </div>
+                </div>
+                <div class="row" ng-if="vmid.notFoundList.length > 0">
+                    <div class="col-md-12">
+                        Users not found in LDAP
+                        <ul>
+                            <li ng-repeat="user in vmid.notFoundList">
+                                <span class="text-danger">{{user}}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <span flex></span>
+            <md-button ng-click="cancel()" aria-label="cancelFreezeDate_UpdateWindow">
+                Cancel
+            </md-button>
+            <md-button class="md-primary" ng-click="vmid.submitUpdateRepositoryOwners(vmid.repoInfo)" aria-label="updateFreezeDateWindow">
+                Update
+            </md-button>
+
+        </md-dialog-actions>
+    </form>
+</md-dialog>

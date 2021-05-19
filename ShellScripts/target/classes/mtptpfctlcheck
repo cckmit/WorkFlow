@@ -1,0 +1,205 @@
+#!/bin/bash
+# shellcheck disable=SC1090,SC2164,SC2207,SC2143,SC2178
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpfctlcheck                                               #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to perform the control file operation using cntliq tool         #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - implementation id                                                #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   09242018    ARUL    Created the script                                    #
+#   15112018    VINOTH  Allowing only for git files                           #
+#   02202019    VINOTH  Verify make file with proper file list                #
+#   04252019    GOWTHAM Updated with logger support                           #
+#   02082019    VINOTH  ERROR message enchanced                               #
+#   06082019    VINOTH  GIT status added to stop without                      #
+#   09052019    VINOTH  Travelport segment allocation error message           #
+#   09272019    GOWTHAM Adding DVL path for new file .mak validation          #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+implementation="$1";                   #Read Implementation name
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${implementation} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  getParmFromBranch "${implementation}" "USR"; RC=$?;
+  if [ "$RC" -eq 0 ]; then
+    pushd "${USR_IMPL_CWRK}" &> /dev/null;
+      uTvalidate=($(git status -s | grep -w M | grep -v ".git" | awk '{print $2}'| tr '\n' ',' | sed 's/,$/\n/')) &>/dev/null;
+      git status -s|grep -v ".git"|grep -w M &> /dev/null ; RC=$?;
+      if [ "${RC}" -eq 0 ]; then
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}: Unit testing completed request identified some segment(s) ${uTvalidate[*]} are not yet committed and checked-in in your implementation plan for ${USR_IMPL_CORE}. Please do commit and check-in and try again.:RC:$EC";
+        echo -e "ERROR: Unit testing complete request identified some segment(s) ${uTvalidate[*]} are not yet committed and checked-in in your implementation plan for ${USR_IMPL_CORE}. Please do commit and check-in and try again."; #CONSOLE
+        RC=${EC};
+      else
+        RC=0;
+        # Get all the segments from local workspace to validate control statement
+        segList=( $(find . -type f \( -name "*.asm" -o -name "*.c" -o -name "*.cpp" \) -not -path "*source*" -not -path "*derived*" -not -path "./.git*" 2> /dev/null) );
+        for sList in "${segList[@]}"
+        do
+          gitList=${sList#*./};
+          if [ "$(git ls-files | grep "${gitList}")" ]; then
+            # Get all mak file for specific segments from local workspace
+            makList=( $(find . -type f -iname "*.mak" -not -path "*source*" -not -path "*derived*" -not -path "./.git*" -exec grep -l "${sList##*/}" {} + 2> /dev/null) )
+            if [ -n "${makList[*]}" ]; then
+              #_tmpResult="$(grep -x "^[^#].*${sList##*/}" "${makList[0]}")"
+              _tmpResult="$(grep -P '^(?!#)' "${makList[0]}" |grep -Fw "${sList##*/}")"
+              if [[ "${_tmpResult}" =~ \.asm ]]; then
+                _tmpResult=${_tmpResult%\.asm*};
+                _tmpResult="${_tmpResult// /}"
+                _tmpResult="${_tmpResult}.asm"
+              elif [[ "${_tmpResult}" =~ \.cpp ]]; then
+                _tmpResult=${_tmpResult%\.cpp*};
+                _tmpResult="${_tmpResult// /}"
+                _tmpResult="${_tmpResult}.cpp"
+              elif [[ "${_tmpResult}" =~ \.c ]]; then
+                _tmpResult=${_tmpResult%\.c*};
+                _tmpResult="${_tmpResult// /}"
+                _tmpResult="${_tmpResult}.c"
+              else
+                _tmpResult=${_tmpResult%#*};
+                _tmpResult="${_tmpResult// /}"
+              fi
+              if [[ "${_tmpResult##*=}" == "${sList##*/}" ]]; then
+                makList="${makList[0]}";
+              else
+                makList="";
+              fi
+            else
+              # check DVL path for new mak
+              makList=( $(find "${DVL_TPF_APP}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" "${DVL_TPF_SYS}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" -type f -iname "*.mak" -not -path "*source*" -not -path "*derived*" -not -path "./.git*" -exec grep -l "${sList##*/}" {} + 2> /dev/null) )  
+              if [ -n "${makList[*]// /}" ]; then
+                #_tmpResult="$(grep -x "^[^#].*${sList##*/}" "${makList[0]}")"
+                _tmpResult="$(grep -P '^(?!#)' "${makList[0]}" |grep -Fw "${sList##*/}")";
+                if [[ "${_tmpResult}" =~ \.asm ]]; then
+                  _tmpResult=${_tmpResult%\.asm*};
+                  _tmpResult="${_tmpResult// /}"
+                  _tmpResult="${_tmpResult}.asm"
+                elif [[ "${_tmpResult}" =~ \.cpp ]]; then
+                  _tmpResult=${_tmpResult%\.cpp*};
+                  _tmpResult="${_tmpResult// /}"
+                  _tmpResult="${_tmpResult}.cpp"
+                elif [[ "${_tmpResult}" =~ \.c ]]; then
+                  _tmpResult=${_tmpResult%\.c*};
+                  _tmpResult="${_tmpResult// /}"
+                  _tmpResult="${_tmpResult}.c"
+                else
+                  _tmpResult=${_tmpResult%#*};
+                  _tmpResult="${_tmpResult// /}"
+                fi
+                if [[ "${_tmpResult##*=}" == "${sList##*/}" ]]; then
+                  makList="${makList[0]}";
+                else
+                  makList="";
+                fi
+              fi            
+            fi
+            if [ -z "${makList[0]// /}" ]; then
+              # If no mak file found at local workspace then search cancatination path
+              makList=( $(find "${STG_TPF_APP}" "${STG_TPF_SYS}" "${PRD_ORIGIN_APP}" "${PRD_ORIGIN_SYS}" "${PRD_ORIGIN_CSY}" "${PRD_ORIGIN_IBM}" -type f -iname "*.mak" -not -path "*source*" -not -path "*derived*" -not -path "./.git*" -exec grep -l "${sList##*/}" {} + 2> /dev/null) )
+              if [ -n "${makList[*]// /}" ]; then
+                #_tmpResult="$(grep -x "^[^#].*${sList##*/}" "${makList[0]}")"
+                _tmpResult="$(grep -P '^(?!#)' "${makList[0]}" |grep -Fw "${sList##*/}")";
+                if [[ "${_tmpResult}" =~ \.asm ]]; then
+                  _tmpResult=${_tmpResult%\.asm*};
+                  _tmpResult="${_tmpResult// /}"
+                  _tmpResult="${_tmpResult}.asm"
+                elif [[ "${_tmpResult}" =~ \.cpp ]]; then
+                  _tmpResult=${_tmpResult%\.cpp*};
+                  _tmpResult="${_tmpResult// /}"
+                  _tmpResult="${_tmpResult}.cpp"
+                elif [[ "${_tmpResult}" =~ \.c ]]; then
+                  _tmpResult=${_tmpResult%\.c*};
+                  _tmpResult="${_tmpResult// /}"
+                  _tmpResult="${_tmpResult}.c"
+                else
+                  _tmpResult=${_tmpResult%#*};
+                  _tmpResult="${_tmpResult// /}"
+                fi
+                if [[ "${_tmpResult##*=}" == "${sList##*/}" ]]; then
+                  makList="${makList[0]}";
+                else
+                  makList="";
+                fi
+              fi
+              if [ -z "${makList[0]}" ]; then
+                # Validate Generic mak if not found at cancatincation path for a segment
+                testMak="${sList##*/}";
+                inputMak="${testMak%%.*}";
+                cntlMak="$("${MTP_ENV}/mtpgitcmdmak" "${inputMak:0:4}" "${USR_IMPL_CORE}")";
+                if [[ -z "${cntlMak}" ]]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unit testing complete request failed because ${testMak} is not yet added to control file. Please contact Travelport Systems who process Segment allocation request to have this corrected.RC:$EC";
+                  echo -e "ERROR: Unit testing complete request failed because ${testMak} is not yet added to control file. Please contact Travelport Systems who process segment allocation request to have this corrected."; #CONSOLE
+                  RC="$EC";
+	              elif [[ "${cntlMak}" =~ mak ]]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${sList##*/} belonging to ${USR_IMPL_CORE} in ${USR_IMPL_ID} does not have any associated ${cntlMak} file. Please create the ${cntlMak} file in local work space to proceed.RC:$EC";
+                  #sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unit testing complete request failed because ${cntlMak} is not in dependancy path but added in control file RC:$EC";
+                  echo -e "ERROR: ${sList##*/} belonging to ${USR_IMPL_CORE} in ${USR_IMPL_ID} does not have any associated ${cntlMak} file. Please update/create the ${cntlMak} file in local work space to proceed."
+                  #echo -e "ERROR: Unit testing complete request failed because ${cntlMak} is not in dependancy path but added in control file"; #CONSOLE
+                  RC="$EC";
+                fi
+              else
+                # Validate specific mak found at cancatincation path for a segment
+                testMak="${makList[0]##*/}";
+                inputMak="${testMak%%.*}";
+                cntlMak="$("${MTP_ENV}/mtpgitcmdmak" "${inputMak:0:4}" "${USR_IMPL_CORE}")";
+                if [[ "${testMak}" == "${cntlMak}" ]]; then
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${sList##*/} belonging to ${USR_IMPL_CORE} in ${USR_IMPL_ID} does not have any associated ${testMak} file. Please update the ${testMak} file in local work space to proceed.RC:$EC";
+                  #sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unit testing complete request failed because ${cntlMak} is not in dependancy path but added in control file RC:$EC";
+                  echo -e "ERROR: ${sList##*/} belonging to ${USR_IMPL_CORE} in ${USR_IMPL_ID} does not have any associated ${testMak} file. Please update/create the ${testMak} file in local work space to proceed."
+                  #sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unit testing complete request failed because ${testMak} for component ${sList##*/} is not checkout out in the implementation ${implementation} RC:$EC";
+                  #echo -e "ERROR: Unit testing complete request failed because ${testMak} for component ${sList##*/} is not checkout out in the implementation ${implementation}"; #CONSOLE
+                  RC="$EC";
+                fi
+              fi
+            else
+              # Validate specific mak with control statement for a segment
+              testMak="${makList[0]##*/}";
+              inputMak="${testMak%%.*}";
+              cntlMak="$("${MTP_ENV}/mtpgitcmdmak" "${inputMak:0:4}" "${USR_IMPL_CORE}")";
+              if [[ "${testMak}" != "${cntlMak}" ]]; then
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unit testing complete request failed because ${testMak} for component ${sList##*/} is not yet added to control file. Please contact Travelport Systems who process Segment allocation request to have this corrected. RC:$EC";
+                echo -e "ERROR: Unit testing complete request failed because ${testMak} for component ${sList##*/} is not yet added to control file. Please contact Travelport Systems who process segment allocation request to have this corrected."; #CONSOLE
+                RC="$EC"
+              fi
+            fi
+          fi
+        done
+      fi
+    popd &> /dev/null
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${implementation} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,221 @@
+<style>
+    .roleName {
+        border: 1px solid #eee;
+        color: #666;
+        font-size: 12px;
+        font-weight: bold;
+        width: 100%;
+        padding: 3px 0px;
+    }
+
+    select.custom {
+        background: #FAFAFA !important;
+        margin-top: -5px !important;
+        color: #037bae !important;
+        padding: 0px !important;
+        outline: none !important;
+        cursor: pointer !important;
+    }
+
+    .blink {
+        animation: blink 2s steps(5, start) infinite;
+        -webkit-animation: blink 1s steps(5, start) infinite;
+    }
+    .side-menu-height-one {
+        height: 485px;
+        overflow-y: scroll; 
+        overflow-x: hidden;
+    }
+    .side-menu-height-two {
+        height: 445px;
+        overflow-y: scroll; 
+        overflow-x: hidden;
+    }
+    .side-menu-height-three {
+        height: 405px;
+        overflow-y: scroll; 
+        overflow-x: hidden;
+    }
+    .side-menu-height-four {
+        height: 375px;
+        overflow-y: scroll; 
+        overflow-x: hidden;
+    }
+    .side-menu-height-zero {
+        height: 495px;
+        overflow-y: scroll; 
+        overflow-x: hidden;
+    }
+    @keyframes blink {
+        to {
+            visibility: hidden;
+        }
+    }
+
+    @-webkit-keyframes blink {
+        to {
+            visibility: hidden;
+        }
+    }
+</style>
+<div class="wrapper" style="background:#ecf0f5;">
+    <header class="main-header animated slideInDown" style="z-index:999;">
+        <!-- Logo -->
+        <a class="logo">
+            <!-- mini logo for sidebar mini 50x50 pixels -->
+            <span class="logo-mini">
+                <b>TP</b>
+            </span>
+            <!-- logo for regular state and mobile devices -->
+            <span class="logo-lg">
+                <img alt="LOGO" src="images/logo.png" style="width: 170px;margin-top:-5px">
+            </span>
+            <span id="appVersionLabel">{{appSettings.isTravelportApp}}</span>
+
+        </a>
+        <!-- Header Navbar: style can be found in header.less -->
+        <nav class="navbar navbar-static-top navAnimate" role="navigation">
+            <!-- Sidebar toggle button-->
+            <a class="sidebar-toggle" data-toggle="offcanvas" data-ng-click="vm.sideBar(1)" role="button">
+                <!--  data-ng-click="vm.sideBar(1);" -->
+                <span class="sr-only">Toggle navigation</span>
+            </a>
+
+            <h4 class="pull-left titleHeading" style="margin-top: 14px; color: #fff;">
+                {{titleHeading}}
+            </h4>
+            <div class="navbar-custom-menu">
+                <ul class="nav navbar-nav">
+                    <li ng-if="vm.local_user_obj.delegated" style="top:15px;">
+                        <label class="label label-warning"> DELEGATION ON</label> <!--Tested for Delegation Orange Bar-->
+                    </li>
+                    <li class="user user-menu">
+                        <a class="dropdown-toggle" data-toggle="dropdown" aria-label="logoutButton">
+                            <i class="fa  fa-gears"></i>
+                            <i class="fa  fa-caret-down"></i>
+                        </a>
+                        <ul class="dropdown-menu user_settings_dropdown">
+                            <li ng-if="vm.local_user_obj.allowDelegateMenu">
+                                <a class="padding-10-10" ng-click="vm.delegate_settings($event)">
+                                    <i class="fa fa-share"></i> Delegation
+
+                                </a>
+                            </li>
+                            <li class="divider margin-none"></li>
+                            <li>
+                                <a class="padding-10-10" ng-click="logout()">
+                                    <i class="fa fa-sign-out"></i> Logout</a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+    </header>
+    <!-- Left side column. contains the logo and sidebar -->
+    <aside class="main-sidebar animated fadeIn responsive-small">
+        <!-- sidebar -->
+        <section class="sidebar">
+            <!-- Sidebar user panel -->
+            <div ng-class="isTravelportApp ? 'travelport_sidemenu_header' : 'delta_sidemenu_header'" class="toolchain_sidemenu_header">
+                <span style="padding-right: 0.25em;">{{isTravelportApp ? 'Travelport' : 'DELTA'}}</span>
+            {{appInfo.appName}}</div>
+            <div class="user-panel {{vm.checkForDefaultUser(vm.home_menu.delegations) ? 'wf_sidemenu_header_primary' : 'wf_sidemenu_header_secondary'}} wf_sidemenu_height">
+                <div class="pull-left image text-white">
+                    <i class="fa fa-user" style="font-size: 38px;"></i>
+                </div>
+                <div class="pull-left info text-white" style="padding:0px;width:70%;">
+                    <p class="sidemenu_name" title="{{vm.home_menu.displayName}}">{{vm.home_menu.displayName | uppercase}}</p>
+                    <select id="roleSelector" style="width:75%;" ng-model="vm.roleName" class="roleName custom" 
+                    ng-change="vm.switchRole()">
+                        <option value="" ng-if="false"></option>
+                        <option value="{{role}}" ng-repeat="role in vm.home_menu.role" ng-selected="vm.roleName==role">{{role}}</option>
+                    </select>
+                </div>
+            </div>
+
+            <ul class="sidebar-menu" ng-class="{'side-menu-height-one': vm.minized_menu.length == 1, 'side-menu-height-two': vm.minized_menu.length == 2, 'side-menu-height-three': vm.minized_menu.length == 3, 'side-menu-height-four': vm.minized_menu.length == 4, 'side-menu-height-zero': vm.minized_menu.length == 0}"
+            style="clear:both;">
+                <li class="treeview" ui-sref-active="active" data-ng-repeat="menu in vm.menuItems">
+                    <a ng-hide="menu.title == 'System Information'" ui-sref="app.{{menu.state}}" 
+                        ng-if="!menu.children" ng-click="vm.refreshState(menu.state)">
+                        <i class="fa fa-{{menu.icon}}"></i>
+                        <span ng-bind-html="menu.title"></span>
+                    </a>
+                    <a ng-hide="menu.title == 'System Information'" ng-class="{'collapsible': menu.children }" 
+                        ng-if="menu.children">
+                        <i class="fa fa-{{menu.icon}}"></i>
+                        <span ng-bind-html="menu.title"></span>
+                    </a>
+                    <ul class="sidebar-menu" style="clear:both;padding: 0 15px;" 
+                        ng-class="{'collapsible_content': menu.children}">
+                        <li class="treeview" ui-sref-active="active" data-ng-repeat="menuChild in menu.children">
+                            <a ui-sref="app.{{menuChild.state}}" ng-if="!menuChild.children" ng-click="vm.refreshChildState(menuChild.state)">
+                                <i class="fa fa-{{menuChild.icon}}"></i>
+                                <span ng-bind-html="menuChild.title"></span>
+                            </a>
+							<a ng-hide="menuChild.title == 'System Information'" ng-class="{'collapsible': menuChild.children}" 
+								ng-if="menuChild.children">
+								<i class="fa fa-{{menuChild.icon}}"></i>
+								<span ng-bind-html="menuChild.title"></span>
+							</a>
+							
+							 <ul class="sidebar-menu" style="clear:both;padding: 0 15px;" 
+								ng-class="{'collapsible_content': menuChild.children.length}">
+								<li class="treeview" ui-sref-active="active" data-ng-repeat="menuSubChild in menuChild.children">
+									<a ui-sref="app.{{menuSubChild.state}}" ng-click="vm.refreshSubChildState(menuSubChild.state)">
+										<i class="fa fa-{{menuSubChild.icon}}"></i>
+										<span ng-bind-html="menuSubChild.title"></span>
+									</a>
+									
+								</li>
+							</ul>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+
+            <ul class="sidebar-menu" style="position: absolute;bottom: 0px;width:100%;">
+                <li class="treeview" ng-repeat="mmObj in vm.minized_menu" style="border-bottom: 1px solid #bbb;">
+                    <a ng-if="vm.checkForDefaultUser(mmObj.delegations)" class="wf_sidemenu_header_primary text-white" ng-click="vm.switch_user($index);">
+                        <i class="fa fa-user"></i> {{mmObj.displayName}}
+                    </a>
+                    <a ng-if="!vm.checkForDefaultUser(mmObj.delegations)" class="wf_sidemenu_header_secondary text-white" ng-click="vm.switch_user($index);">
+                        <i class="fa fa-user"></i> {{mmObj.displayName}}
+                    </a>
+
+                </li>
+            </ul>
+        </section>
+        <!-- /.sidebar -->
+    </aside>
+
+    <!-- Content Wrapper. Contains page content -->
+    <div class="content-wrapper" style="overflow-y: auto;overflow-x: hidden !important;">
+        <ui-view></ui-view>
+    </div>
+
+    <footer class="main-footer animated slideInUp">
+        <div class="pull-right hidden-xs">
+            <a ng-click="switchTimezone($event)">
+                <p class="pull-left text-black liveTime"></p>
+            </a>
+        </div>
+        <!-- <strong>Copyright &copy; {{appInfo.buildYear}}
+            <a href="javascript:void(0)" target="_blank">{{appInfo.orgName}}</a>., -->
+        <!-- </strong> All rights reserved. <b> &nbsp;Version</b> 1.0.0 | <a ng-click="reportLog()">View Log</a> -->
+        <!-- </strong> All rights reserved.
+        <b> &nbsp;Version</b> <a title="{{apiBase}}" ng-click="reportLog()">{{appInfo.appVersionName}} - {{appInfo.appVersion}}</a> -->
+
+
+        <div>
+            <strong>
+                <strong>{{appInfo.appName}} Copyright &copy; {{appInfo.buildYear}}
+                    <a>{{appInfo.orgName}}</a></strong> All rights reserved.
+                <b title="{{apiBase}}" ng-click="reportLog()">{{appInfo.appVersionName}} - {{appInfo.appVersion}}</b>,
+                <b>{{appInfo.buildDateTime}}</b>
+                <i class="fa fa-exclamation-circle errorInicator hide" aria-hidden="true" style="color:red"></i>
+
+        </div>
+    </footer>
+</div>

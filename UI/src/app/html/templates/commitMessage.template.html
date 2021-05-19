@@ -1,0 +1,31 @@
+<md-dialog aria-label="Commit" style="width:40%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2 style="color:#fff;">
+                    Commit Message for {{cm.impId}}
+                </h2>
+                <span flex></span>
+            </div>
+        </md-toolbar>
+        <md-dialog-content>
+                <!-- ng-if="vm.imp.planId.macroHeader" -->
+            <div class="md-dialog-content">
+                <div ng-if="cm.revisionMsg">
+                    <span  style="font-weight:bold;color:red;">{{cm.revisionMsg}}</span>
+                </br>
+                </div>
+                <textarea ng-model="cm.commitMessage" class="form-control" placeholder="Provide Commit Message" required></textarea>
+                <span ng-show="cm.showMessageError" class="requiredField">*Required</span>
+            </div>
+        </md-dialog-content>
+        <md-dialog-actions layout="row">
+            <md-button ng-click="cancel()">
+                Cancel
+            </md-button>
+            <md-button ng-disabled="cm.showCommitBtn" class="md-primary" ng-click="proceedCommit()">
+                Commit
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

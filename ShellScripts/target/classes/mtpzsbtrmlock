@@ -1,0 +1,69 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpzsbtrmlock                                                #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to delete sabretalk sequence build process lock file in zlinux  #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#         Lock file format to be remove - rm /tmp/sabre.lock_t1800001         #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Impl number either TP or DL (Ex: t1800001)                       #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   09152018    VINOTH  Created the script with impl number                   #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ImplNumber="$1"                        #Read Impl number to delete the lock
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplNumber} RC:$RC"
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ ${RC} -eq 0 ]; then
+  #Delete the lock file from tmp folder for sabre talk if its exisit
+  if [ -f "${SAB_LCK_PATH}_${ImplNumber}" ]; then
+    rm -f "${SAB_LCK_PATH}_${ImplNumber}"; RC=$?
+    if [ "${RC}" -eq 0 ]; then
+      echo -e "INFO:Sabre-talk lock file deleted due to cancellation " "of Dvl build - ${SAB_LCK_PATH}_${ImplNumber}.";        #CONSOLE
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Sabre-talk lock file deleted due to cancellation of Dvl build - ${SAB_LCK_PATH}_${ImplNumber} RC:$RC"
+    fi
+    sleep 3
+    if [ -f "${SAB_LCK_PATH}_${ImplNumber}" ]; then
+      rm -f "${SAB_LCK_PATH}_${ImplNumber}"; RC=$?
+      if [ "${RC}" -eq 0 ]; then
+        echo -e "INFO:Sabre-talk lock file deleted second time due to cancellation of Dvl build - ${SAB_LCK_PATH}_${ImplNumber}."                       #CONSOLE
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Sabre-talk lock file deleted second time due to cancellation of Dvl build - ${SAB_LCK_PATH}_${ImplNumber} RC:$RC"
+      fi
+    fi
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplNumber} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

@@ -1,0 +1,82 @@
+<md-dialog aria-label="Jenkin Log">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools" style="margin: 0px 0 15px 0;">
+                <div class="col-md-12">
+                    <div class="row">
+                        <div class="col-md-5" style="margin: 10px 0 0 0;">
+                            <h2 style="color:#fff;">
+                                STAGE Log for <b>{{jks.planInfo.systemName}}</b> ({{jks.planInfo.planId}})
+                            </h2>
+                            <span flex></span>
+                        </div>
+                        <div class="col-md-7">
+                            <div class="col-md-6" style="padding-left: 0;">
+                                <label>Log Types</label>
+                                <select select2 data-placeholder="Select Log Type"
+                                    ng-model="jks.planInfo.defaultStageBuildLog" class="fontSizeChange colorBuildChange"
+                                    ng-init="vm.defaultStageBuildLog()"
+                                    ng-change="selectedBuild(jks.planInfo.defaultStageBuildLog)">
+                                    <option value="{{logs.name}}" ng-repeat="logs in jks.planInfo.stageLogs">
+                                        {{logs.name}}
+                                    </option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6" style="padding-right: 0;"
+                                ng-if="jks.planInfo.defaultStageBuildLog == 'Build Log'">
+                                <label>Historical Logs</label>
+                                <select select2 data-placeholder="Select Log Type"
+                                    ng-model="jks.planInfo.defaultStageHistoricalLog"
+                                    class="fontSizeChange colorBuildChange"
+                                    ng-change="fileNameContent(jks.planInfo.defaultStageHistoricalLog)">
+
+                                    <option value="{{logs}}"
+                                        ng-repeat="logs in jks.planInfo.historicalStageBuildLog.buildFileNameList">
+                                        {{logs}}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="col-md-6" style="padding-right: 0;"
+                                ng-if="jks.planInfo.defaultStageBuildLog == 'Loader Log'">
+                                <label>Historical Logs</label>
+                                <select select2 data-placeholder="Select Log Type"
+                                    ng-model="jks.planInfo.defaultStageHistoricalLoaderLog"
+                                    class="fontSizeChange colorBuildChange"
+                                    ng-change="fileNameContent(jks.planInfo.defaultStageHistoricalLoaderLog)">
+
+                                    <option value="{{logs}}"
+                                        ng-repeat="logs in jks.planInfo.historicalStageBuildLog.loaderFileNameList">
+                                        {{logs}}
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content" style="height: 65vh;padding: 0px;background: #000;"
+                ng-if="onChangeStageBuildFlag">
+                <pre style="background: black;color: #CDDC39;border:0px;word-wrap: break-word;white-space: pre-wrap;">
+                    {{fileContent}}
+                </pre>
+            </div>
+            <div class="md-dialog-content" style="height: 65vh;padding: 0px;background: #000;"
+                ng-if="defaultStageBuildFlag">
+                <pre style="background: black;color: #CDDC39;border:0px;word-wrap: break-word;white-space: pre-wrap;">
+                    {{jks.logContent}}
+                </pre>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <md-button ng-click="cancel('useful')">
+                Close
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

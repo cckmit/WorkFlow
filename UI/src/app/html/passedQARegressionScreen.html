@@ -1,0 +1,26 @@
+<!-- Main content -->
+<section class="content animated slideInLeft scrollingFunction" id="scroll_function">
+    <div class="col-md-12">
+        <div class="row">
+            <div class="well well-sm" style="background-color:#fff;min-height:400px">
+                <!-- <ul class="nav nav-tabs" style="padding-top: 5px; background: linear-gradient(45deg, #067cab, #26A69A);">
+                    <li style="margin-left:10px;" class="active">
+                        <a data-target="#FUNCTIONAL" ng-click="qaType('FUNCTIONAL')" data-toggle="tab" aria-expanded="true">Functional</a>
+                    </li>
+                    <li style="margin-left:10px;">
+                        <a data-target="#REGRESSION" ng-click="qaType('REGRESSION')" data-toggle="tab" aria-expanded="true">Regression</a>
+                    </li>
+                </ul> -->
+                <!-- <div class="tab-content"> -->
+                    <!-- <div class="tab-pane active" id="FUNCTIONAL"> -->
+                        <!-- <div ng-if="qaScreenType == 'FUNCTIONAL'" ng-include='templatePath+"/deployment.template.html"'></div> -->
+                    <!-- </div> -->
+                    <!-- <div class="tab-pane" id="REGRESSION"> -->
+                        <div ng-if="qaScreenType == 'REGRESSION'" ng-include='templatePath+"/deployment.template.html"'></div>
+                    <!-- </div> -->
+                <!-- </div> -->
+            </div>
+        </div>
+    </div>
+</section>
+<!-- /.content -->

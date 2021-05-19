@@ -1,0 +1,14 @@
+{
+            "name": "tpf/tp/nonibm/nonibm_aop.git",
+            "description": "AOP-Test",
+            "owners": [
+                "arul.dhandapani",
+                "mtpservice"
+            ],
+            "accessRestriction": "PUSH",
+            "authorizationControl": "AUTHENTICATED",
+            "allowAuthenticated": false,
+            "useIncrementalPushTags": false,
+            "isFrozen": false,
+            "platform": null
+}

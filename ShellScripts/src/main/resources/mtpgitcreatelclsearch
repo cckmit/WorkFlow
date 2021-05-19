@@ -1,0 +1,90 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcreatelclsearch                                        #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to search and get segment commit list in git repository         #
+#      This script should call from mtpzgilibrary                             #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Core                                                             #
+#      $2  - Segment name                                                     #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   09182017    ARUL    Created script                                        #
+#   03262018    ARUL    ShellCheck                                            #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MiIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+CoreName="$1";                         #Read core name from input
+SegmentName="$2";                      #Read segment name from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MiIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${CoreName} ${SegmentName} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+# Segment serch under git repository
+function getSegmentCommits {
+  local _RC=0;
+  declare -a repoList;
+  declare -a fileList;
+  declare -a commitList;
+  #shellcheck disable=SC2178,SC2061,SC2035,SC2207
+  repoList=($( find "${PRD_GIT_DATA}/tpf" -type d -name '*.git' -not -path "*source*" -not -path "*derived*"));
+  for i in "${repoList[@]}"
+  do
+    #shellcheck disable=SC2164
+    pushd "$i" &> /dev/null
+    #shellcheck disable=SC2178,SC2207
+      fileList=($( git ls-tree "master_$CoreName" --name-only -r 2> /dev/null | grep "$SegmentName"));
+      for j in "${fileList[@]}"
+      do
+        #shellcheck disable=SC2178,SC2207
+        commitList=($( git log --pretty=format:"%h" "master_$CoreName" -- "$j"));
+        for k in "${commitList[@]}"
+        do
+          p=${i##*git/}
+          q=${p##*_}
+          echo -e "${j##*/},$k,$j,${PRD_BIN_RURL_GUSR}/gitblit/raw/" "${i##*git/}/$k/${j},${q%.*}";                       #CONSOLE
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${j##*/},$k,$j,${PRD_BIN_RURL_GUSR}/gitblit/raw/${i##*git/}/$k/${j},${q%.*} RC:$RC"
+        done
+      done
+    #shellcheck disable=SC2164
+    popd &> /dev/null
+  done
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  getSegmentCommits; RC=$?;
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${CoreName} ${SegmentName} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

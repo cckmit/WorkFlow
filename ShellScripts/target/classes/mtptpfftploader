@@ -1,0 +1,119 @@
+#!/bin/bash
+#shellcheck disable=SC2207,SC2128,SC2046,SC2164,SC1117,SC2143,SC2035,SC2034
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpfftploader                                              #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      FTP .oldr/.tldr from zlinux to zTPF Prod or zTPF Test System           #
+#      , to issue ZOLDR command in zTPF system. This is the first step        #
+#      before calling YODA interface                                          #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Read Implementation plan with date and core info                 #
+#      $2  - IP address of the vpars to FTP                                   #
+#      $3  - load type A,E or AE                                              #
+#      $4  - loadset name                                                     #
+#      $5  - Secured IMPL plan(STG) or Unsecured (DVL).                       #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message.                                            #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   06232017    NARASHIMAN   created the script                               #
+#   12222017    ARUL         FTP Return code fix                              #
+#   11122018    VINOTH       Append Loadset file path to update activity log  #
+#   04252019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=5;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+Implementation="$1";                   #Implementation plan with date and core
+IPaddress="$2";                        #IP address of the VPARS systems to FTP
+LoadType="$3";                         #Load type
+LoadsetName="$4";                      #Loadsets name
+SecuredPlan="$5";                      #Plan status secured or unsecured
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${Implementation} ${IPaddress} ${LoadType} ${LoadsetName} ${SecuredPlan} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+# FTP files to VPARS systems
+function ldrFTP {
+  local _RC=0;
+  ping -q -c2 "${IPaddress}" > /dev/null; _RC=$?;
+  if [ "$_RC" -eq 0 ]; then
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:open  ${IPaddress} \n user ftp ######## \n binary \n cd /tmp \n put ${LoadsetName} RC:$_RC"
+    echo -e "open  ${IPaddress} \n user ftp ******** \n binary \n cd /tmp \n put ${LoadsetName} \n" | ftp -v -n | grep -c "Transfer complete" &> /dev/null; _RC=$?;
+    if [ "$_RC" -ne 0 ]; then
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:FTP failed - check Loadset ${Loadset_Path} RC:$_RC"
+      echo -e "ERROR: FTP failed - check Loadset ${Loadset_Path}";     #CONSOLE
+      _RC="$EC";
+    elif [ "${_RC}" -eq 0 ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:FTP loadset path - ${Loadset_Path} RC:$_RC"
+      echo -e "INFO: FTP loadset path - ${Loadset_Path}";              #CONSOLE
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:FTP failed - Host unavailable - ${Loadset_Path} RC:$EC"
+    echo -e "ERROR: FTP failed - Host unavailable - ${Loadset_Path}";  #CONSOLE
+    _RC="$EC";
+  fi
+  return "$_RC"
+}
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [[ "$SecuredPlan" == STG ]]; then
+    getParmFromBranch "${Implementation}" "STG";
+    Loadset_Path="${STG_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE,,}/${LoadsetName}"
+    if [ -f "${Loadset_Path}" ]; then
+      pushd "${STG_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE,,}" &> /dev/null
+        ldrFTP; RC=$?;
+      popd &> /dev/null
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:FTP failed - Loadset not found ${Loadset_Path} RC:$EC"
+      echo -e "ERROR: FTP failed - Loadset not found ${Loadset_Path}"; #CONSOLE
+      RC="$EC";
+    fi
+  elif [[ "$SecuredPlan" == DVL ]]; then
+    getParmFromBranch "${Implementation}" "DVL";
+    Loadset_Path="${DVL_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE,,}/${LoadsetName}"
+    if [ -f "${Loadset_Path}" ]; then
+      pushd "${DVL_TPF_LOD}/${Implementation%%_*}/${USR_IMPL_CORE,,}" &> /dev/null
+        ldrFTP; RC=$?;
+      popd &> /dev/null
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:FTP failed - Loadset not found ${Loadset_Path} RC:$EC"
+      echo -e "ERROR: FTP failed - Loadset not found ${Loadset_Path}"; #CONSOLE
+      RC="$EC";
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid reference, STG or DVL only allowed RC:$EC"
+    echo "ERROR: Invalid reference, STG or DVL only allowed";          #CONSOLE
+    RC="$EC";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${Implementation} ${IPaddress} ${LoadType} ${LoadsetName} ${SecuredPlan} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

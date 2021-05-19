@@ -1,0 +1,79 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcreatedvlspace                                         #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to create devl workspace for implemenation plan                 #
+#                                                                             #
+#   NOTE:                                                                     #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation plan name with core                               #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   03162017    UVAIS   Created the script                                    #
+#   04212017    ARUL    Updates the script for new SCM struct for common src  #
+#   04222019    ARUL    Updated with logger support                           #
+#   07312019    VINOTH  directory is not creating due to && operator for sys  #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+RemoteBranchName="$1";                 #Read actual path of prject dir
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${RemoteBranchName} RC:$RC"
+#-----------------------------------------------------------------------------#
+# Create devl workspace for ibm and non-ibm
+function createDevlspace {
+  local _RC;
+  #Non-IBM DEVL Workspace creation
+  mkdir -p "${APP_DVL_IMPL_CWRK}"; _RC=$?;
+  if [ "$_RC" -ne 0 ]; then
+    _RC="$EC";
+  else
+    #IBM DEVL Workspace creation
+    mkdir -p "${SYS_DVL_IMPL_CWRK}"; _RC=$?;
+    if [ "$_RC" -ne 0 ]; then _RC="$EC"; fi
+  fi
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  getParmFromBranch "$RemoteBranchName" "DVL";
+  if [ ! -d "${APP_DVL_IMPL_CWRK}" ] || [ ! -d "${SYS_DVL_IMPL_CWRK}" ]; then
+    #createDevlspace; RC=$?
+    if [ "$RC" -eq 0 ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Stagging workspace skipping cause handled in cmd export RC:$RC"
+    else
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Stagging workspace skipping failed handled in cmd export RC:$EC"
+      RC=${RC}
+    fi
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${RemoteBranchName} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

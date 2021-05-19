@@ -1,0 +1,2360 @@
+<style>
+   md-input-container.md-block {
+      /* margin-top:10px; */
+   }
+
+   .md-select-value *:first-child {
+      flex: initial;
+      width: 100%;
+   }
+
+   .header li {
+      font-weight: bold;
+   }
+
+   .select2-results__option[aria-selected=true] {
+      display: none;
+   }
+
+   .modal-footer-mdalign {
+      padding: 5px;
+      background: rgba(11, 90, 137, 0.15);
+   }
+
+   .constrained {
+      margin: 10px;
+      padding: 10px;
+      height: 200px;
+      overflow: auto;
+      border: 1px solid lightgray;
+   }
+</style>
+<!-- Content Header (Page header) -->
+<section class="content-header">
+   <!-- <ol class="breadcrumb">
+      <li><a><i class="fa fa-dashboard"></i> Dashboard</a></li>
+      <li class="active">Contact Me</li>
+      </ol> -->
+</section>
+<!-- Main content -->
+<section class="content animated slideInLeft scrollingFunction" id="scroll_function">
+   <div class="row">
+      <div class="col-md-12">
+         <div class="well editImplementation" style="background-color:#fff;padding-top: 0px;">
+            <form class="scrollview" name="vm.impForm">
+               <div class="row">
+                  <div class="col-md-12">
+                     <md-content style="overflow: inherit;">
+                        <fieldset style="padding-bottom: 10px;">
+                           <legend>Implementation Information</legend>
+                           <div class="row">
+                              <div class="col-md-3">
+                                 <!--<label>Implementation Plan ID-->
+                                 <!--</label>-->
+                                 <!--<md-input-container-->
+                                 <!--class="md-icon-float md-block spacingTwo">-->
+                                 <!--<input type="text"-->
+                                 <!--aria-label="planid"-->
+                                 <!--ng-model="vm.imp.planId"-->
+                                 <!--style="color: green;font-weight: bold;"-->
+                                 <!--disabled/>-->
+                                 <!--</md-input-container>-->
+                                 <label>Implementation ID
+                                 </label>
+                                 <md-input-container class="md-icon-float md-block spacingTwo">
+                                    <input type="text" aria-label="implementationid" ng-model="vm.imp.id"
+                                       style="color: green;font-weight: bold;" disabled />
+                                 </md-input-container>
+                              </div>
+                              <div class="col-md-3">
+                                 <label>Description of Change
+                                    <span class="requiredField">*</span>
+                                 </label>
+                                 <md-input-container class="md-icon-float md-block " style="margin-bottom: 0px;">
+                                    <textarea name="description" data-ng-model="vm.imp.impDesc" aria-label="impdesc"
+                                       class="form-control"></textarea>
+                                 </md-input-container>
+                              </div>
+                              <div class="col-md-3">
+                                 <label style="margin-bottom: 21px;">Problem Ticket Number</label>
+                                 <!-- <md-input-container class="md-icon-float md-block " style="margin-bottom: 0px;">
+                                    <input type="text" name="tktNum" data-ng-model="vm.imp.tktNum" aria-label="tktnum" class="form-control">
+                                    </md-input-container> -->
+                                 <md-input-container class="md-icon-float md-block mdIChange">
+                                    <!--<ul id="probTktNo">-->
+                                    <!--</ul>-->
+                                    <input id="iprobTktNo" aria-label="iprobTktNo">
+                                    <!--<input type="text" name="probTktNo"-->
+                                    <!--aria-label="sdmtktnum"-->
+                                    <!--ng-model="vm.impPlan.sdmTktNumber"/>-->
+                                    <span class="requiredField" ng-show="vm.showImpTtktNumberError"
+                                       style="font-style: italic;">{{vm.iticketErrorMessage}}</span>
+                                 </md-input-container>
+                              </div>
+                              <div class="col-md-3">
+                                 <label>Peer Reviewer(s)
+                                    <span class="requiredField">*</span>
+                                 </label>
+                                 <!-- <label ng-if="vm.imp.planId.loadType=='EMERGENCY'">ByPass Peer Review</label>
+                                    <md-checkbox ng-if="vm.imp.planId.loadType =='EMERGENCY'" ng-click="vm.imp.peerReviewers=''" ng-disabled="vm.imp.impStatus == 'READY_FOR_QA'|| userRole!='Lead'" ng-model="vm.imp.bypassPeerReview" style="margin-bottom:0px;margin-left:0px" aria-label="byPassPeerReviewers"></md-checkbox>
+                                    <md-input-container ng-style="vm.imp.planId.loadType =='EMERGENCY' ? 'margin-top: 0px !important' : ''" class="md-icon-float md-block multipleSelect2"> -->
+                                 <md-input-container class="md-icon-float md-block multipleSelect2"
+                                    style="margin-bottom: 0px">
+                                    <select ng-disabled="vm.userAccess || vm.imp.bypassPeerReview" name="peerReviewers"
+                                       id="peerReviewers" ng-model="vm.imp.peerReviewers" class="form-control"
+                                       multiple="multiple" aria-label="selectPeerReviewers">
+                                       <option ng-value="rev.id"
+                                          ng-repeat="rev in vm.peerReviewers | orderBy :'displayName'">
+                                          {{ rev.displayName }}
+                                       </option>
+                                    </select>
+                                 </md-input-container>
+                                 <div
+                                    ng-if="vm.imp.planId.loadType=='EMERGENCY' && userRole== 'Developer' && vm.imp.bypassPeerReview"
+                                    class="text-danger"> <i class="fa fa-info-circle"></i> <b>Peer Review
+                                       Bypassed</b>
+                                 </div>
+                                 <div
+                                    ng-if="vm.imp.planId.loadType=='EMERGENCY' && userRole== 'Lead' && vm.imp.substatus!=null && vm.imp.bypassPeerReview"
+                                    class="text-danger"><i class="fa fa-info-circle"></i> <b>Peer Review
+                                       Bypassed</b>
+                                 </div>
+                              </div>
+                           </div>
+                           <div class="row">
+                              <!-- <div class="col-md-3" ng-hide="vm.imp.impStatus == 'IN_PROGRESS'">
+                                 </div> -->
+                              <!-- <div class="col-md-3">
+                                 <label>Developer Name
+                                     <span class="requiredField">*</span>
+                                 </label>
+                                 <md-input-container class="md-icon-float md-block singleSelect2">
+
+                                     <select ng-disabled="vm.userAccess" name="developerName" ng-model="vm.imp.devId" id="developersList" class="form-control" aria-label="selectDeveloperList">
+                                         <option ng-value="dev.id" ng-repeat="dev in vm.developerList" ng-selected="dev.id == vm.imp.devId">
+                                             {{ dev.displayName }}
+                                         </option>
+                                     </select>
+                                 </md-input-container>
+                                 </div> -->
+                              <div class="col-md-3">
+                                 <label>Developer Name
+                                    <span class="requiredField">*</span>
+                                 </label>
+                                 <md-input-container class="md-icon-float md-block multipleSelect2">
+                                    <select ng-disabled="vm.userAccess" name="developerName" ng-model="vm.imp.devId"
+                                       id="developersList" class="form-control" multiple="multiple"
+                                       aria-label="selectDeveloperList">
+                                       <option ng-value="dev.id"
+                                          ng-repeat="dev in vm.developerList | orderBy :'displayName'"
+                                          ng-selected="dev.id == vm.imp.devId">
+                                          {{ dev.displayName }}
+                                       </option>
+                                    </select>
+                                 </md-input-container>
+                              </div>
+                              <div class="col-md-3 impl">
+                                 <label>Developer Phone number
+                                    <span ng-if="vm.imp.substatus=='INTEGRATION_TESTING_COMPLETED'"
+                                       class="requiredField">*</span>
+                                 </label>
+                                 <input style="margin-bottom: 0px;" maxlength="15" tabindex="5" type="text"
+                                    class="form-control margin-top-10 w-100" ng-intl-tel-input data-default-country='us'
+                                    name="developerContact" aria-label="leadcontact" ng-model="vm.imp.devContact" />
+                                 <span class="help-block" style="color:red;margin:0px"
+                                    ng-show="vm.impForm.developerContact.$invalid && vm.impForm.developerContact.$touched">Invalid
+                                    contact number</span>
+                              </div>
+                              <div class="col-md-3">
+                                 <label>Developer Location
+                                    <span ng-if="vm.imp.substatus=='INTEGRATION_TESTING_COMPLETED'"
+                                       class="requiredField">*</span>
+                                 </label>
+                                 <md-input-container class="md-icon-float md-block ">
+                                    <select name="devlocation" name="developerLocation" ng-model="vm.imp.devLocation"
+                                       class="form-control">
+                                       <option ng-value="dL.value" ng-repeat="dL in vm.developerLocation"
+                                          ng-selected='dL.value == vm.imp.devLocation'>
+                                          {{ dL.value }}
+                                       </option>
+                                    </select>
+                                 </md-input-container>
+                              </div>
+                              <div class="col-md-3"
+                                 ng-if="vm.imp.planId.loadType =='EMERGENCY' && vm.imp.substatus == null && userRole == 'Lead'">
+                                 <label>ByPass Peer Review</label>
+                                 </br>
+                                 <md-checkbox ng-click="vm.imp.peerReviewers==''" ng-model="vm.imp.bypassPeerReview"
+                                    style="margin-top: 15px" aria-label="byPassPeerReviewers"></md-checkbox>
+                              </div>
+                              <!-- <div class="col-md-3 " ng-show="vm.imp.impStatus == 'IN_PROGRESS'">
+                                 <label>Sub Status <span
+                                         class="requiredField">*</span></label>
+                                 <md-input-container class="md-icon-float md-block">
+                                     <select disable-if-zero="{{workspaceLength}}" name="subStatus" ng-model="vm.imp.substatus" class="form-control">
+                                         <option value=""></option>
+                                         <option value="{{subStatusKey}}" ng-repeat="(subStatusKey,subStatusValue) in vm.impSubStatusList"
+                                                 ng-selected="vm.imp.substatus == subStatusKey">
+                                             {{subStatusValue}}
+                                         </option>
+                                     </select>
+                                 </md-input-container>
+                                 </div> -->
+                           </div>
+                           <div class="row">
+                              <div class="col-md-3 ">
+                              </div>
+                              <div class="col-md-3 ">
+                              </div>
+                           </div>
+                           <div class="row">
+                              <div class="col-md-12">
+                                 <div class="row">
+                                    <div class="col-md-7">
+                                       <div class="list-group">
+                                          <li class="list-group-item uploadHeader">
+                                             <div class="row" style="padding:0px 10px 0px 10px;">
+                                                <div class="col-md-4 padding-none">
+                                                   Checked Out Segments
+                                                </div>
+                                                <div class="col-md-8 padding-none">
+                                                   <div class="pull-right">
+                                                      <!-- <div class="btn-group">
+                                                         <button ng-disabled="(vm.userAccess ? (vm.workspaceList.length == 0 ? true : !checkSegments()) : true)" type="button" style="border-right: 0px !important;border-radius: 0px;" class="btn btn-primary btn-primary-t white-btn  btn-xs dropdown-toggle" data-toggle="dropdown"
+                                                             aria-expanded="false" aria-label="Get Latest">
+                                                                 <i class="fa fa-arrow-down"></i>&nbsp; Get Latest
+                                                             </button>
+                                                         <ul class="dropdown-menu multi-level" role="menu" aria-labelledby="dropdownMenu" style="left:0px !important;">
+                                                             <li>
+                                                                 <a tabindex="-1" ng-click="getLatest('origin')">
+                                                                     <i class="fa fa-code-fork"></i>&nbsp;From Implementation Plan</a>
+                                                             </li>
+                                                             <li><a ng-click="getLatest('prod')"><i class="fa fa-share-alt" ></i>From Production Source</a></li>
+                                                         </ul>
+
+                                                         </div> -->
+                                                      <!-- ng-disabled="(vm.segmentSelection.selectAll ?  false :  true) || vm.imp.impStatus == 'READY_FOR_QA'" -->
+                                                      <button
+                                                         ng-disabled="(vm.userAccess ? (vm.workspaceList.length == 0 ? true : checkSegments()) : true) || saveRFCLoader"
+                                                         ng-click="confirmDeleteFromWorkspace($event,vm.workspaceList)"
+                                                         class="btn btn-primary btn-primary-t white-btn bold btn-xs "
+                                                         aria-label="deleteAll">
+                                                         <span ng-if="saveRFCLoader">
+                                                            <i class="fa fa-spinner fa-pulse"
+                                                               style="color:white"></i></span><i
+                                                            class="fa fa-trash"></i>&nbsp; Delete
+                                                      </button>
+                                                      <button
+                                                         ng-disabled="(vm.userAccess ? (vm.workspaceList.length == 0 ? true : vm.commitdataList) : true) || vm.imp.impStatus == 'READY_FOR_QA' || saveRFCLoader1 "
+                                                         ng-click="checkIn()"  title="{{(vm.userAccess ? (vm.workspaceList.length == 0 ? true : vm.commitdataList) : true) ? checkinButtonDisableInfoMesssage() : ''}}"
+                                                         class="btn btn-primary btn-primary-t white-btn bold btn-xs "
+                                                         aria-label="Check-In">
+                                                         <span ng-if="saveRFCLoader1">
+                                                            <i class="fa fa-spinner fa-pulse"
+                                                               style="color:white"></i></span><i
+                                                            class="fa fa-bolt"></i>&nbsp; Check-In
+                                                      </button>
+                                                      <button
+                                                         ng-disabled="vm.userAccess ? vm.imp.impStatus == 'READY_FOR_QA' : true"
+                                                         ng-click="createNewSourceArtifact($event,vm.imp.id,vm.planId)"
+                                                         class="btn btn-primary btn-primary-t white-btn bold btn-xs "
+                                                         aria-label="new-source-artifact">
+                                                         <i class="fa fa-plus-circle"></i>&nbsp; New
+                                                         <md-tooltip md-direction='top'>Create new source artifact
+                                                         </md-tooltip>
+                                                      </button>
+                                                      <!-- ng-disabled="(vm.userAccess ? (vm.workspaceList.length == 0 ? true : !checkSegments()) : true)" ng-disabled="vm.userAccess ? vm.imp.devId != vm.currentUser.id : true"-->
+                                                      <button
+                                                         ng-disabled="vm.userAccess ? vm.imp.impStatus == 'READY_FOR_QA' : true"
+                                                         ng-click="openSegments()"
+                                                         class="btn btn-primary btn-primary-t white-btn bold btn-xs"
+                                                         aria-label="Checkout">
+                                                         <i class="fa fa-search"></i> &nbsp; Checkout
+                                                      </button>
+                                                   </div>
+                                                </div>
+                                             </div>
+                                          </li>
+                                          <li ng-if='vm.workspaceList.length==0' class="list-group-item">
+                                             No segments in workspace
+                                          </li>
+                                          <li ng-if='vm.workspaceList.length!=0' style="list-style:none;">
+                                             <ul class="nav header flex" style="background: rgba(44, 150, 133, 0.4);">
+                                                <li class="col-md-1 flex-self-center">
+                                                   <md-checkbox
+                                                      ng-disabled="!vm.userAccess ? true : vm.imp.impStatus == 'READY_FOR_QA'"
+                                                      ng-model="vm.segmentSelection.selectAll" ng-change="checkAll()"
+                                                      class="margin-none checkoutarea" aria-label="selectall">
+                                                   </md-checkbox>
+                                                </li>
+                                                <li class="col-md-5 flex-self-center padding-left-none">
+                                                   Segment Name
+                                                </li>
+                                                <li class="col-md-2 flex-self-center" title="">
+                                                   Target Systems
+                                                </li>
+                                                <li class="col-md-3 flex-self-center" title="">
+                                                   Functional Area
+                                                </li>
+                                                <!-- <li class="col-md-1 flex-self-center padding-left-none">
+                                                   Action
+                                                   </li> -->
+                                             </ul>
+                                             <div style="padding:0px;" class="list-group-item maxFileList col-md-12">
+                                                <div style="overflow:hidden;">
+                                                   <div class="nav" ng-repeat="workspace in vm.workspaceList"
+                                                      style="border-bottom: 1px solid #ddd;display: flex;align-items: center;">
+                                                      <div class="col-md-1">
+                                                         <md-checkbox
+                                                            ng-disabled="!vm.userAccess ? true  : vm.imp.impStatus == 'READY_FOR_QA'"
+                                                            ng-model="vm.segmentSelection.singleSelect[$index]"
+                                                            ng-init="vm.wsSelect[$index]=true"
+                                                            ng-change="singleselectchange(vm.segmentSelection)"
+                                                            class="checkoutarea"
+                                                            style="margin-bottom: 0px;margin-left:-1px;"
+                                                            aria-label="selectall">
+                                                         </md-checkbox>
+                                                      </div>
+                                                      <div class="col-md-5 word-wrap padding-left-none">
+                                                         {{workspace.fileName}}
+                                                      </div>
+                                                      <div class="col-md-5">
+                                                         <div class="row" ng-repeat="branch in workspace.branch">
+                                                            <div class="col-md-5">
+                                                               {{branch.targetSystem}}
+                                                            </div>
+                                                            <div class="col-md-5">
+                                                               {{branch.funcArea}}
+                                                            </div>
+                                                         </div>
+                                                      </div>
+                                                      <!-- <div class="col-md-1 textCenter">
+                                                         <label class="margin-none" ng-hide="!vm.userAccess || vm.imp.impStatus == 'READY_FOR_QA'" ng-click="confirmDeleteFromWorkspace($event,workspace.branch,true)">
+                                                             <i class="fa fa-trash padding-left-none"></i>
+                                                             <md-tooltip md-direction='right'>
+                                                                 Delete from Workspace
+                                                             </md-tooltip>
+                                                         </label>
+                                                         </div> -->
+                                                   </div>
+                                                </div>
+                                             </div>
+                                          </li>
+                                          <ul class="nav" style="margin-top: -4px;">
+                                             <li class="col-md-12 "
+                                                style="background: rgb(44, 150, 133);color: white;padding: 3px;">
+                                                <div class="row">
+                                                   <div class="col-md-2">
+                                                      <button
+                                                         ng-disabled="(vm.userAccess ? (vm.workspaceList.length == 0 ? true : checkSegments()) : true)"
+                                                         ng-click="addCommit($event, vm.imp.id)"
+                                                         class="btn btn-primary btn-primary-t white-btn bold btn-xs "
+                                                         aria-label="Commit">
+                                                         <i class="fa fa-check-square-o"></i>&nbsp; Local Commit
+                                                      </button>
+                                                   </div>
+                                                   <div class="col-md-7 text-center">
+                                                      Last Checkin :
+                                                      <span class="" style="font-weight:bold;">
+                                                         {{vm.imp.checkinDateTime | formattedDateTime}}</span>
+                                                      <label ng-if="vm.imp.lastCheckinStatus == 'S'"
+                                                         class="label label-success checkout-outline">SUCCESS</label>
+                                                      <label
+                                                         ng-if="vm.imp.lastCheckinStatus != null && vm.imp.lastCheckinStatus != 'S'"
+                                                         class="label label-danger checkout-outline">FAILED</label>
+                                                   </div>
+                                                   <div class="col-md-3">
+                                                      <span class="pull-right" style="font-weight:bold;"> Total segments
+                                                         :
+                                                         {{vm.workspaceList.length}}</span>
+                                                   </div>
+                                                </div>
+                                             </li>
+                                          </ul>
+                                       </div>
+                                    </div>
+                                    <div class="col-md-5">
+                                       <div class="list-group">
+                                          <li class="list-group-item uploadHeader">
+                                             Test Result Documents
+                                             <button
+                                                title='"txt", "bmp ", "jpg ", "jpeg ", "tiff", "msg", "xls ", "xlsx", "doc ", "docx", "xml", "rtflog", "ppt"'
+                                                ngf-select="uploadFiles($files, $invalidFiles)" multiple
+                                                ng-disabled="!vm.userAccess" name="file" ngf-max-size="1MB"
+                                                class="btn themeButton searchSegmentBtn pull-right"
+                                                style="margin-top: -8px;margin-right: -15px;border:0px;">
+                                                <i class="fa fa-paperclip "></i> &nbsp; Choose Files
+                                             </button>
+                                          </li>
+                                          <li ng-if='vm.uploadedFiles.length!=0' class="list-group-item"
+                                             style="background:#aad5ce;padding:0px;font-weight:bold;">
+                                             <span style="margin-left:10px;">Filename</span>
+                                             <span ng-show="vm.userAccess" style="margin-right:15px;"
+                                                class="pull-right">Action</span>
+                                          </li>
+                                          <div ng-if='vm.uploadedFiles.length==0' class="list-group-item">
+                                             No files uploaded
+                                          </div>
+                                          <div ng-if='vm.uploadedFiles.length!=0' class="maxFileList">
+                                             <li ng-repeat="file in vm.uploadedFiles" class="list-group-item"
+                                                style="font:smaller;padding:5px;border-bottom: 0px;">
+                                                <a ng-click='downloadTestCase(file)' style="color:#2c9685;">
+                                                   {{file}} </a>
+                                                <span class="pull-right">
+                                                   <div ng-show="vm.userAccess" style="margin-right: 22px;"
+                                                      ng-click="confirmDeleteTestDoc($event, file)">
+                                                      <i class="fa fa-trash"></i>
+                                                      <md-tooltip md-direction='right'>
+                                                         Delete
+                                                      </md-tooltip>
+                                                   </div>
+                                                </span>
+                                                <!--{{f.$errorParam}}-->
+                                                <!--<span class="progress" ng-show="f.progress >= 0">-->
+                                                <!--<div style="width:{{f.progress}}%"-->
+                                                <!--ng-bind="f.progress + '%'"></div>-->
+                                                <!--</span>-->
+                                             </li>
+                                          </div>
+                                          <div class="list-group-item" ng-if='vm.uploadedFiles.length!=0'
+                                             style="background:#2c9685;padding:0px;font-weight:bold;color:white;">
+                                             <span style="margin-left:5px;">{{vm.uploadedFiles.length}}
+                                                Files {{vm.uploadedFilesSize}} KB</span>
+                                             <span class="pull-right" style="margin-right:10px;">{{vm.freeSpace}} KB
+                                                Available</span>
+                                          </div>
+                                       </div>
+                                    </div>
+                                 </div>
+                              </div>
+                           </div>
+                           <div class="row spacingFour">
+                              <div class="col-md-6">
+                                 <div class="btn-group pull-left">
+                                    <button type="submit" ng-if="vm.imp.substatus == null"
+                                       ng-disabled="!vm.userAccess ? (vm.imp.substatus == null) : (vm.workspaceList.length == 0 && vm.imp.substatus == null) || (vm.imp.isCheckedin == false || vm.imp.isCheckedin == null) || vm.loader.unitTest"
+                                       ng-click="saveStatusAndSubmitChange(vm.imp, null, 'UNIT_TESTING_COMPLETED', 'IN_PROGRESS')"
+                                       class="form-inline btn btn-primary themeButton"
+                                       aria-label="Unit Testing Completed">
+                                       <span ng-if="vm.loader.unitTest">
+                                          <i class="fa fa-spinner fa-pulse" style="color:white"></i>
+                                       </span> Unit Testing Completed
+                                    </button>
+                                    <button type="submit"
+                                       ng-if="vm.imp.tktNum == null && vm.imp.isCheckedin && vm.imp.substatus == 'UNIT_TESTING_COMPLETED'"
+                                       ng-disabled="!vm.userAccess || vm.loader.peerReview"
+                                       ng-click="peerReviewRequest(vm.imp)"
+                                       class="form-inline btn btn-primary themeButton peerReviewButton">
+                                       <span ng-if="vm.loader.peerReview">
+                                          <i class="fa fa-spinner fa-pulse" style="color:white"></i>
+                                       </span> Request for Peer Review
+                                    </button>
+                                    <button
+                                       ng-if="vm.imp.tktNum != null && vm.imp.substatus == 'UNIT_TESTING_COMPLETED'"
+                                       disabled="true" class="form-inline btn btn-primary themeButton">
+                                       Peer Review Requested
+                                    </button>
+                                    <button type="submit"
+                                       ng-if="vm.imp.substatus == 'PEER_REVIEW_COMPLETED' || vm.imp.substatus == 'BYPASSED_PEER_REVIEW'"
+                                       ng-disabled="!vm.userAccess || vm.workspaceList.length == 0 || partialBuildStatus || vm.loader.integration"
+                                       ng-click="saveStatusAndSubmitChange(vm.imp, null, 'INTEGRATION_TESTING_COMPLETED', 'IN_PROGRESS')"
+                                       class="form-inline btn btn-primary themeButton"
+                                       aria-label="Integration Testing Completed">
+                                       <span ng-if="vm.loader.integration">
+                                          <i class="fa fa-spinner fa-pulse" style="color:white"></i>
+                                       </span> Integration Testing Completed
+                                    </button>
+                                    <button type="submit" ng-if="vm.imp.substatus=='INTEGRATION_TESTING_COMPLETED'"
+                                       ng-disabled="vm.workspaceList.length == 0 || vm.imp.impStatus == 'READY_FOR_QA' || vm.loader.readyForQA"
+                                       ng-click="confirmReadyForQA($event, vm.imp)"
+                                       class="form-inline btn btn-primary themeButton" aria-label="Ready for QA">
+                                       <span ng-if="vm.loader.readyForQA">
+                                          <i class="fa fa-spinner fa-pulse" style="color:white"></i>
+                                       </span> Ready for QA
+                                    </button>
+                                    <button ng-click="saveStatusAndSubmitChange(vm.imp)"
+                                       ng-disabled="!enableUpdate ||  http_loading" style="margin-left:2px;"
+                                       class="form-inline btn btn-success themeButton"
+                                       aria-label="UpdateImplementation">
+                                       <span ng-if="vm.loader.updateImp">
+                                          <i class="fa fa-spinner fa-pulse" style="color:white"></i>
+                                       </span> Update Implementation
+                                    </button>
+                                 </div>
+                              </div>
+                              <div class="col-md-6">
+                                 <button type="submit" ng-click="goBackImpl()"
+                                    class="form-inline btn btn-default themeButton pull-right" aria-label="Cancel">
+                                    Cancel
+                                 </button>
+                              </div>
+                           </div>
+                        </fieldset>
+                     </md-content>
+                  </div>
+               </div>
+            </form>
+         </div>
+      </div>
+   </div>
+</section>
+<!-- /.content -->
+<div id="segmentSearch" class="modal fade" tabindex="-1" role="dialog" style="overflow:hidden;">
+   <div class="modal-dialog modal-md" role="document" style="width:75%;">
+      <div class="modal-content">
+         <div class="modal-header" style="padding: 10px;background: #3c8dbc;">
+            <h4 class="modal-title">
+               <span class="searchSegments" style="color:#fff;">Search Segments (For best results, use minimum 3
+                  chars.)</span>
+               <form class="searchSegments pnpTabs" data-ng-submit="searchSegmentPNP(searchText)">
+                  <div class="row">
+                     <div class="col-md-9">
+                        <input id="srchtext" type="text" class="form-control" data-ng-model="searchText"
+                           style="width: 100%;" placeholder="Search Segments" aria-label="CheckoutSegmentSearch"
+                           autocomplete="off" autofocus>
+                     </div>
+                     <div class="col-md-3" style="padding-left:0px;">
+                        <button type="submit" style="width:100%;float:right;background: #eee;color: #333;"
+                           class="btn btn-primary themeButton modalSearchBtn" aria-label="Search Prod/Non-Prod">
+                           <i class="fa fa-search"></i> Search Prod/Non-Prod/Legacy
+                        </button>
+                     </div>
+                  </div>
+               </form>
+               <form class="chooseSCMArea" data-ng-submit="ibmVanillaList(vanillaSearchText)" style="display:none;">
+                  <div class="row">
+                     <div class="col-md-9" style="">
+                        <input type="text" class="form-control" data-ng-model="vanillaSearchText" style="width: 100%;"
+                           placeholder="Search Segments">
+                     </div>
+                     <div class="col-md-3" style="padding-left:0px;">
+                        <button type="submit" style="width:100%;float:right;background: #eee;color: #333;"
+                           class="btn btn-primary themeButton modalSearchBtn" aria-label="vanillaSearchText">
+                           <i class="fa fa-search"></i> Search IBM Vanilla Files
+                        </button>
+                     </div>
+                  </div>
+               </form>
+               <span class="checkoutSegmentsTitle" style="display:none;color:#fff;">
+                  <span>Checkout Segments</span>
+                  <span class="pull-right">Total: {{segmentsList.length}}</span>
+               </span>
+               <span class="makCheckoutSegmentsTitle" style="display:none;color:#fff;">
+                  <span>{{makFileMessage}}</span>
+               </span>
+               <span style="color:#fff;" class="checkoutReportTemplate">
+                  <span>Checkout Report</span>
+                  <span class="pull-right">Total: {{vm.checkoutStatusList.length}}</span>
+               </span>
+               <span style="color:#fff;" class="populateMakCheckoutSegmentsTitle">
+                  <span>{{makFileMessage}}</span>
+               </span>
+               <span style="color:#fff;" class="populateSummaryTemplate">
+                  <span>Populate SCM and Summary Report</span>
+                  <span class="pull-right">Total: {{vm.segmentCount}}</span>
+               </span>
+               <span style="color:#fff;" class="populateReportTemplate">
+                  <span>Populate SCM and Checkout Report</span>
+                  <span class="pull-right">Total: {{vm.populatedVanillaFileList.length}}</span>
+               </span>
+            </h4>
+         </div>
+         <div class="modal-body chkModalBody" style="padding-top: 0px;background:#fff;">
+            <div class="searchSegments">
+               <div class="row">
+                  <div class="col-md-12 pnpTabs">
+                     <ul class="nav nav-tabs chkoutTabs prodFlagTabs" style="border: 0px;background: #dbe6ed;">
+                        <li class="active" flag="COMMON" style="margin-left: 20px;">
+                           <a data-target="#common" data-toggle="tab">Prod/Non-Prod/Legacy
+                              <span style="font-size:12px;">({{productionMetaData.totalCount}})</span>
+                           </a>
+                        </li>
+                        <li class="pull-right" style="line-height: 35px;">
+                           <button class="btn btn-primary btn-sm themeButton" ng-click="togglePopulateSCM()"
+                              style="margin-right: 20px;">
+                              <i class="fa fa-cube"></i>&nbsp; IBM Vanilla Files
+                           </button>
+                        </li>
+                     </ul>
+                     <div class="tab-content" style="margin-top: 10px;">
+                        <div class="tab-pane active" id="common">
+                           <div class="row" style="margin:20px 0px;margin-top:0px;">
+                              <div class="col-md-12 scrollview">
+                                 <ul class="nav header flex pnpTableHeader" infinite-scroll="loadMore()"
+                                    infinite-scroll-distance="2" infinite-scroll-parent="true">
+                                    <li class="col-md-2 textCenter">Segment Names
+                                    </li>
+                                    <li class="col-md-1 textCenter">Access
+                                    </li>
+                                    <li class="col-md-2 textCenter">Target Systems
+                                    </li>
+                                    <li class="col-md-2 textCenter">Functional Area
+                                    </li>
+                                    <li class="col-md-2 textCenter" style="margin-left: -20px;">Impl Plan
+                                    </li>
+                                    <li class="col-md-1 textCenter">Status</li>
+                                    <!-- <li class="col-md-2">Status</li> -->
+                                    <li class="col-md-2 textCenter">Load Date/Time
+                                    </li>
+                                 </ul>
+                                 <div class="searchList prod modalProgramListing" aria-label="ProdSegmentListing"
+                                    style="border-bottom:1px solid #eee;">
+                                    <ul class="nav centerItems {{(individualSegmentObj.enableCount === 0 || individualSegmentObj.repoAccess == 'R') ? 'disabled' : ''}}"
+                                       ng-repeat="individualSegmentObj in productionMetaData.searchList = (productionMetaData.logprodSegmentsEvents  | limitTo:productionMetaData.numberToDisplay)"
+                                       ng-init="individualSegmentObj.enableCount = 0"
+                                       ng-class="(individualSegmentObj.prodFlag == 'PROD' ? 'class_PROD_{{individualSegmentObj.fileNameWithHash}}' : (individualSegmentObj.prodFlag == 'NONPROD' ? 'class_NONPROD_{{individualSegmentObj.fileNameWithHash}}_{{individualSegmentObj.additionalInfo.planId}}' : 'class_PENDING_{{individualSegmentObj.fileNameWithHash}}')) + ' ' + (individualSegmentObj.targetSystems.length > 1 ? 'class_groups' : 'class_individuals')"
+                                       style="overflow:hidden;margin:3px 0px;border-bottom:1px solid #eee;">
+                                       <!-- <li class="col-md-3 textCenter" style="font-weight:bold;outline:0px;" ng-if="individualSegmentObj.enableCount > 0" select-segment select-obj="individualSegmentObj" select-call="selectSegmentPNP(segmentObj)"> -->
+                                       <div class="col-md-2 textCenter word-wrap"
+                                          ng-if="individualSegmentObj.prodFlag == 'PROD' || individualSegmentObj.prodFlag == 'LEGACY'">
+                                          <li class="" style="font-weight:bold;outline:0px;"
+                                             ng-if="individualSegmentObj.enableCount > 0"
+                                             data-ng-click="selectSegmentPNP(individualSegmentObj)">
+                                             {{individualSegmentObj.fileName}}
+                                          </li>
+                                          <li class="" style="font-weight:bold;outline:0px;"
+                                             ng-if="individualSegmentObj.enableCount === 0  || individualSegmentObj.repoAccess == 'R'">
+                                             {{individualSegmentObj.fileName}}
+                                          </li>
+                                       </div>
+                                       <div class="col-md-2 textCenter word-wrap"
+                                          ng-if="individualSegmentObj.prodFlag == 'NONPROD' ">
+                                          <li style="font-weight:bold;outline:0px;"
+                                             ng-if="individualSegmentObj.enableCount > 0"
+                                             data-ng-click="selectSegmentNonProd(individualSegmentObj) || checkoutPlanShowPopup(individualSegmentObj) ">
+                                             {{individualSegmentObj.fileName}}
+                                          </li>
+                                          <li class="" style="font-weight:bold;outline:0px;"
+                                             ng-if="individualSegmentObj.enableCount === 0  || individualSegmentObj.repoAccess == 'R'">
+                                             {{individualSegmentObj.fileName}}
+                                          </li>
+                                       </div>
+                                       <!-- <li class="col-md-2 textCenter word-wrap" style="font-weight:bold;outline:0px;" -->
+                                       <!-- ng-if="individualSegmentObj.enableCount > 0" -->
+                                       <!-- data-ng-click="selectSegmentPNP(individualSegmentObj)"> -->
+                                       <!-- {{individualSegmentObj.fileName}} -->
+                                       <!-- </li> -->
+                                       <!-- <li class="col-md-2 textCenter word-wrap" style="font-weight:bold;outline:0px;" -->
+                                       <!-- ng-if="individualSegmentObj.enableCount === 0  || individualSegmentObj.repoAccess == 'R'"> -->
+                                       <!-- {{individualSegmentObj.fileName}} -->
+                                       <!-- </li> -->
+                                       <li class="col-md-1 textCenter">
+                                          <label class="label label-warning">{{individualSegmentObj.repoAccess}}</label>
+                                       </li>
+                                       <!-- <li ng-if="individualSegmentObj.repoAccess == 'R'" title='READ' class="col-md-1 textCenter" ><label  class="label label-warning">{{individualSegmentObj.repoAccess}}</label></li>
+                                          <li ng-if="individualSegmentObj.repoAccess == 'RWC'" title='READ_WRITE' class="col-md-1 textCenter" ><label  class="label label-warning">{{individualSegmentObj.repoAccess}}</label></li>
+                                           -->
+                                       <li class="col-md-9">
+                                          <div data-ng-repeat="branchObj in individualSegmentObj.branch">
+                                             <div
+                                                class="row flex pnpGrouping {{branchObj.isCheckedout ? 'disabled' : ''}}">
+                                                <div class="col-md-3 textCenter leftBorderSplit">
+                                                   <div class="row">
+                                                      <!-- <div class="col-md-4"></div> -->
+                                                      <div class="col-md-3"></div>
+                                                      <div class="col-md-2 padding-none">
+                                                         <md-checkbox ng-if="branchObj.isCheckoutAllowed"
+                                                            ng-init="individualSegmentObj.enableCount = (branchObj.isCheckedout || individualSegmentObj.repoAccess == 'R') ? individualSegmentObj.enableCount : individualSegmentObj.enableCount+1;"
+                                                            ng-show="individualSegmentObj.branch.length > 1"
+                                                            ng-disabled="branchObj.isCheckedout"
+                                                            ng-model="branchObj.isBranchSelected"
+                                                            ng-change="divergenceWarning(individualSegmentObj,branchObj)"
+                                                            class="spacingTwo branchCheck"
+                                                            aria-label="{{branchObj.targetSystem}}"
+                                                            style="text-align:left;">
+                                                         </md-checkbox>
+                                                      </div>
+                                                      <div class="col-md-7  padding-none ">
+                                                         {{branchObj.targetSystem | systemFilter}}
+                                                      </div>
+                                                      <!-- <div class="col-md-4"> -->
+                                                      <!-- <span ng-if="branchObj.isCheckedout && branchObj.refStatus.indexOf('-')<0">
+                                                         <i title="Already checked out" class="fa  fa-star-half-o"></i>
+                                                         </span> -->
+                                                      <!-- </div> -->
+                                                   </div>
+                                                </div>
+                                                <div class="col-md-2 textCenter leftBorderSplit"
+                                                   ng-if="branchObj.isCheckedout" style="outline:0px;">
+                                                   {{branchObj.funcArea}}
+                                                   <!-- {{branchObj.trimmedFuncArea}} -->
+                                                </div>
+                                                <div class="col-md-2 textCenter leftBorderSplit"
+                                                   ng-if="!branchObj.isCheckedout"
+                                                   data-ng-click="individualSegmentObj.enableCount > 0 && selectSegmentPNP(individualSegmentObj)"
+                                                   style="outline:0px;">
+                                                   {{branchObj.funcArea}}
+                                                   <!-- {{branchObj.trimmedFuncArea}} -->
+                                                </div>
+                                                <div class="col-md-2 textCenter "
+                                                   style="outline:none; padding-left:30px; text-transform: uppercase;"
+                                                   ng-if="individualSegmentObj.prodFlag == 'PROD' || individualSegmentObj.prodFlag == 'LEGACY'">
+                                                   <label>{{branchObj.refPlan}}</label>
+                                                </div>
+                                                <div class="col-md-2 textCenter "
+                                                   style="outline:none; padding-left:30px;text-transform: uppercase;"
+                                                   ng-if="individualSegmentObj.prodFlag == 'NONPROD'">
+                                                   <label>{{individualSegmentObj.additionalInfo.planId}}</label>
+                                                </div>
+                                                <div class="col-md-2 textCenter " ng-if="branchObj.isCheckedout"
+                                                   style="outline: 0px; text-align: center; padding-right: 0px; padding-left:30px;">
+                                                   <!-- <label -->
+                                                   <!-- ng-if="branchObj.refStatus.indexOf('Online') >= 0 && branchObj.refStatus.indexOf('Online-') < 0" -->
+                                                   <!-- class="label label-success">{{branchObj.refStatus}}</label> -->
+                                                   <span ng-if="branchObj.refStatus.indexOf('Online-') >= 0"
+                                                      class="label label-warning">{{branchObj.refStatus}}</span>
+                                                   <!-- <label ng-if="branchObj.refStatus.indexOf('Fallback') >= 0" -->
+                                                   <!-- class="label label-danger">{{branchObj.refStatus}}</label> -->
+                                                   <label
+                                                      plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                      ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                      class="spacingTwo"></label>
+                                                </div>
+                                                <div class="col-md-2 textCenter " ng-if="!branchObj.isCheckedout"
+                                                   data-ng-click="individualSegmentObj.enableCount > 0 && selectSegmentPNP(individualSegmentObj)"
+                                                   style="outline: 0px;  padding-right: 0px;padding-left:30px;">
+                                                   <!-- <label -->
+                                                   <!-- ng-if="branchObj.refStatus.indexOf('Online') >= 0 && branchObj.refStatus.indexOf('Online-') < 0" -->
+                                                   <!-- class="label label-success">{{branchObj.refStatus}}</label> -->
+                                                   <label ng-if="branchObj.refStatus.indexOf('Online-') >= 0"
+                                                      class="label label-warning">{{branchObj.refStatus}}</label>
+                                                   <!-- <label ng-if="branchObj.refStatus.indexOf('Fallback') >= 0" -->
+                                                   <!-- class="label label-danger">{{branchObj.refStatus}}</label> -->
+                                                   <label
+                                                      plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                      ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                      class="spacingTwo"></label>
+                                                </div>
+                                                <div class="col-md-3 textCenter " ng-if="branchObj.isCheckedout"
+                                                   style="outline:0px;">
+                                                   {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                                </div>
+                                                <div class="col-md-3 textCenter"
+                                                   data-ng-click="individualSegmentObj.enableCount > 0 && selectSegmentPNP(individualSegmentObj)"
+                                                   ng-if="!branchObj.isCheckedout" style="outline:0px;">
+                                                   {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                                </div>
+                                             </div>
+                                          </div>
+                                       </li>
+                                    </ul>
+                                    <p ng-if="(productionMetaData.searchList.length == 0 && nonProductionMetaData.searchList.length == 0 && legacyMetaData.searchList.length == 0)  && !vm.showCheckoutLoading"
+                                       style="text-align:center;padding:50px 0px;color:#aaa;">
+                                       No segments found!
+                                    </p>
+                                    <div ng-show="vm.showCheckoutLoading"
+                                       style="text-align:center;padding:50px 0px;color:#aaa;">
+                                       <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+                                    </div>
+                                 </div>
+                                 <div class="pull-left searchSegments"
+                                    style="font-size:12px;padding: 5px;width: 100%;background: #3695b8;color: white;"
+                                    ng-if="(productionMetaData.totalCount > 0 || nonProductionMetaData.totalCount > 0 || legacyMetaData.totalCount > 0)">
+                                    <div class="row">
+                                       <div class="col-md-6">
+                                          <span class="pull-left">
+                                             Total:
+                                             <b>{{productionMetaData.totalCount}} segments</b>
+                                          </span>
+                                       </div>
+                                       <div class="col-md-6"
+                                          ng-if="(productionMetaData.selectedSegmentCount > 0 || nonProductionMetaData.selectedSegmentCount > 0 || legacyMetaData.selectedSegmentCount > 0 || productionMetaData.selectedMakSegmentCount > 0 || nonProductionMetaData.selectedMakSegmentCount > 0 || legacyMetaData.selectedMakSegmentCount > 0)">
+                                          <span class="pull-right">
+                                             Selected:
+                                             <b>{{productionMetaData.selectedSegmentCount + nonProductionMetaData.selectedSegmentCount + legacyMetaData.selectedSegmentCount + productionMetaData.selectedMakSegmentCount + nonProductionMetaData.selectedMakSegmentCount + legacyMetaData.selectedMakSegmentCount}}
+                                                segments</b>
+                                          </span>
+                                       </div>
+                                    </div>
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+                  <div style="display:none;" class="col-md-12 chooseSCMArea">
+                     <div class="col-md-12" style="border: 0px;background: #dbe6ed;line-height: 40px;">
+                        <ul class="nav nav-tabs chkoutTabs prodFlagTabs" style="border: 0px;background: #dbe6ed;">
+                           <li class="active" style="margin-left: 5px;">
+                              <a data-toggle="tab">IBM Vanilla Files
+                                 <span style="font-size:12px;">
+                                    ({{ibmVanillaMetaData.searchList.length}})
+                                 </span>
+                              </a>
+                           </li>
+                           <li class="pull-right" style="line-height: 35px;">
+                              <button class="btn btn-primary btn-sm themeButton" ng-click="togglePopulateSCM()">
+                                 <i class="fa fa-database"></i> &nbsp; Prod/Non-Prod Search
+                              </button>
+                           </li>
+                        </ul>
+                     </div>
+                     <div class="col-md-12" style="margin-top:10px;">
+                        <ul class="nav header pnpTableHeader">
+                           <li class="col-md-5 textCenter">Segment Name
+                           </li>
+                           <li class="col-md-7 textCenter">
+                              Target Systems
+                           </li>
+                        </ul>
+                        <div class="searchList ibmVanila modalProgramListing" style="border-bottom:1px solid #eee;">
+                           <ul class="nav class_{{individualSegmentObj.fileNameWithHash}} centerItems"
+                              ng-repeat="individualSegmentObj in ibmVanillaMetaData.searchList"
+                              style="overflow:hidden;margin:3px 0px;border-bottom:1px solid #eee">
+                              <li class="col-md-6 textCenter" ng-click="chooseVanillaSegments(individualSegmentObj)"
+                                 style="outline: none;">
+                                 <div style="word-wrap:break-word; text-align: left">
+                                    <label class="spacingTwo word-wrap" style="cursor: pointer;">
+                                       {{individualSegmentObj.fileName}}
+                                    </label>
+                                 </div>
+                              </li>
+                              <li class="col-md-6 textCenter">
+                                 <div layout="row" style="display:block;">
+                                    <md-checkbox style="margin-bottom:0px !important;"
+                                       ng-change="chooseVanillaSystem(individualSegmentObj)" ng-value="targetSystem"
+                                       ng-model="individualSegmentObj.selectedSystems[targetSystem]"
+                                       ng-repeat="targetSystem in individualSegmentObj.targetSystems"
+                                       ng-disabled="individualSegmentObj.allowedTargetSystems.indexOf(targetSystem)<0"
+                                       aria-label="systems">{{targetSystem}}
+                                    </md-checkbox>
+                                 </div>
+                              </li>
+                           </ul>
+                           <p ng-if="ibmVanillaMetaData.searchList.length == 0 && !vm.showCheckoutLoading"
+                              style="text-align:center;padding:50px 0px;color:#aaa;">
+                              No segments found!
+                           </p>
+                           <div ng-show="vm.showCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                              <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+                           </div>
+                        </div>
+                        <div class="pull-left searchSegments"
+                           style="font-size:12px;padding: 5px;width: 100%;background: #3695b8;color: white;"
+                           ng-if="ibmVanillaMetaData.searchList.length > 0">
+                           <div class="row">
+                              <div class="col-md-6">
+                                 <span class="pull-left">
+                                    Total:
+                                    <b>{{ibmVanillaMetaData.searchList.length}} segments</b>
+                                 </span>
+                              </div>
+                              <div class="col-md-6" ng-if="vm.selectedVanillaSegments.length > 0">
+                                 <span class="pull-right">
+                                    Selected:
+                                    <b>{{vm.selectedVanillaSegments.length}} segments</b>
+                                 </span>
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <!-- Mak checkout screen -->
+            <div class="makCheckoutSegments" style="display:none;padding:10px;">
+               <div ng-show="vm.showMakCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                  <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+               </div>
+               <div ng-show="!vm.showMakCheckoutLoading">
+                  <ul class="nav nav-tabs chkoutTabs prodFlagTabs" style="border: 0px;background: #dbe6ed;">
+                     <li class="active" flag="COMMON" style="margin-left: 20px;">
+                        <a data-target="#common" data-toggle="tab">Prod/Non-Prod/Legacy
+                           <span style="font-size:12px;">({{makFileLength}})</span>
+                        </a>
+                     </li>
+                  </ul>
+                  <div class="row" style="margin-left: 10px;margin-right: 10px;padding:10px;">
+                     <ul class="nav header flex pnpTableHeader" infinite-scroll="loadMore()"
+                        infinite-scroll-distance="2" infinite-scroll-parent="true">
+                        <li class="col-md-2 textCenter">Segment Names
+                        </li>
+                        <li class="col-md-1 textCenter">Access
+                        </li>
+                        <li class="col-md-2 textCenter">Target Systems
+                        </li>
+                        <li class="col-md-2 textCenter">Functional Area
+                        </li>
+                        <li class="col-md-2 textCenter" style="margin-left: -20px;">Impl Plan
+                        </li>
+                        <li class="col-md-1 textCenter">Status</li>
+                        <!-- <li class="col-md-2">Status</li> -->
+                        <li class="col-md-2 textCenter">Load Date/Time
+                        </li>
+                     </ul>
+                     <div class="modalProgramListing" ng-if='segmentsList.length!=0'>
+                        <ul class="nav "
+                           style="width:100%;border-bottom: 1px solid #eee;padding:5px;padding-bottom: 0px;padding-top: 0px;"
+                           ng-repeat="segment in segmentsList">
+                           <div ng-if="segment.associatedMakFiles " ng-repeat="mak in segment.associatedMakFiles">
+                              <div ng-repeat="maks in mak"
+                                 class="col-md-12 centerItems {{(maks[0].enableCount === 0 || maks[0].repoAccess == 'R') ? 'disabled' : ''}}"
+                                 ng-class="maks[0].prodFlag == 'PROD' ? 'class_PROD_{{maks[0].fileNameWithHash}}' : (maks[0].prodFlag == 'NONPROD' ? 'class_NONPROD_{{maks[0].fileNameWithHash}}_{{maks[0].additionalInfo.planId}}' : 'class_PENDING_{{maks[0].fileNameWithHash}}')">
+                                 <div class="col-md-2 textCenter word-wrap"
+                                    ng-if="maks[0].prodFlag == 'PROD' || maks[0].prodFlag == 'LEGACY'">
+                                    <li class="" style="font-weight:bold;outline:0px;" ng-if="maks[0].enableCount > 0"
+                                       data-ng-click="selectMakSegmentPNP(maks[0])">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                    <li class="" style="font-weight:bold;outline:0px;"
+                                       ng-if="maks[0].enableCount === 0  || maks[0].repoAccess == 'R'">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                 </div>
+                                 <div class="col-md-2 textCenter word-wrap" ng-if="maks[0].prodFlag == 'NONPROD' ">
+                                    <li style="font-weight:bold;outline:0px;" ng-if="maks[0].enableCount > 0"
+                                       data-ng-click="selectMakSegmentNonProd(maks[0]) || checkoutPlanShowPopup(maks[0]) ">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                    <li class="" style="font-weight:bold;outline:0px;"
+                                       ng-if="maks[0].enableCount === 0  || maks[0].repoAccess == 'R'">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                 </div>
+                                 <li class="col-md-1 textCenter">
+                                    <label class="label label-warning">{{maks[0].repoAccess}}</label>
+                                 </li>
+                                 <li class="col-md-9">
+                                    <div data-ng-repeat="branchObj in maks[0].branch">
+                                       <div class="row flex pnpGrouping {{branchObj.isCheckedout ? 'disabled' : ''}}">
+                                          <div class="col-md-3 textCenter leftBorderSplit">
+                                             <div class="row">
+                                                <div class="col-md-3"></div>
+                                                <div class="col-md-2 padding-none">
+                                                   <md-checkbox ng-if="branchObj.isCheckoutAllowed" ng-init="maks[0].enableCount = (branchObj.isCheckedout || maks[0].repoAccess == 'R') ? maks[0].enableCount : maks[0].enableCount+1;" ng-show="maks[0].branch.length > 1" ng-disabled="branchObj.isCheckedout" ng-model="branchObj.isBranchSelected" ng-change="divergenceWarning(maks[0],branchObj)" class="spacingTwo branchCheck" aria-label="{{branchObj.targetSystem}}" style="text-align:left;">
+                                                   </md-checkbox>
+                                                </div>
+                                                <div class="col-md-7  padding-none ">
+                                                   {{branchObj.targetSystem | systemFilter}}
+                                                </div>
+                                             </div>
+                                          </div>
+                                          <div class="col-md-2 textCenter leftBorderSplit"
+                                             ng-if="branchObj.isCheckedout" style="outline:0px;">
+                                             {{branchObj.funcArea}}
+                                          </div>
+                                          <div class="col-md-2 textCenter leftBorderSplit"
+                                             ng-if="!branchObj.isCheckedout"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             style="outline:0px;">
+                                             {{branchObj.funcArea}}
+                                          </div>
+                                          <div class="col-md-2 textCenter "
+                                             style="outline:none; padding-left:30px; text-transform: uppercase;"
+                                             ng-if="maks[0].prodFlag == 'PROD' || maks[0].prodFlag == 'LEGACY'">
+                                             <label>{{branchObj.refPlan}}</label>
+                                          </div>
+                                          <div class="col-md-2 textCenter "
+                                             style="outline:none; padding-left:30px;text-transform: uppercase;"
+                                             ng-if="maks[0].prodFlag == 'NONPROD'">
+                                             <label>{{maks[0].additionalInfo.planId}}</label>
+                                          </div>
+                                          <div class="col-md-2 textCenter " ng-if="branchObj.isCheckedout"
+                                             style="outline: 0px; text-align: center; padding-right: 0px; padding-left:30px;">
+                                             <!-- <span ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</span> -->
+                                             <!-- <label plan-status-to-display-label="{{branchObj.refStatus | uppercase}}" ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0" class="spacingTwo"></label> -->
+                                             <span ng-if="maks[0].prodFlag === 'PROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'NONPROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{maks[0].additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'LEGACY'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                          <div class="col-md-2 textCenter " ng-if="!branchObj.isCheckedout"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             style="outline: 0px;  padding-right: 0px;padding-left:30px;">
+                                             <!-- <label ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</label> -->
+                                             <!-- <label plan-status-to-display-label="{{branchObj.refStatus | uppercase}}" ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0" class="spacingTwo"></label> -->
+                                             <span ng-if="maks[0].prodFlag === 'PROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'NONPROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{maks[0].additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'LEGACY'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                          <div class="col-md-3 textCenter " ng-if="branchObj.isCheckedout"
+                                             style="outline:0px;">
+                                             {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                          </div>
+                                          <div class="col-md-3 textCenter"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             ng-if="!branchObj.isCheckedout" style="outline:0px;">
+                                             {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                          </div>
+                                       </div>
+                                    </div>
+                                 </li>
+                              </div>
+                           </div>
+                        </ul>
+                     </div>
+                     <p ng-if="segmentsList.length==0 && !vm.showMakCheckoutLoading"
+                        style="text-align:center;padding:50px 0px;color:#aaa;">
+                        No segments selected!
+                     </p>
+                     <div class="pull-left makCheckoutSegments"
+                        style="font-size:12px;padding: 5px;width: 100%;background: #3695b8;color: white;">
+                        <div class="row">
+                           <div class="col-md-6">
+                              <span class="pull-left">
+                                 Total:
+                                 <b>{{makFileLength}} segments</b>
+                              </span>
+                           </div>
+                           <div class="col-md-6"
+                              ng-if="(productionMetaData.selectedMakSegmentCount > 0 || nonProductionMetaData.selectedMakSegmentCount > 0 || legacyMetaData.selectedMakSegmentCount > 0)">
+                              <span class="pull-right">
+                                 Selected:
+                                 <b>{{productionMetaData.selectedMakSegmentCount + nonProductionMetaData.selectedMakSegmentCount + legacyMetaData.selectedMakSegmentCount}}
+                                    segments</b>
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <!-- Mak checkout screen ends -->
+
+            <!-- mak file checkout Loop -->
+
+            <div class="makCheckoutSegmentsLoop" style="display:none;padding:10px;">
+               <div ng-show="vm.showMakCheckoutLoading0" style="text-align:center;padding:50px 0px;color:#aaa;">
+                  <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+               </div>
+               <div ng-show="!vm.showMakCheckoutLoading0">
+                  <ul class="nav nav-tabs chkoutTabs prodFlagTabs" style="border: 0px;background: #dbe6ed;">
+                     <li class="active" flag="COMMON" style="margin-left: 20px;">
+                        <a data-target="#common" data-toggle="tab">Prod/Non-Prod/Legacy
+                           <span style="font-size:12px;">({{makFileLength}})</span>
+                        </a>
+                     </li>
+                  </ul>
+                  <div class="row" style="margin-left: 10px;margin-right: 10px;padding:10px;">
+                     <ul class="nav header flex pnpTableHeader" infinite-scroll="loadMore()"
+                        infinite-scroll-distance="2" infinite-scroll-parent="true">
+                        <li class="col-md-2 textCenter">Segment Names
+                        </li>
+                        <li class="col-md-1 textCenter">Access
+                        </li>
+                        <li class="col-md-2 textCenter">Target Systems
+                        </li>
+                        <li class="col-md-2 textCenter">Functional Area
+                        </li>
+                        <li class="col-md-2 textCenter" style="margin-left: -20px;">Impl Plan
+                        </li>
+                        <li class="col-md-1 textCenter">Status</li>
+                        <!-- <li class="col-md-2">Status</li> -->
+                        <li class="col-md-2 textCenter">Load Date/Time
+                        </li>
+                     </ul>
+                     <div class="modalProgramListing" ng-if='segmentsList.length!=0'>
+                        <ul class="nav "
+                           style="width:100%;border-bottom: 1px solid #eee;padding:5px;padding-bottom: 0px;padding-top: 0px;"
+                           ng-repeat="segments in segmentsList">
+                           <div ng-if="segments.associatedMakFiles" ng-repeat="mak in segments.associatedMakFiles">
+                              <div ng-repeat="maks in mak"
+                                 class="col-md-12 centerItems {{(maks[0].enableCount === 0 || maks[0].repoAccess == 'R') ? 'disabled' : ''}}"
+                                 ng-class="maks[0].prodFlag == 'PROD' ? 'class_PROD_{{maks[0].fileNameWithHash}}' : (maks[0].prodFlag == 'NONPROD' ? 'class_NONPROD_{{maks[0].fileNameWithHash}}_{{maks[0].additionalInfo.planId}}' : 'class_PENDING_{{maks[0].fileNameWithHash}}')">
+                                 <div class="col-md-2 textCenter word-wrap"
+                                    ng-if="maks[0].prodFlag == 'PROD' || maks[0].prodFlag == 'LEGACY'">
+                                    <li class="" style="font-weight:bold;outline:0px;" ng-if="maks[0].enableCount > 0"
+                                       data-ng-click="selectMakSegmentPNP(maks[0])">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                    <li class="" style="font-weight:bold;outline:0px;"
+                                       ng-if="maks[0].enableCount === 0  || maks[0].repoAccess == 'R'">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                 </div>
+                                 <div class="col-md-2 textCenter word-wrap" ng-if="maks[0].prodFlag == 'NONPROD' ">
+                                    <li style="font-weight:bold;outline:0px;" ng-if="maks[0].enableCount > 0"
+                                       data-ng-click="selectMakSegmentNonProd(maks[0]) || checkoutPlanShowPopup(maks[0]) ">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                    <li class="" style="font-weight:bold;outline:0px;"
+                                       ng-if="maks[0].enableCount === 0  || maks[0].repoAccess == 'R'">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                 </div>
+                                 <li class="col-md-1 textCenter">
+                                    <label class="label label-warning">{{maks[0].repoAccess}}</label>
+                                 </li>
+                                 <li class="col-md-9">
+                                    <div data-ng-repeat="branchObj in maks[0].branch">
+                                       <div class="row flex pnpGrouping {{branchObj.isCheckedout ? 'disabled' : ''}}">
+                                          <div class="col-md-3 textCenter leftBorderSplit">
+                                             <div class="row">
+                                                <div class="col-md-3"></div>
+                                                <div class="col-md-2 padding-none">
+                                                   <md-checkbox ng-if="branchObj.isCheckoutAllowed"
+                                                      ng-init="maks[0].enableCount = (branchObj.isCheckedout || maks[0].repoAccess == 'R') ? maks[0].enableCount : maks[0].enableCount+1;"
+                                                      ng-show="maks[0].branch.length > 1"
+                                                      ng-disabled="branchObj.isCheckedout"
+                                                      ng-model="branchObj.isBranchSelected"
+                                                      ng-change="divergenceWarning(maks[0],branchObj)"
+                                                      class="spacingTwo branchCheck"
+                                                      aria-label="{{branchObj.targetSystem}}" style="text-align:left;">
+                                                   </md-checkbox>
+                                                </div>
+                                                <div class="col-md-7  padding-none ">
+                                                   {{branchObj.targetSystem | systemFilter}}
+                                                </div>
+                                             </div>
+                                          </div>
+                                          <div class="col-md-2 textCenter leftBorderSplit"
+                                             ng-if="branchObj.isCheckedout" style="outline:0px;">
+                                             {{branchObj.funcArea}}
+                                          </div>
+                                          <div class="col-md-2 textCenter leftBorderSplit"
+                                             ng-if="!branchObj.isCheckedout"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             style="outline:0px;">
+                                             {{branchObj.funcArea}}
+                                          </div>
+                                          <div class="col-md-2 textCenter "
+                                             style="outline:none; padding-left:30px; text-transform: uppercase;"
+                                             ng-if="maks[0].prodFlag == 'PROD' || maks[0].prodFlag == 'LEGACY'">
+                                             <label>{{branchObj.refPlan}}</label>
+                                          </div>
+                                          <div class="col-md-2 textCenter "
+                                             style="outline:none; padding-left:30px;text-transform: uppercase;"
+                                             ng-if="maks[0].prodFlag == 'NONPROD'">
+                                             <label>{{maks[0].additionalInfo.planId}}</label>
+                                          </div>
+                                          <div class="col-md-2 textCenter " ng-if="branchObj.isCheckedout"
+                                             style="outline: 0px; text-align: center; padding-right: 0px; padding-left:30px;">
+                                             <!-- <span ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</span> -->
+                                             <!-- <label plan-status-to-display-label="{{branchObj.refStatus | uppercase}}" ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0" class="spacingTwo"></label> -->
+                                             <span ng-if="maks[0].prodFlag === 'PROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'NONPROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{maks[0].additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'LEGACY'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                          <div class="col-md-2 textCenter " ng-if="!branchObj.isCheckedout"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0] )"
+                                             style="outline: 0px;  padding-right: 0px;padding-left:30px;">
+                                             <!-- <label ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</label> -->
+                                             <!-- <label plan-status-to-display-label="{{branchObj.refStatus | uppercase}}" ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0" class="spacingTwo"></label> -->
+                                             <span ng-if="maks[0].prodFlag === 'PROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'NONPROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{maks[0].additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'LEGACY'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                          <div class="col-md-3 textCenter " ng-if="branchObj.isCheckedout"
+                                             style="outline:0px;">
+                                             {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                          </div>
+                                          <div class="col-md-3 textCenter"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0] )"
+                                             ng-if="!branchObj.isCheckedout" style="outline:0px;">
+                                             {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                          </div>
+                                       </div>
+                                    </div>
+                                 </li>
+                              </div>
+                           </div>
+                        </ul>
+                     </div>
+                     <p ng-if="segmentsList.length==0 && !vm.showMakCheckoutLoading0"
+                        style="text-align:center;padding:50px 0px;color:#aaa;">
+                        No segments selected!
+                     </p>
+                     <div class="pull-left makCheckoutSegmentsLoop"
+                        style="font-size:12px;padding: 5px;width: 100%;background: #3695b8;color: white;">
+                        <div class="row">
+                           <div class="col-md-6">
+                              <span class="pull-left">
+                                 Total:
+                                 <b>{{makFileLength}} segments</b>
+                              </span>
+                           </div>
+                           <div class="col-md-6"
+                              ng-if="(productionMetaData.selectedMakSegmentCount > 0 || nonProductionMetaData.selectedMakSegmentCount > 0 || legacyMetaData.selectedMakSegmentCount > 0)">
+                              <span class="pull-right">
+                                 Selected:
+                                 <b>{{productionMetaData.selectedMakSegmentCount + nonProductionMetaData.selectedMakSegmentCount + legacyMetaData.selectedMakSegmentCount}}
+                                    segments</b>
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <div class="makCheckoutSegmentsLoop1" style="display:none;padding:10px;">
+               <div ng-show="vm.showMakCheckoutLoading1" style="text-align:center;padding:50px 0px;color:#aaa;">
+                  <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+               </div>
+               <div ng-show="!vm.showMakCheckoutLoading1">
+                  <ul class="nav nav-tabs chkoutTabs prodFlagTabs" style="border: 0px;background: #dbe6ed;">
+                     <li class="active" flag="COMMON" style="margin-left: 20px;">
+                        <a data-target="#common" data-toggle="tab">Prod/Non-Prod/Legacy
+                           <span style="font-size:12px;">({{makFileLength}})</span>
+                        </a>
+                     </li>
+                  </ul>
+                  <div class="row" style="margin-left: 10px;margin-right: 10px;padding:10px;">
+                     <ul class="nav header flex pnpTableHeader" infinite-scroll="loadMore()"
+                        infinite-scroll-distance="2" infinite-scroll-parent="true">
+                        <li class="col-md-2 textCenter">Segment Names
+                        </li>
+                        <li class="col-md-1 textCenter">Access
+                        </li>
+                        <li class="col-md-2 textCenter">Target Systems
+                        </li>
+                        <li class="col-md-2 textCenter">Functional Area
+                        </li>
+                        <li class="col-md-2 textCenter" style="margin-left: -20px;">Impl Plan
+                        </li>
+                        <li class="col-md-1 textCenter">Status</li>
+                        <!-- <li class="col-md-2">Status</li> -->
+                        <li class="col-md-2 textCenter">Load Date/Time
+                        </li>
+                     </ul>
+                     <div class="modalProgramListing" ng-if='segmentsList.length!=0'>
+                        <ul class="nav "
+                           style="width:100%;border-bottom: 1px solid #eee;padding:5px;padding-bottom: 0px;padding-top: 0px;"
+                           ng-repeat="segments in segmentsList">
+                           <div ng-if="segments.associatedMakFiles" ng-repeat="mak in segments.associatedMakFiles">
+                              <div ng-repeat="maks in mak"
+                                 class="col-md-12 centerItems {{(maks[0].enableCount === 0 || maks[0].repoAccess == 'R') ? 'disabled' : ''}}"
+                                 ng-class="maks[0].prodFlag == 'PROD' ? 'class_PROD_{{maks[0].fileNameWithHash}}' : (maks[0].prodFlag == 'NONPROD' ? 'class_NONPROD_{{maks[0].fileNameWithHash}}_{{maks[0].additionalInfo.planId}}' : 'class_PENDING_{{maks[0].fileNameWithHash}}')">
+                                 <div class="col-md-2 textCenter word-wrap"
+                                    ng-if="maks[0].prodFlag == 'PROD' || maks[0].prodFlag == 'LEGACY'">
+                                    <li class="" style="font-weight:bold;outline:0px;" ng-if="maks[0].enableCount > 0"
+                                       data-ng-click="selectMakSegmentPNP(maks[0] )">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                    <li class="" style="font-weight:bold;outline:0px;"
+                                       ng-if="maks[0].enableCount === 0  || maks[0].repoAccess == 'R'">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                 </div>
+                                 <div class="col-md-2 textCenter word-wrap" ng-if="maks[0].prodFlag == 'NONPROD' ">
+                                    <li style="font-weight:bold;outline:0px;" ng-if="maks[0].enableCount > 0"
+                                       data-ng-click="selectMakSegmentNonProd(maks[0]) || checkoutPlanShowPopup(maks[0]) ">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                    <li class="" style="font-weight:bold;outline:0px;"
+                                       ng-if="maks[0].enableCount === 0  || maks[0].repoAccess == 'R'">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                 </div>
+                                 <li class="col-md-1 textCenter">
+                                    <label class="label label-warning">{{maks[0].repoAccess}}</label>
+                                 </li>
+                                 <li class="col-md-9">
+                                    <div data-ng-repeat="branchObj in maks[0].branch">
+                                       <div class="row flex pnpGrouping {{branchObj.isCheckedout ? 'disabled' : ''}}">
+                                          <div class="col-md-3 textCenter leftBorderSplit">
+                                             <div class="row">
+                                                <div class="col-md-3"></div>
+                                                <div class="col-md-2 padding-none">
+                                                   <!-- <md-checkbox ng-if="branchObj.isCheckoutAllowed" ng-init="maks[0].enableCount = (branchObj.isCheckedout || maks[0].repoAccess == 'R') ? maks[0].enableCount : maks[0].enableCount+1;" ng-show="maks[0].branch.length > 1" ng-disabled="branchObj.isCheckedout" ng-model="branchObj.isBranchSelected" ng-change="divergenceWarning(maks[0],branchObj)" class="spacingTwo branchCheck" aria-label="{{branchObj.targetSystem}}" style="text-align:left;"> -->
+                                                   <!-- </md-checkbox> -->
+                                                </div>
+                                                <div class="col-md-7  padding-none ">
+                                                   {{branchObj.targetSystem | systemFilter}}
+                                                </div>
+                                             </div>
+                                          </div>
+                                          <div class="col-md-2 textCenter leftBorderSplit"
+                                             ng-if="branchObj.isCheckedout" style="outline:0px;">
+                                             {{branchObj.funcArea}}
+                                          </div>
+                                          <div class="col-md-2 textCenter leftBorderSplit"
+                                             ng-if="!branchObj.isCheckedout"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             style="outline:0px;">
+                                             {{branchObj.funcArea}}
+                                          </div>
+                                          <div class="col-md-2 textCenter "
+                                             style="outline:none; padding-left:30px; text-transform: uppercase;"
+                                             ng-if="maks[0].prodFlag == 'PROD' || maks[0].prodFlag == 'LEGACY'">
+                                             <label>{{branchObj.refPlan}}</label>
+                                          </div>
+                                          <div class="col-md-2 textCenter "
+                                             style="outline:none; padding-left:30px;text-transform: uppercase;"
+                                             ng-if="maks[0].prodFlag == 'NONPROD'">
+                                             <label>{{maks[0].additionalInfo.planId}}</label>
+                                          </div>
+                                          <div class="col-md-2 textCenter " ng-if="branchObj.isCheckedout"
+                                             style="outline: 0px; text-align: center; padding-right: 0px; padding-left:30px;">
+                                             <!-- <span ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</span> -->
+                                             <!-- <label plan-status-to-display-label="{{branchObj.refStatus | uppercase}}" ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0" class="spacingTwo"></label> -->
+                                             <span ng-if="maks[0].prodFlag === 'PROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'NONPROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{maks[0].additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'LEGACY'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                          <div class="col-md-2 textCenter " ng-if="!branchObj.isCheckedout"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             style="outline: 0px;  padding-right: 0px;padding-left:30px;">
+                                             <!-- <label ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</label> -->
+                                             <!-- <label plan-status-to-display-label="{{branchObj.refStatus | uppercase}}" ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0" class="spacingTwo"></label> -->
+                                             <span ng-if="maks[0].prodFlag === 'PROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'NONPROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{maks[0].additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'LEGACY'">
+                                                <label plan-status-to-display-label="{{bObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                          <div class="col-md-3 textCenter " ng-if="branchObj.isCheckedout"
+                                             style="outline:0px;">
+                                             {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                          </div>
+                                          <div class="col-md-3 textCenter"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             ng-if="!branchObj.isCheckedout" style="outline:0px;">
+                                             {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                          </div>
+                                       </div>
+                                    </div>
+                                 </li>
+                              </div>
+                           </div>
+                        </ul>
+                     </div>
+                     <p ng-if="segmentsList.length==0 && !vm.showMakCheckoutLoading1"
+                        style="text-align:center;padding:50px 0px;color:#aaa;">
+                        No segments selected!
+                     </p>
+                     <div class="pull-left makCheckoutSegmentsLoop1"
+                        style="font-size:12px;padding: 5px;width: 100%;background: #3695b8;color: white;">
+                        <div class="row">
+                           <div class="col-md-6">
+                              <span class="pull-left">
+                                 Total:
+                                 <b>{{makFileLength}} segments</b>
+                              </span>
+                           </div>
+                           <div class="col-md-6"
+                              ng-if="(productionMetaData.selectedMakSegmentCount > 0 || nonProductionMetaData.selectedMakSegmentCount > 0 || legacyMetaData.selectedMakSegmentCount > 0)">
+                              <span class="pull-right">
+                                 Selected:
+                                 <b>{{productionMetaData.selectedMakSegmentCount + nonProductionMetaData.selectedMakSegmentCount + legacyMetaData.selectedMakSegmentCount}}
+                                    segments</b>
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <div class="makCheckoutSegmentsLoop2" style="display:none;padding:10px;">
+               <div ng-show="vm.showMakCheckoutLoading2" style="text-align:center;padding:50px 0px;color:#aaa;">
+                  <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+               </div>
+               <div ng-show="!vm.showMakCheckoutLoading2">
+                  <ul class="nav nav-tabs chkoutTabs prodFlagTabs" style="border: 0px;background: #dbe6ed;">
+                     <li class="active" flag="COMMON" style="margin-left: 20px;">
+                        <a data-target="#common" data-toggle="tab">Prod/Non-Prod/Legacy
+                           <span style="font-size:12px;">({{makFileLength}})</span>
+                        </a>
+                     </li>
+                  </ul>
+                  <div class="row" style="margin-left: 10px;margin-right: 10px;padding:10px;">
+                     <ul class="nav header flex pnpTableHeader" infinite-scroll="loadMore()"
+                        infinite-scroll-distance="2" infinite-scroll-parent="true">
+                        <li class="col-md-2 textCenter">Segment Names
+                        </li>
+                        <li class="col-md-1 textCenter">Access
+                        </li>
+                        <li class="col-md-2 textCenter">Target Systems
+                        </li>
+                        <li class="col-md-2 textCenter">Functional Area
+                        </li>
+                        <li class="col-md-2 textCenter" style="margin-left: -20px;">Impl Plan
+                        </li>
+                        <li class="col-md-1 textCenter">Status</li>
+                        <!-- <li class="col-md-2">Status</li> -->
+                        <li class="col-md-2 textCenter">Load Date/Time
+                        </li>
+                     </ul>
+                     <div class="modalProgramListing" ng-if='segmentsList.length!=0'>
+                        <ul class="nav "
+                           style="width:100%;border-bottom: 1px solid #eee;padding:5px;padding-bottom: 0px;padding-top: 0px;"
+                           ng-repeat="segments in segmentsList">
+                           <div ng-if="segments.associatedMakFiles" ng-repeat="mak in segments.associatedMakFiles">
+                              <div ng-repeat="maks in mak"
+                                 class="col-md-12 centerItems {{(maks[0].enableCount === 0 || maks[0].repoAccess == 'R') ? 'disabled' : ''}}"
+                                 ng-class="maks[0].prodFlag == 'PROD' ? 'class_PROD_{{maks[0].fileNameWithHash}}' : (maks[0].prodFlag == 'NONPROD' ? 'class_NONPROD_{{maks[0].fileNameWithHash}}_{{maks[0].additionalInfo.planId}}' : 'class_PENDING_{{maks[0].fileNameWithHash}}')">
+                                 <div class="col-md-2 textCenter word-wrap"
+                                    ng-if="maks[0].prodFlag == 'PROD' || maks[0].prodFlag == 'LEGACY'">
+                                    <li class="" style="font-weight:bold;outline:0px;" ng-if="maks[0].enableCount > 0"
+                                       data-ng-click="selectMakSegmentPNP(maks[0])">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                    <li class="" style="font-weight:bold;outline:0px;"
+                                       ng-if="maks[0].enableCount === 0  || maks[0].repoAccess == 'R'">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                 </div>
+                                 <div class="col-md-2 textCenter word-wrap" ng-if="maks[0].prodFlag == 'NONPROD' ">
+                                    <li style="font-weight:bold;outline:0px;" ng-if="maks[0].enableCount > 0"
+                                       data-ng-click="selectMakSegmentNonProd(maks[0]) || checkoutPlanShowPopup(maks[0]) ">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                    <li class="" style="font-weight:bold;outline:0px;"
+                                       ng-if="maks[0].enableCount === 0  || maks[0].repoAccess == 'R'">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                 </div>
+                                 <li class="col-md-1 textCenter">
+                                    <label class="label label-warning">{{maks[0].repoAccess}}</label>
+                                 </li>
+                                 <li class="col-md-9">
+                                    <div data-ng-repeat="branchObj in maks[0].branch">
+                                       <div class="row flex pnpGrouping {{branchObj.isCheckedout ? 'disabled' : ''}}">
+                                          <div class="col-md-3 textCenter leftBorderSplit">
+                                             <div class="row">
+                                                <div class="col-md-3"></div>
+                                                <div class="col-md-2 padding-none">
+                                                   <!-- <md-checkbox ng-if="branchObj.isCheckoutAllowed" ng-init="maks[0].enableCount = (branchObj.isCheckedout || maks[0].repoAccess == 'R') ? maks[0].enableCount : maks[0].enableCount+1;" ng-show="maks[0].branch.length > 1" ng-disabled="branchObj.isCheckedout" ng-model="branchObj.isBranchSelected" ng-change="divergenceWarning(maks[0],branchObj)" class="spacingTwo branchCheck" aria-label="{{branchObj.targetSystem}}" style="text-align:left;"> -->
+                                                   <!-- </md-checkbox> -->
+                                                </div>
+                                                <div class="col-md-7  padding-none ">
+                                                   {{branchObj.targetSystem | systemFilter}}
+                                                </div>
+                                             </div>
+                                          </div>
+                                          <div class="col-md-2 textCenter leftBorderSplit"
+                                             ng-if="branchObj.isCheckedout" style="outline:0px;">
+                                             {{branchObj.funcArea}}
+                                          </div>
+                                          <div class="col-md-2 textCenter leftBorderSplit"
+                                             ng-if="!branchObj.isCheckedout"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             style="outline:0px;">
+                                             {{branchObj.funcArea}}
+                                          </div>
+                                          <div class="col-md-2 textCenter "
+                                             style="outline:none; padding-left:30px; text-transform: uppercase;"
+                                             ng-if="maks[0].prodFlag == 'PROD' || maks[0].prodFlag == 'LEGACY'">
+                                             <label>{{branchObj.refPlan}}</label>
+                                          </div>
+                                          <div class="col-md-2 textCenter "
+                                             style="outline:none; padding-left:30px;text-transform: uppercase;"
+                                             ng-if="maks[0].prodFlag == 'NONPROD'">
+                                             <label>{{maks[0].additionalInfo.planId}}</label>
+                                          </div>
+                                          <div class="col-md-2 textCenter " ng-if="branchObj.isCheckedout"
+                                             style="outline: 0px; text-align: center; padding-right: 0px; padding-left:30px;">
+                                             <!-- <span ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</span> -->
+                                             <!-- <label plan-status-to-display-label="{{branchObj.refStatus | uppercase}}" ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0" class="spacingTwo"></label> -->
+                                             <span ng-if="maks[0].prodFlag === 'PROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'NONPROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{maks[0].additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'LEGACY'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                          <div class="col-md-2 textCenter " ng-if="!branchObj.isCheckedout"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             style="outline: 0px;  padding-right: 0px;padding-left:30px;">
+                                             <!-- <label ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</label> -->
+                                             <!-- <label plan-status-to-display-label="{{branchObj.refStatus | uppercase}}" ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0" class="spacingTwo"></label> -->
+                                             <span ng-if="maks[0].prodFlag === 'PROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'NONPROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{maks[0].additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'LEGACY'">
+                                                <label plan-status-to-display-label="{{bObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                          <div class="col-md-3 textCenter " ng-if="branchObj.isCheckedout"
+                                             style="outline:0px;">
+                                             {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                          </div>
+                                          <div class="col-md-3 textCenter"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             ng-if="!branchObj.isCheckedout" style="outline:0px;">
+                                             {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}}
+                                          </div>
+                                       </div>
+                                    </div>
+                                 </li>
+                              </div>
+                           </div>
+                        </ul>
+                     </div>
+                     <p ng-if="segmentsList.length==0 && !vm.showMakCheckoutLoading2"
+                        style="text-align:center;padding:50px 0px;color:#aaa;">
+                        No segments selected!
+                     </p>
+                     <div class="pull-left makCheckoutSegmentsLoop2"
+                        style="font-size:12px;padding: 5px;width: 100%;background: #3695b8;color: white;">
+                        <div class="row">
+                           <div class="col-md-6">
+                              <span class="pull-left">
+                                 Total:
+                                 <b>{{makFileLength}} segments</b>
+                              </span>
+                           </div>
+                           <div class="col-md-6"
+                              ng-if="(productionMetaData.selectedMakSegmentCount > 0 || nonProductionMetaData.selectedMakSegmentCount > 0 || legacyMetaData.selectedMakSegmentCount > 0)">
+                              <span class="pull-right">
+                                 Selected:
+                                 <b>{{productionMetaData.selectedMakSegmentCount + nonProductionMetaData.selectedMakSegmentCount + legacyMetaData.selectedMakSegmentCount}}
+                                    segments</b>
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+
+
+            <!-- mak file checkout loop -->
+
+            <!--Summary Screen-->
+            <div class="checkoutSegments" style="display:none;padding:10px;">
+               <div ng-show="vm.showCheckoutMakLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                  <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+               </div>
+               <div ng-show="!vm.showCheckoutMakLoading">
+                  <!-- <div class="row" ng-if="vm.showMakInfo"> -->
+                  <!-- <div class="col-md-12 word-wrap" style="color:blue; text-align: left;"><b>Few of the -->
+                  <!-- components below have associated .mak files in secured implementation plans. Please -->
+                  <!-- select the implementation plans from where the .mak file needs to be checked out. If -->
+                  <!-- none of the secured implementation plans are selected, the production .mak will be -->
+                  <!-- checked out.</b> -->
+                  <!-- </div> -->
+                  <!-- </div> -->
+                  <!-- <br> -->
+                  <div class="row" style="margin-left: 10px;margin-right: 10px;">
+                     <ul class="nav header pnpTableHeader">
+                        <li class="col-md-3 textCenter">Segment Name</li>
+                        <li class="col-md-2 textCenter">Prod/Non-Prod/Legacy
+                        <li class="col-md-3 textCenter">Target Systems</li>
+                        <li class="col-md-3 textCenter">Status</li>
+                        <!--<li class="col-md-3">Tag</li>-->
+                        <li class="col-md-1 textCenter" ng-show="vm.userAccess">Delete</li>
+                     </ul>
+                     <div class="modalProgramListing" ng-if='segmentsList.length!=0'>
+                        <ul class="nav centerItems"
+                           style="width:100%;border-bottom: 1px solid #eee;paddssing:5px;padding-bottom: 0px;padding-top: 0px;"
+                           ng-repeat="segment in segmentsList">
+                           <li class="col-md-12"
+                              style="display:flex;justify-content: center;align-items: center;flex-direction: column">
+                              <div class="col-md-12" style="display:flex;justify-content: center;align-items: center;">
+                                 <div class="col-md-3 textCenter boldLi word-wrap" style="align-items: center;">
+                                    {{segment.fileName}}
+                                 </div>
+                                 <div class="col-md-2 textCenter boldLi" style="align-items: center;">
+                                    <span ng-if="segment.prodFlag === 'PROD' ">PROD</span>
+                                    <span ng-if="segment.prodFlag === 'NONPROD'">NONPROD</span>
+                                    <span ng-if="segment.prodFlag === 'LEGACY'">LEGACY</span>
+                                    <!-- <span ng-if=" !checkNonProd(segment)">LEGACY</span> -->
+                                 </div>
+                                 <div class="col-md-6 textCenter rightBorderSplit" style="align-items: center;">
+                                    <div data-ng-repeat="bObj in segment.branch">
+                                       <div class="row {{segment.branch.length > 1 ? 'pnpGrouping' : ''}}">
+                                          <div class="col-md-6 textCenter leftBorderSplit">
+                                             {{bObj.targetSystem | systemFilter}}
+                                          </div>
+                                          <div class="col-md-6 textCenter leftBorderSplit">
+                                             <span ng-if="segment.prodFlag === 'PROD'">
+                                                <label plan-status-to-display-label="{{bObj.refStatus | uppercase}}"
+                                                   ng-if="bObj.refStatus != null && bObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="segment.prodFlag === 'NONPROD'">
+                                                <label
+                                                   style="margin-bottom: 0px">{{segment.additionalInfo.planId}}</label><br>
+                                                <label
+                                                   plan-status-to-display-label="{{segment.additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="bObj.refStatus != null && bObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="segment.prodFlag === 'LEGACY'">
+                                                <label plan-status-to-display-label="{{bObj.refStatus | uppercase}}"
+                                                   ng-if="bObj.refStatus != null && bObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                       </div>
+                                    </div>
+                                 </div>
+                                 <div class="col-md-1 textCenter" ng-show="vm.userAccess" style="align-items: center;">
+                                    <label data-ng-click="removeSegment(segment)">
+                                       <i class="fa fa-trash"></i>
+                                    </label>
+                                 </div>
+                              </div>
+                              <div class="col-md-12" style="align-items: center;">
+                                 <div class="col-md-12" style="align-items: center;"
+                                    ng-if="segment.associatedMakFiles && segment.associatedMakFiles.length>0"
+                                    ng-repeat="mak in segment.associatedMakFiles">
+                                    <!-- <div> -->
+                                    <div class="col-md-3 textCenter boldLi word-wrap">
+                                       <!-- <md-checkbox ng-model="vm.makFileCheck[segment.fileNameWithHash][mak.fileNameWithHash]" -->
+                                       <!-- id="check_{{mak.fileNameWithHash}}" -->
+                                       <!-- ng-change="updateMak(mak, segment, vm.makFileCheck[segment.fileNameWithHash][mak.fileNameWithHash], vm.makFileCheck[segment.fileNameWithHash])" -->
+                                       <!-- class="margin-none checkoutarea" aria-label="selectMak"> -->
+                                       <!-- </md-checkbox> -->
+                                       {{mak.fileName}}
+                                    </div>
+                                    <div class="col-md-2 textCenter boldLi word-wrap">
+                                       <span ng-if="mak.prodFlag === 'PROD' ">PROD</span>
+                                       <span ng-if="mak.prodFlag === 'NONPROD'">NONPROD</span>
+                                       <span ng-if="mak.prodFlag === 'LEGACY'">LEGACY</span>
+                                    </div>
+                                    <div class="col-md-6 textCenter rightBorderSplit">
+                                       <div data-ng-repeat="bObj in mak.branch">
+                                          <div class="row {{mak.branch.length > 1 ? 'pnpGrouping' : ''}}">
+                                             <div class="col-md-6 textCenter leftBorderSplit word-wrap"
+                                                ng-if="mak.prodFlag === 'PROD'">
+                                                {{bObj.targetSystem | systemFilter}} <br>
+                                             </div>
+                                             <div class="col-md-6 textCenter leftBorderSplit word-wrap"
+                                                ng-if="mak.prodFlag === 'NONPROD'">
+                                                {{bObj.targetSystem | systemFilter}} <br>
+                                                {{bObj.loadDate | formattedDateTimeWithoutSeconds}}
+                                             </div>
+                                             <div class="col-md-6 textCenter leftBorderSplit word-wrap"
+                                                ng-if="mak.prodFlag === 'LEGACY'">
+                                                {{bObj.targetSystem | systemFilter}} <br>
+                                             </div>
+                                             <div class="col-md-6 textCenter leftBorderSplit word-wrap">
+                                                <span ng-if="mak.prodFlag === 'PROD'">
+                                                   <label plan-status-to-display-label="{{bObj.refStatus | uppercase}}"
+                                                      ng-if="bObj.refStatus != null && bObj.refStatus.indexOf('Online-') < 0"
+                                                      class="spacingTwo"></label>
+                                                </span>
+                                                <span ng-if="mak.prodFlag === 'NONPROD'">
+                                                   <label
+                                                      style="margin-bottom: 0px">{{mak.additionalInfo.planId}}</label><br>
+                                                   <label
+                                                      plan-status-to-display-label="{{mak.additionalInfo.planStatus | uppercase}}"
+                                                      ng-if="bObj.refStatus != null && bObj.refStatus.indexOf('Online-') < 0"
+                                                      class="spacingTwo"></label>
+                                                   </label>
+                                                </span>
+                                                <span ng-if="mak.prodFlag === 'LEGACY'">
+                                                   <label plan-status-to-display-label="{{bObj.refStatus | uppercase}}"
+                                                      ng-if="bObj.refStatus != null && bObj.refStatus.indexOf('Online-') < 0"
+                                                      class="spacingTwo"></label>
+                                                </span>
+                                             </div>
+                                          </div>
+                                       </div>
+                                    </div>
+                                    <div class="col-md-1 textCenter word-wrap">
+                                    </div>
+                                 </div>
+                              </div>
+                           </li>
+                        </ul>
+                     </div>
+                     <p ng-if="segmentsList.length==0" style="text-align:center;padding:50px 0px;color:#aaa;">
+                        No segments selected!
+                     </p>
+                  </div>
+               </div>
+            </div>
+            <!-- Summary screen ends -->
+            <!--Report Screen-->
+            <div style="padding:10px;" class="checkoutReportTemplate">
+               <div class="row" style="margin-left: 10px;margin-right: 10px;">
+                  <ul class="nav header pnpTableHeader">
+                     <li class="col-md-3 textCenter">Segment Name</li>
+                     <li class="col-md-2 textCenter">Prod/Non-Prod/Legacy
+                     <li class="col-md-3 textCenter">Target Systems</li>
+                     <li class="col-md-4 textCenter">Status</li>
+                  </ul>
+                  <div class="modalProgramListing">
+                     <ul class="nav centerItems"
+                        style="width:100%;border-bottom: 1px solid #eee;padding:5px;padding-bottom: 0px;padding-top: 0px;"
+                        ng-repeat="segment in vm.checkoutStatusList">
+                        <li class="col-md-3 textCenter boldLi word-wrap">
+                           {{segment.fileName}}
+                        </li>
+                        <li class="col-md-2 textCenter boldLi">
+                           <span ng-if="segment.prodFlag === 'PROD' && !checkLegacy(segment)">PROD</span>
+                           <span ng-if="segment.prodFlag === 'NONPROD' && !checkLegacy(segment)">NONPROD</span>
+                           <!-- <span ng-if="segment.prodFlag === 'PENDING'">LEGACY</span> -->
+                           <span ng-if="segment.prodFlag === 'LEGACY'">LEGACY</span>
+                        </li>
+                        <li class="col-md-7 textCenter">
+                           <div data-ng-repeat="bObj in segment.branch" class="boldLi">
+                              <div class="row {{segment.branch.length > 1 ? 'pnpGrouping' : ''}}"
+                                 ng-show="bObj.isBranchSelected">
+                                 <div class="col-md-6 textCenter leftBorderSplit" ng-show="bObj.isCheckedout"
+                                    style="background:#A5D6A7">
+                                    {{bObj.targetSystem | systemFilter}}
+                                 </div>
+                                 <div class="col-md-6 textCenter leftBorderSplit" ng-show="!bObj.isCheckedout"
+                                    style="background:#EF9A9A">
+                                    {{bObj.targetSystem | systemFilter}}
+                                 </div>
+                                 <div class="col-md-6 textCenter leftBorderSplit">
+                                    <span ng-if="bObj.isCheckedout" style="color: green;">
+                                       <i class="fa fa-check"></i>
+                                    </span> &nbsp;
+                                    <span ng-if="!bObj.isCheckedout" style="color: red;">
+                                       <i class="fa fa-times"></i>
+                                    </span>
+                                    <span ng-if="bObj.status === 'W'" style="color: #bbb;">
+                                       .mak not found
+                                       <br />
+                                       <span ng-if="(segment.fileName.length - segment.fileName.indexOf('.c')) == 2">
+                                          create a new .mak file or associate it with an existing .mak
+                                          file
+                                       </span>
+                                    </span>
+                                    <span ng-if="bObj.status === 'A'" style="color: #bbb;">
+                                       Already checked out
+                                    </span>
+                                    <span ng-if="!bObj.isCheckedout && bObj.status != 'A' && bObj.status != 'W'"
+                                       style="color: #bbb;">
+                                       Failed
+                                    </span>
+                                    <span>
+                                       <a ng-if="!bObj.expanded" ng-click="bObj.expanded = true">View
+                                          Log</a>
+                                       <a ng-if="bObj.expanded" class="text-warning"
+                                          ng-click="bObj.expanded = false">Hide Log</a>
+                                    </span>
+                                 </div>
+                              </div>
+                              <div class="row logEffect" ng-if="bObj.expanded">
+                                 {{bObj.additionalInfo.checkoutLog}}
+                              </div>
+                           </div>
+                        </li>
+                     </ul>
+                  </div>
+               </div>
+            </div>
+
+            <!-- IBM Mak checkout screen -->
+            <div class="populateMakCheckoutSegments" style="display:none;padding:10px;">
+               <div ng-show="vm.showMakCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                  <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+               </div>
+               <div ng-show="!vm.showMakCheckoutLoading">
+                  <ul class="nav nav-tabs chkoutTabs prodFlagTabs" style="border: 0px;background: #dbe6ed;">
+                     <li class="active" flag="COMMON" style="margin-left: 20px;">
+                        <a data-target="#common" data-toggle="tab">IBM Vanilla Files
+                           <span style="font-size:12px;">({{makFileLength}})</span>
+                        </a>
+                     </li>
+                  </ul>
+                  <div class="row" style="margin-left: 10px;margin-right: 10px;padding:10px;">
+                     <ul class="nav header flex pnpTableHeader" infinite-scroll="loadMore()"
+                        infinite-scroll-distance="2" infinite-scroll-parent="true">
+                        <li class="col-md-5 textCenter">Segment Names
+                        </li>
+                        <!-- <li class="col-md-1 textCenter">Access -->
+                        </li>
+                        <li class="col-md-3 textCenter">Target Systems
+                        </li>
+                        <!-- <li class="col-md-2 textCenter">Functional AreaQQ -->
+                        <!-- </li> -->
+                        <!-- <li class="col-md-2 textCenter" style="margin-left: -20px;">Impl Plan -->
+                        <!-- </li> -->
+                        <li class="col-md-4 textCenter">Status</li>
+                        <!-- <li class="col-md-2">Status</li> -->
+                        <!-- <li class="col-md-2 textCenter">Load Date/Time -->
+                        <!-- </li> -->
+                     </ul>
+                     <div class="modalProgramListing" ng-if='vm.segmentsToPopulate.length!=0'>
+                        <ul class="nav "
+                           style="width:100%;border-bottom: 1px solid #eee;padding:5px;padding-bottom: 0px;padding-top: 0px;"
+                           ng-repeat="segment in vm.segmentsToPopulate">
+                           <div ng-if="segment.associatedMakFiles " ng-repeat="mak in segment.associatedMakFiles">
+                              <div ng-repeat="maks in mak"
+                                 class="col-md-12 centerItems {{(maks[0].enableCount === 0 || maks[0].repoAccess == 'R') ? 'disabled' : ''}}"
+                                 ng-class="maks[0].prodFlag == 'PROD' ? 'class_PROD_{{maks[0].fileNameWithHash}}' : (maks[0].prodFlag == 'NONPROD' ? 'class_NONPROD_{{maks[0].fileNameWithHash}}_{{maks[0].additionalInfo.planId}}' : 'class_PENDING_{{maks[0].fileNameWithHash}}')">
+                                 <div class="col-md-5 textCenter word-wrap"
+                                    ng-if="maks[0].prodFlag == 'PROD' || maks[0].prodFlag == 'LEGACY'">
+                                    <li class="" style="font-weight:bold;outline:0px;" ng-if="maks[0].enableCount > 0 || maks[0].repoAccess != 'R'"
+                                       data-ng-click="selectMakSegmentPNP(maks[0])">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                    <li class="" style="font-weight:bold;outline:0px;"
+                                       ng-if="maks[0].enableCount === 0  || maks[0].repoAccess == 'R'">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                 </div>
+                                 <div class="col-md-5 textCenter word-wrap" ng-if="maks[0].prodFlag == 'NONPROD' ">
+                                    <li style="font-weight:bold;outline:0px;" ng-if="maks[0].enableCount > 0 || maks[0].repoAccess != 'R'"
+                                       data-ng-click="selectMakSegmentNonProd(maks[0]) || checkoutPlanShowPopup(maks[0]) ">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                    <li class="" style="font-weight:bold;outline:0px;"
+                                       ng-if="maks[0].enableCount === 0  || maks[0].repoAccess == 'R'">
+                                       {{maks[0].fileName}}
+                                    </li>
+                                 </div>
+                                 <!-- <li class="col-md-1 textCenter"> -->
+                                    <!-- <label class="label label-warning">{{maks[0].repoAccess}}</label> -->
+                                 <!-- </li> -->
+                                 <li class="col-md-7">
+                                    <div class="col-md-12" data-ng-repeat="branchObj in maks[0].branch">
+                                       <div class="row flex pnpGrouping {{branchObj.isCheckedout ? 'disabled' : ''}}">
+                                          <div class="col-md-6 textCenter leftBorderSplit">
+                                             <div class="row">
+                                                <div class="col-md-12  padding-none ">
+                                                   {{branchObj.targetSystem | systemFilter}}
+                                                </div>
+                                             </div>
+                                          </div>
+                                          <!-- <div class="col-md-2 textCenter leftBorderSplit" -->
+                                             <!-- ng-if="branchObj.isCheckedout" style="outline:0px;"> -->
+                                             <!-- {{branchObj.funcArea}} -->
+                                          <!-- </div> -->
+                                          <!-- <div class="col-md-2 textCenter leftBorderSplit" -->
+                                             <!-- ng-if="!branchObj.isCheckedout" -->
+                                             <!-- data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])" -->
+                                             <!-- style="outline:0px;"> -->
+                                             <!-- {{branchObj.funcArea}} -->
+                                          <!-- </div> -->
+                                          <!-- <div class="col-md-2 textCenter " -->
+                                             <!-- style="outline:none; padding-left:30px; text-transform: uppercase;" -->
+                                             <!-- ng-if="maks[0].prodFlag == 'PROD' || maks[0].prodFlag == 'LEGACY'"> -->
+                                             <!-- <label>{{branchObj.refPlan}}</label> -->
+                                          <!-- </div> -->
+                                          <!-- <div class="col-md-2 textCenter " -->
+                                             <!-- style="outline:none; padding-left:30px;text-transform: uppercase;" -->
+                                             <!-- ng-if="maks[0].prodFlag == 'NONPROD'"> -->
+                                             <!-- <label>{{maks[0].additionalInfo.planId}}</label> -->
+                                          <!-- </div> -->
+                                          <div class="col-md-6 textCenter " ng-if="branchObj.isCheckedout"
+                                             style="outline: 0px; text-align: center; padding-right: 0px; padding-left:30px;">
+                                             <!-- <span ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</span> -->
+                                             <!-- <label plan-status-to-display-label="{{branchObj.refStatus | uppercase}}" ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0" class="spacingTwo"></label> -->
+                                             <span ng-if="maks[0].prodFlag === 'PROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'NONPROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{maks[0].additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'LEGACY'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                          <div class="col-md-6 textCenter " ng-if="!branchObj.isCheckedout"
+                                             data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])"
+                                             style="outline: 0px;  padding-right: 0px;padding-left:30px;">
+                                             <!-- <label ng-if="branchObj.refStatus.indexOf('Online-') >= 0" class="label label-warning">{{branchObj.refStatus}}</label> -->
+                                             <!-- <label plan-status-to-display-label="{{branchObj.refStatus | uppercase}}" ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0" class="spacingTwo"></label> -->
+                                             <span ng-if="maks[0].prodFlag === 'PROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'NONPROD'">
+                                                <label
+                                                   plan-status-to-display-label="{{maks[0].additionalInfo.planStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                                </label>
+                                             </span>
+                                             <span ng-if="maks[0].prodFlag === 'LEGACY'">
+                                                <label
+                                                   plan-status-to-display-label="{{branchObj.refStatus | uppercase}}"
+                                                   ng-if="branchObj.refStatus != null && branchObj.refStatus.indexOf('Online-') < 0"
+                                                   class="spacingTwo"></label>
+                                             </span>
+                                          </div>
+                                          <!-- <div class="col-md-3 textCenter " ng-if="branchObj.isCheckedout" -->
+                                             <!-- style="outline:0px;"> -->
+                                             <!-- {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}} -->
+                                          <!-- </div> -->
+                                          <!-- <div class="col-md-3 textCenter" -->
+                                             <!-- data-ng-click="maks[0].enableCount > 0 && selectMakSegmentPNP(maks[0])" -->
+                                             <!-- ng-if="!branchObj.isCheckedout" style="outline:0px;"> -->
+                                             <!-- {{branchObj.refLoadDate | formattedDateTimeWithoutSeconds}} -->
+                                          <!-- </div> -->
+                                       </div>
+                                    </div>
+                                 </li>
+                              </div>
+                           </div>
+                        </ul>
+                     </div>
+                     <p ng-if="vm.segmentsToPopulate.length==0 && !vm.showMakCheckoutLoading"
+                        style="text-align:center;padding:50px 0px;color:#aaa;">
+                        No segments selected!
+                     </p>
+                  </div>
+               </div>
+            </div>
+
+            <!-- IBM Mak checkout screen ends -->
+
+            <!-- populate Summary Report screen -->
+            <div class="populateSummaryReport" style="display:none;padding:10px;">
+               <div ng-show="vm.showMakCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                  <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+               </div>
+               <div ng-show="!vm.showMakCheckoutLoading">
+                  <!-- <div class="row" ng-if="vm.showMakInfo"> -->
+                  <!-- <div class="col-md-12 word-wrap" style="color:blue; text-align: left;"><b>Few of the -->
+                  <!-- components below have associated .mak files in secured implementation plans. Please -->
+                  <!-- select the implementation plans from where the .mak file needs to be checked out. If -->
+                  <!-- none of the secured implementation plans are selected, the production .mak will be -->
+                  <!-- checked out.</b> -->
+                  <!-- </div> -->
+                  <!-- </div> -->
+                  <!-- <br> -->
+                  <div class="row" style="margin-left: 10px;margin-right: 10px;">
+                     <ul class="nav header pnpTableHeader">
+                        <li class="col-md-6 textCenter">Segment Name</li>
+                        <li class="col-md-5 textCenter">Target Systems</li>
+                        <li class="col-md-1 textCenter" ng-show="vm.userAccess">Delete</li>
+                     </ul>
+                     <div class="modalProgramListing" ng-if='vm.segmentsToPopulate.length!=0'>
+                        <ul class="nav centerItems"
+                           style="width:100%;border-bottom: 1px solid #eee;paddssing:5px;padding-bottom: 0px;padding-top: 0px;"
+                           ng-repeat="segment in vm.segmentsToPopulate">
+                           <li class="col-md-12"
+                              style="display:flex;justify-content: center;align-items: center;flex-direction: column">
+                              <div class="col-md-12" style="display:flex;justify-content: center;align-items: center;">
+                                 <div class="col-md-6 textCenter boldLi word-wrap" style="align-items: center;">
+                                    {{segment[0].fileName}}
+                                 </div>
+
+                                 <div class="col-md-5 textCenter rightBorderSplit" style="align-items: center;">
+                                    <div data-ng-repeat="bObj in segment[0].branch" class="col-md-12">
+                                       <div class="row {{segment[0].branch.length > 1 ? 'pnpGrouping' : ''}}">
+                                          <div class="col-md-12 textCenter leftBorderSplit">
+                                             {{bObj.targetSystem | systemFilter}}
+                                          </div>
+                                       </div>
+                                    </div>
+                                 </div>
+                                 <div class="col-md-1 textCenter" ng-show="vm.userAccess" style="align-items: center;">
+                                    <label data-ng-click="removeSegmentIBM(segment[0])">
+                                       <i class="fa fa-trash"></i>
+                                    </label>
+                                 </div>
+                              </div>
+                              <div class="col-md-12" style="align-items: center;">
+                                 <div class="col-md-12" style="align-items: center;"
+                                    ng-if="segment[0].associatedMakFiles && segment[0].associatedMakFiles.length>0"
+                                    ng-repeat="mak in segment[0].associatedMakFiles">
+                                    <!-- <div> -->
+                                    <div class="col-md-6 textCenter boldLi word-wrap">
+                                       <!-- <md-checkbox ng-model="vm.makFileCheck[segment.fileNameWithHash][mak.fileNameWithHash]" -->
+                                       <!-- id="check_{{mak.fileNameWithHash}}" -->
+                                       <!-- ng-change="updateMak(mak, segment, vm.makFileCheck[segment.fileNameWithHash][mak.fileNameWithHash], vm.makFileCheck[segment.fileNameWithHash])" -->
+                                       <!-- class="margin-none checkoutarea" aria-label="selectMak"> -->
+                                       <!-- </md-checkbox> -->
+                                       {{mak.fileName}}
+                                    </div>
+                                    <div class="col-md-6 textCenter rightBorderSplit">
+                                       <div data-ng-repeat="bObj in mak.branch" class="col-md-12">
+                                          <div class="row {{mak.branch.length > 1 ? 'pnpGrouping' : ''}}">
+                                             <div class="col-md-12 textCenter leftBorderSplit word-wrap">
+                                                {{bObj.targetSystem | systemFilter}} <br>
+                                             </div>
+                                          </div>
+                                       </div>
+                                    </div>
+                                    <div class="col-md-1 textCenter word-wrap">
+                                    </div>
+                                 </div>
+                              </div>
+                           </li>
+                        </ul>
+                     </div>
+                     <p ng-if="vm.segmentsToPopulate.length==0" style="text-align:center;padding:50px 0px;color:#aaa;">
+                        No segments selected!
+                     </p>
+                  </div>
+               </div>
+            </div>
+
+            <!-- populate Summary Report screen -->
+
+            <div style="padding:10px;" class="populateReportTemplate">
+				<div ng-show="vm.showMakCheckoutLoading" style="text-align:center;padding:50px 0px;color:#aaa;">
+                  <i class="fa fa-pulse fa-spinner fa-4x" style="color:#ccc;"></i>
+               </div>
+			   <div ng-show="!vm.showMakCheckoutLoading">
+				   <div class="row" style="margin-left: 10px;margin-right: 10px;">
+					  <ul class="nav header pnpTableHeader">
+						 <li class="col-md-6 textCenter">File Name</li>
+						 <li class="col-md-3 textCenter">Target Systems</li>
+						 <li class="col-md-3 textCenter">Status</li>
+					  </ul>
+					  <div class="modalProgramListing">
+						 <ul class="nav centerItems"
+							style="width:100%;border-bottom: 1px solid #eee;padding:5px;padding-bottom: 0px;padding-top: 0px;"
+							ng-repeat="segment in vm.populatedVanillaFileList">
+							<li class="col-md-6 textCenter boldLi word-wrap">
+							   {{segment.fileName}}
+							</li>
+							<li class="col-md-6">
+							   <div data-ng-repeat="bObj in segment.branch" class="boldLi">
+								  <div class="row {{segment.branch.length > 1 ? 'pnpGrouping' : ''}}">
+									 <div class="col-md-6 textCenter leftBorderSplit">
+										{{bObj.targetSystem | systemFilter}}
+									 </div>
+									 <div class="col-md-6 leftBorderSplit" style="text-align:left;">
+										<span ng-if="bObj.status === 'Y'" aria-label="{{bObj.status}}">
+										   <i class="fa fa-check" style="color: green;"></i> &nbsp; Success
+										</span>
+										<span ng-if="bObj.status === 'N'" aria-label="{{bObj.status}}">
+										   <i class="fa fa-times" style="color: red;"></i> &nbsp; Failed
+										</span>
+										<span ng-if="bObj.status === 'W'" aria-label="{{bObj.status}}">
+										   <i class="fa fa-warning" style="color: orange;"></i> &nbsp; Already
+										   Populated
+										</span>
+										<span ng-if="bObj.additionalInfo.isMakFound === 'W'"
+										   aria-label="{{bObj.isMakFound}}">
+										   <i class="fa fa-warning" style="color: #bbb;"></i> &nbsp; .mak not
+										   found
+										   <br />
+										   <span ng-if="(segment.fileName.length - segment.fileName.indexOf('.c')) == 2">
+											  create a new .mak file or associate it with an existing .mak
+											  file
+										   </span>
+										</span>
+									 </div>
+								  </div>
+							   </div>
+							</li>
+						 </ul>
+					  </div>
+				   </div>
+			   </div>
+            </div>
+            <div style="position: relative;top: 30%;display:none;" class="checkoutLoading">
+               <div style="height:150px;padding:30px;width:50%;margin: 0px auto;">
+                  <div style="position:relative;">
+                     <span class="text-white" style="position:absolute;top:200px;left:35%;font-size:1.2em;">
+                        <i class="fa fa-spinner fa-pulse"></i> Checkout In-Progress</span>
+                     <div class="text-white" style="width:50px;height:50px;float:left;margin-top:13px;">
+                        <i class="fa fa-folder-open fa-4x"></i>
+                        <span style="font-weight:bold;">GitRepo</span>
+                     </div>
+                     <div id="chkoutAnimate" class="aBox" style="width:50px;height:50px;float:left;margin-top:15px;">
+                        <i class="fa fa-file fa-4x text-white"></i>
+                     </div>
+                     <div class="text-white" style="width:50px;height:50px;float:right;margin-top:10px;">
+                        <i class="fa fa-folder fa-4x"></i>
+                        <span style="font-weight:bold;">Workspace</span>
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+         <div class="modal-footer modalfooter-mdalign small-screen-padding">
+            <a type="button" class="pull-left closeDialogButton" data-dismiss="modal" ng-click="closeCheckoutDialog()"
+               aria-label="Close" style="padding:8px;">
+               <span aria-hidden="true">
+                  <i class="fa fa-close"></i> Close</span>
+            </a>
+            <span ng-if="vm.imp.planId.macroHeader" style="font-weight:bold;color:red;padding-right:282px">Note:
+               This is a macro/header only plan and you will only be able to check out
+               .h/.mac/.inc/.cpy/.hpp</span>
+            <br>
+            <span ng-if="productionMetaData.metaData"
+               style="font-weight:bold;color:red;padding:35px">{{productionMetaData.metaData}}</span>
+            <span ng-if="ibmVanillaMetaData.metaData"
+               style="font-weight:bold;color:red;padding:35px">{{ibmVanillaMetaData.metaData}}</span>
+            <!-- <span ng-if="nonProductionMetaData.metaData" style="font-weight:bold;color:red;padding:35px">{{nonProductionMetaData.metaData}}</span> -->
+            <!-- <span ng-if="legacyMetaData.metaData" style="font-weight:bold;color:red;padding:35px">{{legacyMetaData.metaData}}</span> -->
+            <div class="btn-group pull-right">
+               <!--<button class="btn btn-warning themeButton"><i class="fa fa-close"></i> Close</button>-->
+               <button class="btn btn-primary themeButton chkSelected pnpTabs" data-ng-click="chooseSegment()"
+                  ng-disabled="(nonProductionMetaData.selectedSegmentCount + productionMetaData.selectedSegmentCount + legacyMetaData.selectedSegmentCount + productionMetaData.selectedMakSegmentCount + nonProductionMetaData.selectedMakSegmentCount + legacyMetaData.selectedMakSegmentCount) == 0">
+                  <i class="fa fa-check"></i> Selected Segments for Checkout
+                  <span
+                     ng-if="(nonProductionMetaData.selectedSegmentCount + productionMetaData.selectedSegmentCount + legacyMetaData.selectedSegmentCount + productionMetaData.selectedMakSegmentCount + nonProductionMetaData.selectedMakSegmentCount + legacyMetaData.selectedMakSegmentCount) >= 0">
+                     (<b>{{nonProductionMetaData.selectedSegmentCount + productionMetaData.selectedSegmentCount + legacyMetaData.selectedSegmentCount + productionMetaData.selectedMakSegmentCount + nonProductionMetaData.selectedMakSegmentCount + legacyMetaData.selectedMakSegmentCount}}</b>)</span>
+               </button>
+
+               <button class="btn btn-primary themeButton chkMakSelected pnpTabs" data-ng-click="chooseMakSegment()">
+                  <i class="fa fa-check"></i> Select Mak Segments for Checkout
+                  <!-- <span ng-if="(nonProductionMetaData.selectedMakSegmentCount + productionMetaData.selectedMakSegmentCount + legacyMetaData.selectedMakSegmentCount) >= 0"> -->
+                  <!-- (<b>{{nonProductionMetaData.selectedMakSegmentCount + productionMetaData.selectedMakSegmentCount + legacyMetaData.selectedMakSegmentCount}}</b>)</span> -->
+               </button>
+
+               <button class="btn btn-primary themeButton chooseSCMArea chooseSCMBtn" ng-click="chooseVanillaSCM()"
+                  style="display:none;" ng-disabled="vm.selectedVanillaSegments.length == 0">
+                  <i class="fa fa-forward"></i> &nbsp; Selected IBM Segments for Checkout
+               </button>{{}}
+               <button class="btn btn-primary themeButton populateChkMakSelected pnpTabs"
+                  data-ng-click="populateChooseMakSegment()" ng-disabled="vm.makFileLoading">
+                  <i class="fa fa-check"></i> Select Mak Segments for Checkout
+               </button>
+               <button class="btn btn-primary themeButton populateSCMArea populateSCMBtn"
+                  ng-click="populateVanillaSCM()" style="display:none;" ng-disabled="vm.makFileLoading">
+                  <i class="fa fa-forward"></i> &nbsp; Populate SCM and checkout
+               </button>
+
+               <a class="chkCheckout pull-left" data-ng-click="backToSelection()"
+                  style="display:none;padding: 8px;font-weight: bold;border: 1px solid;" aria-label="CheckOut_Back">
+                  <i class="fa fa-chevron-left"></i> Back
+               </a>
+               <button class="btn btn-success themeButton chkCheckout" ng-disabled="vm.showCheckoutMakLoading"
+                  aria-label="FinalCheckoutbutton" data-ng-click="checkoutShowPopup()" style="display:none;">
+                  <i class="fa fa-download"></i> Checkout
+                  <span ng-if="selectedSegmentCount >= 0">(
+                     <b>{{segmentsList.length}}</b>)</span>
+               </button>
+            </div>
+         </div>
+      </div>
+   </div>
+</div>
+<div id="warningModal" class="modal fade" style="z-index:9999;overflow:hidden;">
+   <div class="modal-dialog">
+      <div class="modal-content warningContent" style="width: 50%;margin: 50% auto;padding: 20px;background:#fff;">
+         <div class="warningModal-body">
+            <div class="row" style="text-align:center;">
+               <h4 class="warningModal-content">
+                  Segment :
+                  <b>
+                     <div class="word-wrap" id="warnFileName"></div>
+                  </b>
+                  <br /> System :
+                  <b>
+                     <span class="word-wrap" id="warnSystemName"></span>
+                  </b>
+                  <br />
+               </h4>
+               <h4>
+                  <span>Will be diverged...</span>
+               </h4>
+            </div>
+            <br />
+            <div class="row" style="text-align:center;">
+               <button type="button" class="btn btn-default themeDefaultButton warnCancel" data-dismiss="modal">
+                  Cancel
+               </button>
+               <button type="button" class="btn btn-primary themePrimaryButton warnProceed" data-dismiss="modal">
+                  Proceed
+               </button>
+            </div>
+         </div>
+      </div>
+   </div>
+</div>
+<div id="warningCheckoutPopup" class="modal fade" style="z-index:9999;overflow:hidden;">
+   <div class="modal-dialog">
+      <div class="modal-content warningContent" style="width: 70%;margin: 50% auto;padding: 20px;background:#fff;">
+         <div class="warningModal-body">
+            <div class="row" style="text-align:center;">
+               <h4>
+                  <span>{{vm.makFileErrorMsg}}</span>
+               </h4>
+            </div>
+            <br />
+            <div class="row" style="text-align:center;">
+               <button type="button" class="btn btn-default themeDefaultButton warnCheckoutYes" data-dismiss="modal">
+                  Yes
+               </button>
+               <button type="button" class="btn btn-primary themePrimaryButton warnCheckoutNo" data-dismiss="modal">
+                  No
+               </button>
+            </div>
+         </div>
+      </div>
+   </div>
+</div>
+<div id="warningDeactivateCheckoutPopup" class="modal fade" style="z-index:9999;overflow:hidden;">
+   <div class="modal-dialog">
+      <div class="modal-content warningContent" style="width: 70%;margin: 50% auto;padding: 20px;background:#fff;">
+         <div class="warningModal-body">
+            <div class="row" style="text-align:center;">
+               <h4>
+                  <span>{{vm.warningMessage}}</span>
+               </h4>
+            </div>
+            <br />
+            <div class="row" style="text-align:center;">
+               <button type="button" class="btn btn-default themeDefaultButton warnPlanCheckoutYes"
+                  data-dismiss="modal">
+                  Yes
+               </button>
+               <button type="button" class="btn btn-primary themePrimaryButton warnPlanCheckoutNo" data-dismiss="modal">
+                  No
+               </button>
+            </div>
+         </div>
+      </div>
+   </div>
+</div>
+<div id="categoryPModal" class="modal fade" style="z-index:9999;overflow:hidden;">
+   <div class="modal-dialog">
+      <div class="modal-content confirmContent" style="width: 80%;margin: 60% auto;padding: 20px;background:#fff;">
+         <div class="confirmModal-body">
+            <div class="row" style="text-align:center;">
+               <h4 class="confirmModal-content">
+                  Would like to check out selected segment from the Implementation Plan which is marked as
+                  <b>Planned Fallback?</b>
+                  <!-- Selected segment contains category <b>P</b>. <br/> Would you like to proceed ? -->
+               </h4>
+            </div>
+            <br />
+            <div class="row" style="text-align:center;">
+               <button type="button" class="btn btn-default themeDefaultButton confirmCancel" data-dismiss="modal">
+                  Cancel
+               </button>
+               <button type="button" class="btn btn-primary themePrimaryButton confirmProceed" data-dismiss="modal">
+                  Proceed
+               </button>
+            </div>
+         </div>
+      </div>
+   </div>
+</div>
+<div id="warningConfirmationModal" class="modal fade" style="z-index:9999;overflow:hidden;">
+   <div class="modal-dialog">
+      <div class="modal-content confirmContent" style="width: 80%;margin: 60% auto;padding: 20px;background:#fff;">
+         <div class="confirmModal-body">
+            <div class="row" style="text-align:center;">
+               <h4 class="confirmModal-content">
+                  Selected segment already checked out. Would you like to proceed anyway ?
+                  <!-- Selected segment contains category <b>P</b>. <br/> Would you like to proceed ? -->
+               </h4>
+            </div>
+            <br />
+            <div class="row" style="text-align:center;">
+               <button type="button" class="btn btn-default themeDefaultButton warnSelectionCancel"
+                  data-dismiss="modal">
+                  Cancel
+               </button>
+               <button type="button" class="btn btn-primary themePrimaryButton confirmSelectionsProceed"
+                  data-dismiss="modal">
+                  Proceed
+               </button>
+            </div>
+         </div>
+      </div>
+   </div>
+</div>

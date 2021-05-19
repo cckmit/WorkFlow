@@ -1,0 +1,26 @@
+<md-dialog aria-label="Reject" style="width:40%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2 style="color:#fff;">
+                    {{me.title}}
+                </h2>
+                <span flex></span>
+            </div>
+        </md-toolbar>
+        <md-dialog-content>
+            <div class="md-dialog-content">
+                <textarea ng-model="me.meReason" class="form-control" placeholder="Provide {{me.title}}" required></textarea>
+                <span ng-show="me.showMessageError" class="requiredField">*Required</span>
+            </div>
+        </md-dialog-content>
+        <md-dialog-actions layout="row">
+            <md-button ng-click="cancel()">
+                Cancel
+            </md-button>
+            <md-button class="md-primary" ng-click="proceed()">
+                {{me.btnProceed}}
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

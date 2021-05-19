@@ -1,0 +1,47 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"workbench.colorTheme": "Horizon",
+		"editor.fontSize": 12,
+		"files.trimFinalNewlines": true,
+		"files.trimTrailingWhitespace": true,
+		"terminal.integrated.shell.windows": "C:\\Program Files\\Git\\bin\\bash.exe",
+		"terminal.integrated.fontSize": 12,
+		"shellcheck.executablePath": "C:\\shellcheck\\shellcheck.exe",
+		"python.pythonPath": "C:\\Python\\Python37\\python.exe",
+		"[shellscript]": {
+			"editor.rulers": [
+				4,
+				39,
+				49,
+				59,
+				69,
+				79,
+				119
+			],
+		},
+		"[python]": {
+			"editor.rulers": [
+				4,
+				39,
+				49,
+				59,
+				69,
+				79,
+				119
+			],
+		},
+		"scm.alwaysShowActions": true,
+		"scm.alwaysShowProviders": true,
+		"git.ignoreLegacyWarning": true,
+		"git.autofetch": true,
+		"git.confirmSync": false,
+		"markdown.preview.fontSize": 12,
+		"workbench.statusBar.feedback.visible": false,
+		"files.eol": "\n"
+	}
+}

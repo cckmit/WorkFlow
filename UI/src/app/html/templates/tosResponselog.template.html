@@ -1,0 +1,49 @@
+<md-dialog aria-label="Tos Log" style="width: 60%;">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2 style="color:#fff;">
+                    TOS action status and response
+                </h2>
+                <span flex></span>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content " style="padding: 0px;">
+                <div class="divTableHeader flex textCenter">
+                    <div class="col-md-2">PlanId</div>
+                    <div class="col-md-2">System</div>
+                    <div class="col-md-2">Actions</div>
+                    <div class="col-md-2">Status</div>
+                    <div class="col-md-4">Tos Response</div>
+                </div>
+                <div class="flex textCenter  vpar-band {{($index%2)==0 ? 'vpar-band-odd' : 'vpar-band-even' }}"
+                    ng-repeat="jk1 in jk.logContent">
+                    <div class="col-md-2">{{jk1.planId}}</div>
+                    <div class="col-md-2">{{jk1.systemName}}</div>
+                    <div class="col-md-2">{{jk1.action}}</div>
+                    <div class="col-md-2">{{jk1.queueStatus}}</div>
+                    <div class="col-md-4">
+                        <span ng-if="jk1.tosResponseMessage !== '' ">
+                            {{jk1.tosResponseMessage}}
+                        </span>
+                        <span ng-if="jk1.tosResponseMessage === '' ">
+                            -
+                        </span>
+                    </div>
+                </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <md-button ng-click="cancel('useful')">
+                Close
+            </md-button>
+
+            <md-button ng-click="tosDataClear($event,jk.planInfo)">
+                Clear
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

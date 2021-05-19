@@ -1,0 +1,91 @@
+#!/bin/bash
+#shellcheck disable=SC2034,SC1117,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: logarch                                                      #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to perform the archive of applications log                      #
+#                                                                             #
+#   INSTRUCTIONS:                                                             #
+#       1. Install this script to /opt/logArchive path                        #
+#       2. Set permission 700 to /opt/logArchive/logarch                      #
+#       3. Setup crontab "10 0 * * * /opt/logArchive/logarch"                 #
+#                                                                             #
+#   INPUT:                                                                    #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   12262018    ARUL    Created the script                                    #
+#   02082019    VINOTH  ADDED 6 months tar back option                        #
+#*****************************************************************************#
+movelogDays=+3
+tarlogDays=+21
+delTarDays=+182
+timeStamp="$(date "+%Y%m%d%H%M%S")"
+threeWeekStamp="$(date "+%Y%m%d%H%M%S" -d 'now - 3 weeks')"
+logger "$(date "+%Y-%m-%d %H:%M:%S") [logArchive] - Scheduled log achive started"
+logPath=("/var/log" "/var/log/tomcat" "/var/log/workflow" "/var/log/httpd" "/var/log/raw" "/opt/tomcat2/logs")
+logPathTar=("/opt/logArchive1/log" "/opt/logArchive1/tomcat" "/opt/logArchive1/workflow" "/opt/logArchive1/httpd" "/opt/logArchive1/tomcat2")
+logArch="/opt/logArchive1"
+if [ -d "${logArch}" ]; then
+  logger "$(date "+%Y-%m-%d %H:%M:%S") [logArchive] - Scheduled log achive in-progress"
+  for lp in "${logPath[@]}"
+  do
+    if [ -d "${lp}" ]; then
+      if [[ "${lp}" =~ tomcat2 ]]; then
+        archPath="${logArch}/tomcat2"
+        mkdir -p "${archPath}"
+      else
+        archPath="${logArch}/${lp##*/}"
+        mkdir -p "${archPath}"
+      fi
+      find "${lp}" -maxdepth 1 -type f -mtime "${movelogDays}" -exec mv {} "${archPath}" \;
+    else
+      logger "$(date "+%Y-%m-%d %H:%M:%S") [logArchive] - Scheduled log archive skip to ${lp##*/} path"
+    fi
+  done
+  for tarBak in "${logPathTar[@]}"
+  do
+    if [ -d "${tarBak}" ]; then
+      oldlogVerify=$(find "${tarBak}" -maxdepth 1 -type f -mtime "${tarlogDays}")
+      if [ ! -z "${oldlogVerify[0]}" ]; then
+        archPathTar="${logArch}/zTPFlogbkup/zTPFlogbak_${threeWeekStamp}/${tarBak##*/}"
+        mkdir -p "${archPathTar}"
+        find "${tarBak}" -maxdepth 1 -type f -mtime "${tarlogDays}" -exec mv {} "${archPathTar}" \;
+      else
+        logger "$(date "+%Y-%m-%d %H:%M:%S") [logArchive] - Scheduled log archive skipped due to no before ${tarlogDays} logs available"
+      fi
+    else
+      logger "$(date "+%Y-%m-%d %H:%M:%S") [logArchive] - Scheduled log archive skip to ${tarBak##*/} path"
+    fi
+  done
+  if [ -d "${logArch}/zTPFlogbkup" ]; then
+    pushd "${logArch}/zTPFlogbkup" &> /dev/null
+      if [ -d "zTPFlogbak_${threeWeekStamp}" ]; then
+        tar cfz "zTPFlogbak_${threeWeekStamp}.tgz" "zTPFlogbak_${threeWeekStamp}"; RC=$?;
+        if [ ${RC} -eq 0 ]; then
+          rm "zTPFlogbak_${threeWeekStamp}" -rf;
+        fi
+      fi
+      oldLogarch=$(find "${logArch}/zTPFlogbkup" -maxdepth 1 -type f -mtime "${delTarDays}")
+      if [ ! -z "${oldLogarch[0]}" ]; then
+        logger "$(date "+%Y-%m-%d %H:%M:%S") [logArchive] - Old archive found clearing in progress"
+        find "${logArch}/zTPFlogbkup" -maxdepth 1 -type f -mtime "${delTarDays}" -exec rm -f {} \;
+      fi
+    popd &> /dev/nullu
+  fi
+else
+  logger "$(date "+%Y-%m-%d %H:%M:%S") [logArchive] - Scheduled log achive path not found"
+fi
+logger "$(date "+%Y-%m-%d %H:%M:%S") [logArchive] - Scheduled log achive completed"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash
+#-----------------------------------------------------------------------------#

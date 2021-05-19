@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:activiti="http://activiti.org/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" typeLanguage="http://www.w3.org/2001/XMLSchema" expressionLanguage="http://www.w3.org/1999/XPath" targetNamespace="http://www.activiti.org/test">
+    <process id="dlProcess" name="Developer Process" isExecutable="true">
+        <startEvent id="startevent1" name="Start"></startEvent>
+        <userTask id="checkoutSegments" name="Checkout Segments" activiti:formKey="checkoutSegmensts">
+            <extensionElements>
+                <activiti:formProperty id="implementationId" name="Implementation Id" type="string"></activiti:formProperty>
+                <activiti:formProperty id="stepImplementationFlag" name="Step Implementation Falg" type="string" required="true"></activiti:formProperty>
+            </extensionElements>
+        </userTask>
+        <dataObject id="devEmailId" name="devEmailId" itemSubjectRef="xsd:string"></dataObject>
+        <userTask id="usertask1" name="Unit Testing">
+            <extensionElements>
+                <activiti:formProperty id="implementationId" name="Implementation Id" type="string"></activiti:formProperty>
+                <activiti:formProperty id="stepFlag" name="Step Flag" type="string"></activiti:formProperty>
+            </extensionElements>
+        </userTask>
+        <sequenceFlow id="flow3" sourceRef="checkoutSegments" targetRef="usertask1"></sequenceFlow>
+        <endEvent id="endevent2" name="End"></endEvent>
+        <sequenceFlow id="flow4" sourceRef="usertask1" targetRef="endevent2"></sequenceFlow>
+        <serviceTask id="mailTask" name="Mail Task" activiti:type="mail">
+            <extensionElements>
+                <activiti:field name="html">
+                    <activiti:expression><![CDATA[<html>
+<body>
+<br/><br/>
+${adlName} has assigned you a new Implementation - <b>${implementationId} (${implementationDescription})</b> <br/><br/>
+
+This is a system generated mail. Please do not reply.
+</body>
+</html>]]></activiti:expression>
+                </activiti:field>
+                <activiti:field name="to">
+                    <activiti:expression><![CDATA[${devEmailId}]]></activiti:expression>
+                </activiti:field>
+                <activiti:field name="from">
+                    <activiti:string><![CDATA[workflow@dev-mtp.tpfsoftware.com]]></activiti:string>
+                </activiti:field>
+                <activiti:field name="subject">
+                    <activiti:expression><![CDATA[${adlName} has assigned you a new Implementation - ${implementationId}]]></activiti:expression>
+                </activiti:field>
+            </extensionElements>
+        </serviceTask>
+        <sequenceFlow id="flow5" sourceRef="startevent1" targetRef="mailTask"></sequenceFlow>
+        <sequenceFlow id="flow6" sourceRef="mailTask" targetRef="checkoutSegments"></sequenceFlow>
+    </process>
+    <bpmndi:BPMNDiagram id="BPMNDiagram_dlProcess">
+        <bpmndi:BPMNPlane bpmnElement="dlProcess" id="BPMNPlane_dlProcess">
+            <bpmndi:BPMNShape bpmnElement="startevent1" id="BPMNShape_startevent1">
+                <omgdc:Bounds height="35.0" width="35.0" x="250.0" y="150.0"></omgdc:Bounds>
+            </bpmndi:BPMNShape>
+            <bpmndi:BPMNShape bpmnElement="checkoutSegments" id="BPMNShape_checkoutSegments">
+                <omgdc:Bounds height="55.0" width="105.0" x="470.0" y="140.0"></omgdc:Bounds>
+            </bpmndi:BPMNShape>
+            <bpmndi:BPMNShape bpmnElement="usertask1" id="BPMNShape_usertask1">
+                <omgdc:Bounds height="55.0" width="105.0" x="620.0" y="140.0"></omgdc:Bounds>
+            </bpmndi:BPMNShape>
+            <bpmndi:BPMNShape bpmnElement="endevent2" id="BPMNShape_endevent2">
+                <omgdc:Bounds height="35.0" width="35.0" x="770.0" y="150.0"></omgdc:Bounds>
+            </bpmndi:BPMNShape>
+            <bpmndi:BPMNShape bpmnElement="mailTask" id="BPMNShape_mailTask">
+                <omgdc:Bounds height="55.0" width="105.0" x="330.0" y="140.0"></omgdc:Bounds>
+            </bpmndi:BPMNShape>
+            <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
+                <omgdi:waypoint x="575.0" y="167.0"></omgdi:waypoint>
+                <omgdi:waypoint x="620.0" y="167.0"></omgdi:waypoint>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow4" id="BPMNEdge_flow4">
+                <omgdi:waypoint x="725.0" y="167.0"></omgdi:waypoint>
+                <omgdi:waypoint x="770.0" y="167.0"></omgdi:waypoint>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow5" id="BPMNEdge_flow5">
+                <omgdi:waypoint x="285.0" y="167.0"></omgdi:waypoint>
+                <omgdi:waypoint x="330.0" y="167.0"></omgdi:waypoint>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow6" id="BPMNEdge_flow6">
+                <omgdi:waypoint x="435.0" y="167.0"></omgdi:waypoint>
+                <omgdi:waypoint x="470.0" y="167.0"></omgdi:waypoint>
+            </bpmndi:BPMNEdge>
+        </bpmndi:BPMNPlane>
+    </bpmndi:BPMNDiagram>
+</definitions>

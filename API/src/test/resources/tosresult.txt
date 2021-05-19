@@ -1,0 +1,23 @@
+{
+	"id": 46,
+	"user": {
+		"id": "radhakrishnan.adhimoolam",
+		"password": "18884617A8E97164736DEEA5297353665B11B570C719CEA1",
+		"displayName": "Radhakrishnan Adhimoolam",
+		"mailId": "Radhakrishnan.Adhimoolam@travelport.com",
+		"role": ["DevManager", "TechnicalServiceDesk", "LoadsControl", "Reviewer", "Lead", "Developer", "ToolAdmin"],
+		"currentRole": "TechnicalServiceDesk",
+		"timeZone": "Etc/GMT",
+		"delegated": false,
+		"allowDelegateMenu": false,
+		"delegations": {}
+	},
+	"command": "LOADDIS",
+	"loadset": "GC800107",
+	"returnValue": 0,
+	"message": "STATUS\u003d\"A INACTIVE B INACTIVE C 01/25/18 D 01/25/18\"",
+	"oldStatus": "",
+        "ipAddress":"",
+        "host":"",
+	"last": true
+}

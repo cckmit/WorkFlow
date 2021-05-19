@@ -1,0 +1,27 @@
+<md-dialog aria-label="Imp Plan Details">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2 style="color:#fff;">
+                    {{pObj.id}} - Implementation Plan Details
+                </h2>
+                <span flex></span>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content padding-none">
+                <div class="well well-lg">
+                    <div ng-include="'html/templates/impPlanDetails.template.html'"></div>
+                </div>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+
+            <md-button ng-click="cancel('useful')">
+                Close
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

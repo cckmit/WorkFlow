@@ -1,0 +1,127 @@
+#!/bin/bash
+# shellcheck disable=SC2164,SC2086,2207,2034
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpfdvlload                                                #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to create production system branch in repositories and          #
+#      to migrate the source code from non-ibm path to SCM GIT repository     #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Source Core                                                      #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull code migration.                               #
+#      exit with 8, error message                                             #
+#                                                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   25102017    NARASHIMAN   created the script                               #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+SourceCore="$1";                       #Read core data as input
+#
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "$0" "INPUT:${SourceCore} RC:$RC"
+#-----------------------------------------------------------------------------#
+#Start main execution validation success
+if [ "$RC" -eq 0 ]; then
+  echo -e "INFO: MCF analysis started.";
+  case "${SourceCore}" in
+    apo)
+      zLockDate=20140308;
+      SourcePath="/ztpfrepos/tpfgi/cc/gal"
+      ;;
+    pgr)
+      zLockDate=20120229;
+      SourcePath="/ztpfrepos/tpfgi/cc/gal"
+      ;;
+    pre)
+      zLockDate=20130706;
+      SourcePath="/ztpfrepos/tpfgi/cc/gal"
+      ;;
+    wsp)
+      zLockDate=20140818;
+      SourcePath="/ztpfrepos/tpfps/cc/gds"
+      ;;
+    air)
+      zLockDate=20160408;
+      SourcePath="/ztpfrepos/tpfdl/cc/${SourceCore,,}"
+      ;;
+    res)
+      zLockDate=20150220;
+      SourcePath="/ztpfrepos/tpfdl/cc/${SourceCore,,}"
+      ;;
+    oss)
+      zLockDate=20150417;
+      SourcePath="/ztpfrepos/tpfdl/cc/${SourceCore,,}"
+      ;;
+  esac
+  pushd "/ztpfsys/${SourceCore}/tools/" &> /dev/null
+    [ -f .${SourceCore}_BaseCopy ] && rm ".${SourceCore}_BaseCopy"
+    [ -f .${SourceCore}_DateSorted ] && rm ".${SourceCore}_DateSorted"
+    [ -f .${SourceCore}_Beforedate ] && rm ".${SourceCore}_Beforedate"
+    [ -f .${SourceCore}_Afterdate ] && rm ".${SourceCore}_Afterdate"
+    [ -f ${SourceCore,,}_BZMigPathFile.txt ] && rm "${SourceCore,,}_BZMigPathFile.txt"
+    [ -f ${SourceCore,,}_AZMigPathFile.txt ] && rm "${SourceCore,,}_AZMigPathFile.txt"
+    [ -f ${SourceCore,,}_migrate_scm.txt ] && rm "${SourceCore,,}_migrate_scm.txt"
+    grep -v "..FIELD" ${SourceCore}_migrate.txt > .${SourceCore}_BaseCopy
+    sort -k1.25,1.33 .${SourceCore}_BaseCopy > .${SourceCore}_DateSorted
+    DateList=($(sort -k1.25,1.33 .${SourceCore}_DateSorted | cut -c 25-33))
+    for((i=1; i<${#DateList[@]}; i++));
+    do
+      if [ "$zLockDate" -eq "${DateList[i]}" ] || [ "${DateList[i]}" -gt "$zLockDate" ]; then
+        sed -n "$i",\$p .${SourceCore}_DateSorted > .${SourceCore}_Afterdate
+	    i=$((i-1));
+        sed -n 1,"$i"p .${SourceCore}_DateSorted > .${SourceCore}_Beforedate3
+        break;
+      fi
+    done
+    count=0;
+    while read -r line
+    do
+	  count=$((count+1));
+	    sed "${count}s/\r\?$/OK/" -i ".${SourceCore}_Afterdate"
+    done < .${SourceCore,,}_Afterdate
+    sort -r -k1.1,1.8 .${SourceCore}_Beforedate3 > .${SourceCore}_Beforedate2
+    count=0;
+    Previous_seg=""
+    while read -r line
+    do
+        segment=${line:0:8}
+        filetype=${line:12:3}
+	    filetype1="$(echo "$filetype" | tr -d ' ')"
+	    count=$((count+1));
+	    if [[ "$filetype1" != "h" ]] && [[ "$filetype1" != "mac" ]] && [[ "$filetype1" != "bsc" ]] && [[ "$filetype1" != "mak" ]]; then
+	    if [ "$Previous_seg" == "$segment" ]; then
+	      sed "${count}s/\r\?$/NK/" -i ".${SourceCore}_Beforedate2"
+	    else
+	      sed "${count}s/\r\?$/OK/" -i ".${SourceCore}_Beforedate2"
+	  	Previous_seg="$segment"
+	    fi
+	    fi
+    done < .${SourceCore}_Beforedate2
+    sort -k1.1,1.8 .${SourceCore}_Beforedate2 > .${SourceCore}_Beforedate1
+    sort -k1.25,1.33 .${SourceCore}_Beforedate1 > .${SourceCore}_Beforedate
+  popd &> /dev/null
+fi
+#-----------------------------------------------------------------------------#
+exit "$RC";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

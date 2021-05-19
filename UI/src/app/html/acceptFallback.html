@@ -1,0 +1,222 @@
+<!-- Main content -->
+<section class="content animated slideInLeft scrollingFunction" id="scroll_function">
+        <div class="col-md-12">
+            <div class="row">
+                <div class="systemTasks">
+                    <div class="row text-right" style="margin-right: 0px;padding-bottom: 5px;" ng-if="keyLength(vm.loadsetReadyList) != 0">
+                        <span style="margin:0 10px;"> Total number of items: <span class="templateCountSize"> {{vm.totalNumberOfItem}}</span> </span>
+                        <button type="button" style="margin-right:5px;" class="btn btn-primary themeButton "
+                            ng-click="refreshTSDAccept()" aria-label="refreshDeploymentChanges">
+                            <i class="fa fa-refresh"></i> Refresh
+                        </button>
+    
+                    </div>
+                    <div ng-if="keyLength(vm.loadsetReadyList) == 0"
+                        style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                        <b>No tasks found</b>
+                    </div>
+    
+                    <div class="row" style="margin: 10px 0px;">
+                        <div class="col-md-12">
+                            <div ng-if="keyLength(vm.loadsetReadyList) !== 0" class="row">
+                                <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                                <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                            ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePagination"></dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+    
+                    <div ng-if="keyLength(vm.loadsetReadyList) != 0">
+                        <div class="row divTableHeader flex textCenter">
+                            <div class="col-md-1"></div>
+                            <div class="col-md-1">
+                                <span class="noClickProp" ng-click="sort('loads.planId.id')">
+                                    Plan ID
+                                </span>
+                                <span class="pull-right">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn['loads.planId.id'].asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn['loads.planId.id'].desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </div>
+                            <div class="col-md-2" ng-show="getLoadCategoryAcceptR(vm.loadsetReadyList)"> Enabled for ACCEPT
+                                <div class="flex-1">
+                                    <md-checkbox style="margin-top:5px;"
+                                        ng-disabled="getloadSetReadyList(vm.loadsetReadyList)"
+                                        ng-change="updateCheckbox(vm.loadsetReadyList,vm.isAllSelected)"
+                                        ng-model="vm.isAllSelected" aria-label="tsdAcceptRAll">
+                                    </md-checkbox>
+                                </div>
+                            </div>
+                            <div class="col-md-1">
+                                <span class="noClickProp" ng-click="sort('loads.planId.loadType')">
+                                    Load Type
+                                </span>
+                                <span class="pull-right">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn['loads.planId.loadType'].asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn['loads.planId.loadType'].desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </div>
+                            <div class="col-md-1">Target System</div>
+                            <div class="col-md-2">
+                                <span class="noClickProp" ng-click="sort('sysload.loadDateTime')">
+                                    Load Date/Time
+                                </span>
+                                <span class="pull-right">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn['sysload.loadDateTime'].asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn['sysload.loadDateTime'].desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </div>
+                            <div class="col-md-1">Category</div>
+                            <div class="col-md-2">
+                                <span class="noClickProp" ng-click="sort('loads.fallbackActivatedDateTime')">
+                                    Activated Date/Time
+                                </span>
+                                <span class="pull-right">
+                                    <i
+                                        class="fa fa-long-arrow-down {{sortColumn['loads.fallbackActivatedDateTime'].asc ? '' : 'sortDisabled'}}"></i>
+                                    <i
+                                        class="fa fa-long-arrow-up {{sortColumn['loads.fallbackActivatedDateTime'].desc ? '' : 'sortDisabled'}}"></i>
+                                </span>
+                            </div>
+                            <div class="col-md-1">Action</div>
+                        </div>
+                        <div dir-paginate="(lrKey,lrValue) in vm.loadsetReadyList | filter: q | itemsPerPage: tableConfig.pageSize"
+                            total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"
+                            pagination-id="tablePagination">
+                            <div class="flex divFlexBody textCenter hoverCurrentRow">
+                                <div class="col-md-1 fContent">
+                                    <a ng-if="vm.loadsetReadyList[lrKey].productionLoadsList[0].expanded"
+                                        ng-click="vm.loadsetReadyList[lrKey].productionLoadsList[0].expanded = false;"
+                                        aria-label="{{lrKey}}">
+                                        <i class="fa fa-minus-square" style="font-size: 1.2em;color:#ff5722;"></i>
+                                    </a>
+                                    <a ng-if="!vm.loadsetReadyList[lrKey].productionLoadsList[0].expanded"
+                                        ng-click="vm.loadsetReadyList[lrKey].productionLoadsList[0].expanded = true;loadSystemImplApproverList(vm.loadsetReadyList[lrKey].productionLoadsList[0].planId);"
+                                        aria-label="{{lrKey}}">
+                                        <i class="fa fa-plus-square" style="font-size: 1.2em;"></i>
+                                    </a>
+                                </div>
+                                <div class="col-md-1 fContent">
+                                    {{lrKey}}
+                                </div>
+                                <div class="col-md-2 fContent">
+                                    <div ng-show="getLoadCategoryR(lrValue.productionLoadsList)">
+                                        <!-- && !pObj.isAnyLoadsInProgress -->
+    
+                                        <md-checkbox class="margin-none action_load"
+                                            ng-disabled="lrValue.isAcceptInProgress "
+                                            ng-change="makeCheck($index,lrKey,lrValue)" aria-label="dummy "
+                                            ng-model="lrValue.isChecked">
+                                        </md-checkbox>
+                                    </div>
+                                </div>
+    
+                                <div class="col-md-1 fContent">
+                                    {{vm.loadsetReadyList[lrKey].productionLoadsList[0].planId.loadType}}
+                                </div>
+                                <div class="col-md-6 fContent">
+                                    <div class="row flex flex-system-group" style="border-bottom:0px;"
+                                        ng-repeat="syslrObj in lrValue.productionLoadsList">
+                                        <div class="col-md-2 fContent">
+                                            {{syslrObj.systemId.name}}
+                                        </div>
+                                        <div class="col-md-4 fContent">
+                                            {{syslrObj.systemLoadId.loadDateTime | dCheck}}
+                                        </div>
+                                        <div class="col-md-1 fContent"
+                                            ng-class="(syslrObj.systemLoadId.loadCategoryId.name == 'R' )  ? 'exceptionRowColor' : '' ">
+                                            <span
+                                                title="{{syslrObj.systemLoadId.loadCategoryId.description}}">{{syslrObj.systemLoadId.loadCategoryId.name}}</span>
+                                        </div>
+                                        <div class="col-md-4 fContent">
+                                            {{syslrObj.fallbackActivatedDateTime | dCheck}}
+                                        </div>
+    
+                                        <div class="col-md-1 fContent">
+                                            <div ng-show="getLoadCategoryR(lrValue.productionLoadsList)">
+                                                <button class="btn btn-warning btn-xs themeButton"
+                                                    aria-label="accept_{{lrKey}}"
+                                                    ng-click="fallBackAcceptTriggerRCategory(lrKey,syslrObj.systemId.name)"
+                                                    ng-disabled=" getInprogressPlanDiable(lrValue.productionLoadsList,syslrObj.systemLoadId.id) || getDefaultSystemEnable(lrValue.productionLoadsList) ">
+                                                    <i class="fa fa-spinner fa-pulse"
+                                                        ng-if="getInprogressSystemDiable(lrValue.productionLoadsList,syslrObj.systemLoadId.id)"></i>
+                                                    Accept
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-1 fContent">
+                                    <button class="btn btn-warning btn-xs themeButton" style="margin-left: 1em;"
+                                        ng-show="!getLoadCategoryR(lrValue.productionLoadsList)"
+                                        aria-label="accept_{{lrKey}}" ng-click="acceptTrigger($event, lrKey)"
+                                        ng-disabled="lrValue.isAcceptInProgress">
+                                        <i class="fa fa-spinner fa-pulse" ng-if="lrValue.isAcceptInProgress"></i> Accept
+                                    </button>
+    
+                                    <button class="btn btn-warning btn-xs themeButton" ng-show="lrValue.showAcceptAllButton"
+                                        style="margin-left: 1em;" aria-label="accept_{{lrKey}}"
+                                        ng-click="acceptTrigger($event, lrKey)"
+                                        ng-disabled="getAcceptAllInProgressDisable(lrValue , lrKey )">
+                                        <i class="fa fa-spinner fa-pulse"
+                                            ng-if="getAcceptAllInProgressDisable(lrValue , lrKey)"></i>
+                                        Accept
+                                        All
+                                    </button>
+    
+                                </div>
+    
+                            </div>
+                            <div class="row labelFix" style="margin:0px;"
+                                ng-init="pObj=vm.loadsetReadyList[lrKey].productionLoadsList[0].planId"
+                                ng-if="vm.loadsetReadyList[lrKey].productionLoadsList[0].expanded">
+                                <div ng-include='templatePath+"/impPlan.template.html"'></div>
+                            </div>
+                        </div>
+                        <div class="row" style="margin: 10px 0px;">
+                            <div class="col-md-12">
+                                <div ng-if="keyLength(vm.loadsetReadyList) !== 0" class="row">
+                                    <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                                    <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                        <span style="padding: 10px;">Show</span>
+                                        <select class="form-control" style="padding:10px;width: 40%;"
+                                            ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                            <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}"
+                                                ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                        </select>
+                                        <span style="padding:10px">entries</span>
+                                    </div>
+                                    <div class="col-md-3"></div>
+                                    <div class="col-md-6">
+                                        <dir-pagination-controls boundary-links="true"
+                                            on-page-change="pageChangeHandler(newPageNumber)"
+                                            pagination-id="tablePagination"></dir-pagination-controls>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- /.content -->

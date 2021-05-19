@@ -1,0 +1,71 @@
+#!/bin/bash
+# shellcheck disable=SC2086
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdchkallmak                                           #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to validate segment name and its system name with control file  #
+#      registry using cntliq tool to determine if it's component or generic   #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - 4-digit segment name                                             #
+#      $2  - System/Core name                                                 #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   10122018    VINOTH  Created the script                                    #
+#   11012018    VINOTH  Allowed segments mak,c,cpp                            #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+SegmentNames="$1";                     #Read listof name   kulz.cpp,aqj6.sbt pbxe.cpp kulu.cpp
+CoreName="$2";                         #Read Core name
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${SegmentNames} ${CoreName} RC:$RC"
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ ${RC} -eq 0 ]; then
+  IFS=',' read -r -a _chkMak <<< "${SegmentNames[@]}"
+  for _mak in "${_chkMak[@]}";
+  do
+    extChk="${_mak##*.}"
+    if [[ "${extChk}" == 'asm' ]] || [[ "${extChk}" == 'c' ]] || [[ "${extChk}" == 'cpp' ]]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:EXEC:mtpgitcmdchkmak ${_mak} ${CoreName} RC:"
+      _makList="$(${MTP_ENV}/mtpgitcmdchkmak ${_mak} ${CoreName})"
+      _makResult+="${_mak}:${_makList} "
+    fi
+  done
+  unset IFS
+  #echo -e "${_makResult[@]}";                                          #CONSOLE
+  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:EXEC:mtpgitcmdchkmak executed results - ${_makResult[*]} RC:$RC"
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+echo "${_makResult[@]//:,/:}"
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${SegmentNames} ${CoreName} RC:$RC"
+exit "${RC}";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

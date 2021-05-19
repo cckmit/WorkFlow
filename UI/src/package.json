@@ -1,0 +1,39 @@
+{
+  "name": "workflow",
+  "version": "1.0.0",
+  "description": "Workflow Tool",
+  "main": "app/index.html",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "uglifyjs": "uglifyjs -b beautify=false,max-line-len=120000"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://thilak@dev-mtp.tpfsoftware.com:8443/gitblit/r/dev/Workflow.git"
+  },
+  "keywords": [
+    "workflow",
+    "activibpm"
+  ],
+  "author": "travelport",
+  "license": "ISC",
+  "devDependencies": {
+    "browser-sync": "^2.18.8",
+    "del": "^2.2.2",
+    "gulp": "^3.9.1",
+    "gulp-cache": "^0.4.6",
+    "gulp-clean-css": "^3.2.0",
+    "gulp-cssnano": "^2.1.2",
+    "gulp-imagemin": "^3.2.0",
+    "gulp-replace": "^0.5.4",
+    "gulp-sequence": "^0.4.6",
+    "gulp-string-replace": "^0.4.0",
+    "gulp-uglify": "^2.1.2",
+    "gulp-useref": "^3.1.2",
+    "run-sequence": "^1.2.2",
+    "yargs": "^8.0.1"
+  }
+}

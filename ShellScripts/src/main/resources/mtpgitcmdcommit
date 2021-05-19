@@ -1,0 +1,95 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdcommit                                              #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to perform the commit in Local workspace with commit message    #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Commit Message                                                   #
+#      $2  - Local Destination path                                           #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   12072016    Thilak  Created the script                                    #
+#   17082017    Uvais   Code refactor as per new SCM structure                #
+#   05212018    ARUL    Re-try added to git operations                        #
+#   04222019    ARUL    Updated with logger support                           #
+#   08282019    ARUL    Update to support auto comment in .mak file with impl #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+COMMIT_MESSAGE="$1";                   #Read Commit Message from input
+USR_IMPL_CWRK="$2";                  #Read Local Dest path from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${COMMIT_MESSAGE} ${USR_IMPL_CWRK} RC:${RC}"
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  if [ -d "${USR_IMPL_CWRK}" ]; then
+    #Change Directory
+    pushd "${USR_IMPL_CWRK}" &> /dev/null;
+      git status; RC=$?;
+      if [ "${RC}" -ne 0 ];  then
+        echo -e "ERROR: ${USR_IMPL_CWRK} is not a valid GIT Directory";#CONSOLE
+        RC="${EC}";
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_IMPL_CWRK} is not a valid GIT Directory RC:${RC}"
+      else
+        #makAutoComment
+        #Add all changes before commit
+        bash "${MTP_ENV}/mtpgitcmdsync" "${USR_IMPL_CWRK}"; RC=$?;
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:EXEC:mtpgitcmdsync ${USR_IMPL_CWRK} RC:${RC}"
+        if [ "${RC}" -eq 0 ]; then
+          git add .
+          #Perform Commit with Input Message
+          git commit -am "${COMMIT_MESSAGE}"; RC=$?;
+          if [ "${RC}" -ne 0 ]; then
+            echo -e "ERROR: Commit failed";                            #CONSOLE
+            RC="${EC}";
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Commit failed RC:${RC}"
+          else
+            echo -e "Commit done Successfully";                        #CONSOLE
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Commit done Successfully RC:${RC}"
+          fi
+        else
+          echo -e "ERROR: Common file sync fail";                      #CONSOLE
+          RC="${EC}";
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Common file sync fail RC:${RC}"
+        fi
+      fi
+    popd &> /dev/null;
+  else
+    echo -e "ERROR: Workspace not found - ${USR_IMPL_CWRK}";           #CONSOLE
+    RC="${EC}";
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Workspace not found - ${USR_IMPL_CWRK} RC:${RC}"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:${RC}"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${COMMIT_MESSAGE} ${USR_IMPL_CWRK} RC:${RC}"
+exit "${RC}";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

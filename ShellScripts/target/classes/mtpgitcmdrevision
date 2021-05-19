@@ -1,0 +1,104 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164,SC2007
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdrevision                                            #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to check the revision history of *.mak file                     #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Source with implementation                                       #
+#      $2  - Source segment name                                              #
+#                                                                             #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT      COMMENT                                             #
+#   --------    ----    ------------------------------------------------------#
+#   11192018    Gowtham   Created the script                                  #
+#   11272018    VINOTH    Allowed script only for selected .mak               #
+#   04292019    ARUL      Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+implNumCore="$1";                      #Read actual path of source
+sourceSeg="$2";                        #Read files from the input
+#
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${implNumCore} ${sourceSeg} RC:$RC"
+#-----------------------------------------------------------------------------#
+if [ "$RC" -eq 0 ]; then
+  impPlan="${implNumCore%_*}";
+  pushd "${USR_TPF_PROJ}/${impPlan}/${implNumCore##*_}" &> /dev/null;
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Switching to ${USR_TPF_PROJ}/${impPlan}/${implNumCore##*_} directory RC:$RC"
+    makcheck1=( $(find . -type f | grep .mak| grep -v '.gitref'))
+    if [[ -n "${makcheck1[*]// /}" ]]; then
+      for sList in "${makcheck1[@]}";
+      do
+        gitList=${sList#*./};
+        if git ls-files | grep -q "${gitList##*/}"
+        then
+          git status -s | grep -w M | grep -v ".git" | awk '{print $2}' | grep "${gitList##*/}"  &> /dev/null; RC=$?;
+          if [ ${RC} -ne 0 ]; then
+            commitCount=( $(git log --oneline "${gitList}" |wc -l ) )
+            if [ "${commitCount[0]}" -le 1 ]; then
+              makeListFile+="${sList##./} ";
+            fi
+          fi
+        fi
+      done
+    fi
+    #
+    IFS=',' read -r -a sourceFiles <<< "$sourceSeg"; read -r -a makeList <<< "$makeListFile";
+    if [[ -n "${makeList[*]// /}" ]] && [[ -n "${sourceFiles[*]// /}" ]]; then
+      for _makImpl in "${makeList[@]}"; # already version less
+      do
+        for _makWfk in "${sourceFiles[@]}";# Developer selected files
+        do
+          _makExt="${_makWfk##*.}";
+          if [[ "${_makExt}" == mak ]]; then
+            if [[ "${_makImpl}" == "${_makWfk}" ]]; then
+              makListRest+="${_makWfk##*/} "
+            fi
+          fi
+        done
+      done
+      if [[ -n "${makListRest[*]// /}" ]]; then
+        echo -e "${implNumCore##*_} - ${makListRest[*]}";              #CONSOLE
+        #echo -e "Attn: No revision history has been added to the following:${implNumCore##*_} - ${makListRest[*]}"
+        RC="${EC}";
+      else
+        RC=0;
+      fi
+    else
+      RC=0;
+    fi
+    unset IFS;
+  popd &> /dev/null;
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC";
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${implNumCore} ${sourceSeg} RC:$RC"
+exit "$RC";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

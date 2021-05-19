@@ -1,0 +1,463 @@
+// Master Workspace configuration file for Microsoft Visual Studio Code IDE Support
+//     This configurations holds all the configurations required in this project development
+//     to enable zero configurations and setup IDE to achive OneDevelopmentEnvironment
+//     Maintain by Arul.Dhandapani@Travelport.com
+{
+	"folders": [
+		{
+			"name": "Workflow (z/TPF DevOps Toolchain)",
+			"path": ".",
+			"WF_DEV_HOME": "${workspaceFolder}"
+		},
+		{
+			"path": "C:\\vinoth\\ZTPFM\\ZTPFM-2020\\WorkFlow"
+		}
+	],
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"type": "java",
+				"name": "Debug Java Current File",
+				"request": "launch",
+				"mainClass": "${file}"
+			},
+			{
+				"type": "java",
+				"name": "Debug Java ConfigGenerator",
+				"request": "launch",
+				"mainClass": "com.tsi.workflow.configgenerator.Main",
+				"projectName": "ConfigGenerator"
+			},
+			{
+				"type": "java",
+				"name": "Debug Java IMAPI",
+				"request": "launch",
+				"mainClass": "com.tsi.workflow.im.Main",
+				"projectName": "IMAPI"
+			},
+			{
+				"type": "java",
+				"name": "Debug Java RepoReconsile",
+				"request": "launch",
+				"mainClass": "com.tsi.workflow.Main",
+				"projectName": "RepoReconsile"
+			},
+			{
+				"type": "python",
+				"name": "Debug Python Current File",
+				"request": "launch",
+				"program": "${file}"
+			},
+			{
+				"type": "node",
+				"name": "Debug JavaScript Current File",
+				"request": "launch",
+				"program": "${file}"
+			}
+		]
+	},
+	"settings": {
+		// Global Workbench settings for development workspace
+		"workbench.colorTheme": "Horizon Bold",
+		"workbench.activityBar.visible": true,
+		"workbench.sideBar.location": "right",
+		// Global Editor settings for development workspace
+		"files.trimFinalNewlines": true,
+		"files.trimTrailingWhitespace": true,
+		"files.encoding": "utf8",
+		"files.eol": "auto",
+		"breadcrumbs.enabled": true,
+		"editor.fontSize": 12,
+		"editor.wordWrapColumn": 120,
+		"editor.formatOnSave": true,
+		"editor.suggestSelection": "first",
+		"editor.autoIndent": true,
+		"editor.rulers": [
+			4,
+			79,
+			119
+		],
+		"files.exclude": {
+			"**/.git": true,
+			"**/.svn": true,
+			"**/.hg": true,
+			"**/CVS": true,
+			"**/.DS_Store": true,
+			"**/.classpath": true,
+			"**/.project": true,
+			"**/.settings": true,
+			"**/.factorypath": true
+		},
+		"diffEditor.renderSideBySide": true,
+		"vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
+		// Global Terminal settings
+		"terminal.integrated.fontSize": 12,
+		"terminal.integrated.copyOnSelection": true,
+		"terminal.integrated.rightClickBehavior": "copyPaste",
+		"terminal.integrated.rendererType": "auto",
+		"terminal.integrated.shell.windows": "C:\\Program Files\\Git\\bin\\bash.exe",
+		// Global Git settings
+		"git.autofetch": true,
+		"git.confirmSync": true,
+		"git.enableSmartCommit": true,
+		"scm.alwaysShowActions": true,
+		"scm.alwaysShowProviders": true,
+		"scm.diffDecorations": "all",
+		"gitlens.views.repositories.location": "scm",
+		"gitlens.views.fileHistory.location": "scm",
+		"gitlens.views.search.location": "scm",
+		"gitlens.views.compare.location": "scm",
+		"gitlens.views.lineHistory.location": "scm",
+		// Global SonarQube settings
+		"sonarqube-inject.enableLinter": true,
+		"sonarqube-inject.sourceEncoding": "UTF-8",
+		"sonarqube-inject.windowsConsoleEncoding": "cp1251",
+		"sonarqube-inject.unixConsoleEncoding": "utf8",
+		// Global Tomcat settings
+		"tomcat.workspace": "${CATALINA_HOME}",
+		// Java Support
+		"maven.terminal.useJavaHome": true,
+		"maven.view": "hierarchical",
+		"sonarqube-inject.sourcePath": "**/src/**/*.*",
+		"java.configuration.updateBuildConfiguration": "automatic",
+		"java.debug.settings.showLogicalStructure": true,
+		"java.debug.settings.enableRunDebugCodeLens": true,
+		"java.format.onType.enabled": true,
+		"java.format.enabled": true,
+		"java.checkstyle.configuration": "/google_checks.xml",
+		"java.completion.enabled": true,
+		"java.codeGeneration.generateComments": true,
+		"java.foldingRange.enabled": true,
+		"java.dependency.syncWithFolderExplorer": true,
+		"java.saveActions.organizeImports": true,
+		"[java]": {
+			"editor.defaultFormatter": "redhat.java"
+		},
+		"vsintellicode.java.completionsEnabled": true,
+		// JavaScripts Support
+		"javascript.autoClosingTags": true,
+		"javascript.referencesCodeLens.enabled": true,
+		"javascript.suggest.enabled": true,
+		"javascript.validate.enable": true,
+		"javascript.format.enable": true,
+		"javascript.suggest.autoImports": true,
+		"javascript.updateImportsOnFileMove.enabled": "prompt",
+		"javascript.suggestionActions.enabled": true,
+		"javascript.preferences.importModuleSpecifier": "auto",
+		"javascript.suggest.paths": true,
+		"javascript.suggest.names": true,
+		"javascript.suggest.completeJSDocs": true,
+		"javascript.suggest.completeFunctionCalls": true,
+		"javascript.implicitProjectConfig.checkJs": true,
+		"[javascript]": {
+			"editor.tabSize": 4
+		},
+		"vsintellicode.typescript.completionsEnabled": true,
+		// ShellScripts Support
+		"shellcheck.executablePath": "C:\\shellcheck-stable\\shellcheck-stable.exe",
+		"shellcheck.enable": true,
+		"shellcheck.run": "onType",
+		"shellcheck.useWSL": false,
+		"[shellscript]": {
+			"editor.tabSize": 2,
+			"files.eol": "\n",
+			"editor.renderWhitespace": "boundary",
+			"editor.rulers": [
+				4,
+				39,
+				49,
+				59,
+				71,
+				79,
+				119
+			]
+		},
+		// Python Support
+		"python.formatting.provider": "autopep8",
+		"python.linting.enabled": true,
+		"python.jediEnabled": false,
+		"[python]": {
+			"editor.tabSize": 4,
+			"editor.defaultFormatter": "VisualStudioExptTeam.vscodeintellicode",
+		},
+		// CSS Support
+		"css.completion.triggerPropertyValueCompletion": true,
+		"css.validate": true,
+		"[css]": {
+			"editor.tabSize": 4
+		},
+		// HTML Support
+		"html.format.enable": true,
+		"html.autoClosingTags": true,
+		"html.suggest.html5": true,
+		"html.validate.styles": true,
+		"html.validate.scripts": true,
+		"[html]": {
+			"editor.tabSize": 4
+		},
+		// XML Support
+		"xml.format.enabled": true,
+		"xml.completion.autoCloseTags": true,
+		"xml.validation.enabled": true,
+		"[xml]": {
+			"editor.tabSize": 4
+		},
+		// JSON Support
+		"json.format.enable": true,
+		"[json]": {
+			"editor.tabSize": 4
+		},
+		"vsintellicode.python.completionsEnabled": true,
+		// PostgreSQL Connections profile
+		"pgsql.connections": [
+			{
+				"host": "vhldvztdt003.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "DEV-003",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			},
+			{
+				"host": "vhldvztdt004.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "DEV-004",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			},
+			{
+				"host": "vhlqaztdt001.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "SQA-001",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			},
+			{
+				"host": "vhlqaztdt002.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "SQA-002",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			},
+			{
+				"host": "vhlppztdt001.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "PRE-PROD-001",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			},
+			{
+				"host": "vhlppztdt002.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "PRE-PROD-002",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			},
+			{
+				"host": "vhlppztdt003.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "PRE-PROD-003",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			},
+			{
+				"host": "vhlppztdt004.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "PRE-PROD-004",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			},
+			{
+				"host": "vhlpnztdt002.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "PROD-002",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			},
+			{
+				"host": "vhlpnztdt003.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "PROD-003",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			},
+			{
+				"host": "vhlpnztdt004.tvlport.net",
+				"dbname": "workflow",
+				"user": "postgres",
+				"password": "",
+				"emptyPasswordInput": false,
+				"port": "5432",
+				"profileName": "PROD-004",
+				"connectTimeout": 15,
+				"encrypt": false,
+				"applicationName": "vscode-pgsql",
+				"hostaddr": "",
+				"options": "",
+				"sslmode": "prefer",
+				"clientEncoding": "",
+				"sslcompression": true,
+				"sslcert": "",
+				"sslkey": "",
+				"sslrootcert": "",
+				"sslcrl": "",
+				"requirepeer": ""
+			}
+		],
+		"files.associations": {
+			"*.pgsql": "sql"
+		},
+		// Disable anonymous data send to Microsoft while using this project form this IDE
+		"telemetry.enableTelemetry": false
+	}
+}

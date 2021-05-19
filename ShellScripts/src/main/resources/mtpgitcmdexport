@@ -1,0 +1,386 @@
+#!/bin/bash
+#shellcheck disable=SC2034,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdexport                                              #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to export the source from implementation plan master core       #
+#             remote branch                                                   #
+#                                                                             #
+#   NOTE: THIS SCRIPT SHOULD DEL for mtpgitcmddvlexport                       #
+#         Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Project directory path                                           #
+#      $2  - Branch name                                                      #
+#      $3  - User id (Linux)                                                  #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   01062017    ARUL    Created script                                        #
+#   03212018    ARUL    Clone re-try added to support multiple server         #
+#   12102018    ARUL    OCO file support included                             #
+#   04222019    GOWTHAM Updated with logger support                           #
+#   08262019    VINOTH  dont del dvl workspace update new things based input  #
+#   09122019    VINOTH  delete only unwanted directory instead of full        #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+shopt -s extglob nullglob              #Expand BASH options
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=5;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ProjectDir="$1";                       #Read actual path of prject dir
+LocalBranchName="$2"                   #Read local branch name
+LocalUserID="$3"                       #Read Linux User ID for workspace
+updateSegs="$4"                        #Read new and updated segments
+deletedSegs="$5"                       #Read deleted segments using input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ProjectDir} ${LocalBranchName} ${LocalUserID} ${updateSegs} ${deletedSegs} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ "${LocalUserID}" == "${MTP_SUSR}" ]; then
+      getParmFromBranch "${LocalBranchName}" "DVL";
+      if [ -n "${SYS_DVL_IMPL_CWRK}" ] && [ -n "${APP_DVL_IMPL_CWRK}" ]; then
+        tempDir="${HOME}/mtpGit_${LocalUserID}/${LocalBranchName}";
+        rm -rf "${tempDir}";
+        git clone -b "master_${USR_IMPL_CORE}" "${DEV_SRC_RURL_SUSR}/${DEV_GIT_SRC}" "${tempDir}" &> /dev/null; RC=$?;
+        if [ "$RC" -ne 0 ]; then       #Re-try added to support multiple servers
+          if [ -d "${tempDir}" ]; then
+            rm -rf "${tempDir}";
+          fi
+          git clone -b "master_${USR_IMPL_CORE}" "${DEV_SRC_RURL_SUSR}/${DEV_GIT_SRC}" "${tempDir}" &> /dev/null; RC=$?;
+        fi
+        if [ "$RC" -eq 0 ]; then
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Source export in progress... RC:$RC";
+          echo -e "INFO: Source export in progress...\\n";             #CONSOLE
+          if [[ "${updateSegs}" == "NULL" ]] && [[ "${deletedSegs}" == "NULL" ]]; then
+            if [ ${#tempDir[@]} -gt 0 ]; then
+              pushd "${tempDir}" &> /dev/null
+                #Remvo git support data
+                #echo -e "INFO: Clean-up old structure";               #CONSOLE
+                #rm -Rf "${APP_DVL_IMPL_CWRK}"*
+                #rm -Rf "${SYS_DVL_IMPL_CWRK}"*
+                if [ ! -d "${APP_DVL_IMPL_CWRK}" ] && [ ! -d "${SYS_DVL_IMPL_CWRK}" ]; then
+                  rm -rf .git*
+                  mkdir -p "${APP_DVL_IMPL_CWRK}";
+                  if [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+                    echo -e "INFO: Export to ${APP_DVL_IMPL_CWRK} \\n"
+                    cp -Rf "src/" "macro/" "include/" "dataset/" "command/" "cp/" "system_config/" "other/" "unknown/" "tpf-fdes/" "derived/" "oco/" "${APP_DVL_IMPL_CWRK}" &> /dev/null
+                    rm -Rf "src/" "macro/" "include/" "dataset/" "command/" "cp/" "system_config/" "other/" "unknown/" "tpf-fdes/" "derived/" "oco/"
+                    #Remove APP workspace if it's empty
+                    if [ ! "$(ls -A "${APP_DVL_IMPL_CWRK}" 2>/dev/null)" ]; then
+                      rm -Rf "${APP_DVL_IMPL_CWRK}";
+                      if [ ! "$(ls -A "${DVL_TPF_APP}/${USR_IMPL_PLAN}" 2>/dev/null)" ]; then
+                        rm -Rf "${DVL_TPF_APP:?}/${USR_IMPL_PLAN}";
+                      fi
+                    fi
+                  fi
+                  mkdir -p "${SYS_DVL_IMPL_CWRK}";
+                  if [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+                    echo -e "INFO: Export to ${SYS_DVL_IMPL_CWRK} \\n"; #CONSOLE
+                    cp -Rf ./* "${SYS_DVL_IMPL_CWRK}" &> /dev/null;
+                    #Remove SYS workspace if it's empty
+                    if [ ! "$(ls -A "${SYS_DVL_IMPL_CWRK}" 2>/dev/null)" ]; then
+                      rm -Rf "${SYS_DVL_IMPL_CWRK}";
+                      if [ ! "$(ls -A "${DVL_TPF_SYS}/${USR_IMPL_PLAN}" 2>/dev/null)" ]; then
+                        rm -Rf "${DVL_TPF_SYS:?}/${USR_IMPL_PLAN}";
+                      fi
+                    else
+                      echo -e "INFO: Export to ${SYS_DVL_IMPL_CWRK} \\n"; #CONSOLE
+                      rm -Rf ./*
+                    fi
+                  fi
+                else
+                  #shellcheck disable=2207
+                  gitAllFiles=($(git ls-files | grep -v "\.git"))
+                  for gitFile in "${gitAllFiles[@]}";
+                  do
+                    if [[ "${gitFile%/*}" == +($DIR_TPF_APP) ]]; then
+                      if [ ! -d "${APP_DVL_IMPL_CWRK}" ]; then
+                        mkdir -p "${APP_DVL_IMPL_CWRK}";
+                      fi
+                      pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+                        if [ -f "${gitFile}" ]; then
+                          diff "${tempDir}/${gitFile}" "${APP_DVL_IMPL_CWRK}${gitFile}" &> /dev/null; _RC=$?;
+                          if [ "${_RC}" -eq 1 ]; then
+                            cp -Rf "${tempDir}/${gitFile}" "${APP_DVL_IMPL_CWRK}${gitFile}" &> /dev/null
+                            derSeg="${gitFile##*/}";
+                            dervSegmt="${derSeg%.*}";
+                            derExt="${derSeg##*.}";
+                            if [ "${derExt}" == asm ] || [ "${derExt}" == sbt ] || [ "${derExt}" == c ] || [ "${derExt}" == cpp ] || [ "${derExt}" == mak ]; then
+                              find . -type f -iname "${dervSegmt}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+                            fi
+                          fi
+                        else
+                          #copy new file assume and create directory
+                          nonibmDir="${gitFile%/*}";
+                          if [ ! -d "${nonibmDir}" ]; then
+                            mkdir -p "${nonibmDir}";
+                          fi
+                          cp -Rf "${tempDir}/${gitFile}" "${APP_DVL_IMPL_CWRK}${nonibmDir}/" &> /dev/null
+                          #compFile+="${gitFile},"
+                        fi
+                        ApplDrvDel=$(diff --brief --recursive "${tempDir}" "${APP_DVL_IMPL_CWRK}"|grep "Only in ${APP_DVL_IMPL_CWRK}"|awk '{print$3"/"$4}'| tr '\n' ' ')
+                        if [ -n "${ApplDrvDel//:}" ]; then
+                          #shellcheck disable=2086
+                          rm -rf ${ApplDrvDel//:}; # NOTE: dont put double quotes
+                          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Changed files comes as NULL and diff brief will remove from NON-IBM dir- ${ApplDrvDel//:} the files. RC:$RC"
+                        fi
+                      popd &> /dev/null
+                    else
+                      if [ ! -d "${SYS_DVL_IMPL_CWRK}" ]; then
+                        mkdir -p "${SYS_DVL_IMPL_CWRK}";
+                      fi
+                      pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+                        if [ -f "${gitFile}" ]; then
+                          diff "${tempDir}/${gitFile}" "${SYS_DVL_IMPL_CWRK}${gitFile}" &> /dev/null; _RC=$?;
+                          if [ "${_RC}" -eq 1 ]; then
+                            cp -Rf "${tempDir}/${gitFile}" "${SYS_DVL_IMPL_CWRK}${gitFile}" &> /dev/null
+                            derSeg="${gitFile##*/}";
+                            dervSegmt="${derSeg%.*}";
+                            derExt="${derSeg##*.}";
+                            if [ "${derExt}" == asm ] || [ "${derExt}" == sbt ] || [ "${derExt}" == c ] || [ "${derExt}" == cpp ] || [ "${derExt}" == mak ]; then
+                              find . -type f -iname "${dervSegmt}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+                              #compFile+="${gitFile},"
+                            fi
+                          fi
+                        else
+                          #copy new file assume and create base directory
+                          ibmDir="${gitFile%/*}";
+                          if [ ! -d "${ibmDir}" ]; then
+                            mkdir -p "${ibmDir}";
+                          fi
+                          cp -Rf "${tempDir}/${gitFile}" "${SYS_DVL_IMPL_CWRK}${ibmDir}/" &> /dev/null
+                          #compFile+="${gitFile},"
+                        fi
+                        #done
+                        SysDrvDel=$(diff --brief --recursive "${tempDir}" "${SYS_DVL_IMPL_CWRK}" | grep "Only in ${SYS_DVL_IMPL_CWRK}" | awk '{print$3"/"$4}' | tr '\n' ' ')
+                        if [ -n "${SysDrvDel//:}" ]; then
+                          #shellcheck disable=2086
+                          rm -rf ${SysDrvDel//:};  # NOTE: dont put double quotes
+                          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Changed full comes as NULL and diff brief will remove from IBM dir- ${SysDrvDel//:} the files. RC:$RC"
+                        fi
+                      popd &> /dev/null
+                    fi
+                  done
+                  if [ -d "${APP_DVL_IMPL_CWRK}" ]; then
+                    ApplDrvDel=$(diff --brief --recursive "${tempDir}" "${APP_DVL_IMPL_CWRK}" | grep "Only in ${APP_DVL_IMPL_CWRK}" | awk '{print$3"/"$4}' | tr '\n' ' ')
+                    if [ -n "${ApplDrvDel//:}" ]; then
+                      #shellcheck disable=2086
+                      rm -rf ${ApplDrvDel//:}; # NOTE: dont put double quotes
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Changed full comes as NULL and diff brief will remove from NON-IBM dir- ${ApplDrvDel//:} the files. RC:$RC"
+                    fi
+                    #Remove APP workspace if it's empty
+                    if [ ! "$(ls -A "${APP_DVL_IMPL_CWRK}" 2>/dev/null)" ]; then
+                      rm -Rf "${APP_DVL_IMPL_CWRK}";
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Removing ${APP_DVL_IMPL_CWRK} due to empty RC:$RC"
+                      if [ ! "$(ls -A "${DVL_TPF_APP}/${USR_IMPL_PLAN}" 2>/dev/null)" ]; then
+                        rm -Rf "${DVL_TPF_APP:?}/${USR_IMPL_PLAN}";
+                        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Removing ${DVL_TPF_APP}/${USR_IMPL_PLAN} due to empty RC:$RC"
+                      fi
+                    fi
+                  fi
+                  if [ -d "${SYS_DVL_IMPL_CWRK}" ]; then
+                    SysDrvDel=$(diff --brief --recursive "${tempDir}" "${SYS_DVL_IMPL_CWRK}" | grep "Only in ${SYS_DVL_IMPL_CWRK}" | awk '{print$3"/"$4}' | tr '\n' ' ')
+                    if [ -n "${SysDrvDel//:}" ]; then
+                      #shellcheck disable=2086
+                      rm -rf ${SysDrvDel//:}; # NOTE: dont put double quotes
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Changed full comes as NULL and diff brief will remove from IBM dir- ${SysDrvDel//:} the files. RC:$RC"
+                    fi
+                    #Remove SYS workspace if it's empty
+                    if [ ! "$(ls -A "${SYS_DVL_IMPL_CWRK}" 2>/dev/null)" ]; then
+                      rm -Rf "${SYS_DVL_IMPL_CWRK}";
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Removing ${SYS_DVL_IMPL_CWRK} due to empty RC:$RC"
+                      if [ ! "$(ls -A "${DVL_TPF_SYS}/${USR_IMPL_PLAN}" 2>/dev/null)" ]; then
+                        rm -Rf "${DVL_TPF_SYS:?}/${USR_IMPL_PLAN}";
+                        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Removing ${DVL_TPF_SYS}/${USR_IMPL_PLAN} due to empty RC:$RC"
+                      fi
+                    fi
+                  fi
+                  if [ -d "${DVL_TPF_LOD}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" ]; then
+                    rm -Rf "${DVL_TPF_LOD:?}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}";
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Removing ${DVL_TPF_LOD}/${USR_IMPL_PLAN}/${USR_IMPL_CORE} due to ChangedFiles: ${updateSegs} RC:$RC"
+                  fi
+                fi
+              popd &> /dev/null
+            else
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Nothing to export. RC:$RC";
+              echo -e "INFO: Nothing to export.\\n";       #CONSOLE
+            fi
+          else
+            if [ -n "${updateSegs[*]// /}" ] || [ -n "${deletedSegs// /}" ]; then
+              if [ ${#tempDir[@]} -gt 0 ]; then
+                echo -e "INFO: Updateing old structure"    #CONSOLE
+                if [ ! -d "${APP_DVL_IMPL_CWRK}" ]; then
+                  mkdir -p "${APP_DVL_IMPL_CWRK}";
+                fi
+                if [ ! -d "${SYS_DVL_IMPL_CWRK}" ]; then
+                  mkdir -p "${SYS_DVL_IMPL_CWRK}";
+                fi
+                pushd "${tempDir}" &> /dev/null
+                  #Remvo git support data
+                  if [ "${deletedSegs}" != "NULL" ]; then
+                    IFS=',' read -r -a deletedFiles <<< "${deletedSegs[@]}";
+                    for delDvl in "${deletedFiles[@]}";
+                    do
+                      if [[ "${delDvl%/*}" == +($DIR_TPF_APP) ]]; then
+                        pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+                          if [ -f "${delDvl}" ]; then
+                            rm -f "${APP_DVL_IMPL_CWRK}${delDvl}" &> /dev/null
+                            derSeg="${delDvl##*/}";
+                            dervSegmt="${derSeg%.*}";
+                            derExt="${derSeg##*.}"
+                            if [ "${derExt}" == asm ] || [ "${derExt}" == sbt ] || [ "${derExt}" == c ] || [ "${derExt}" == cpp ] || [ "${derExt}" == mak ]; then
+                              find . -type f -iname "${dervSegmt}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+                            fi
+                            if [ "${derExt}" == sbt ]; then
+                              find ./sbtasm -type f -iname "${dervSegmt}\.*" -exec rm -f {} \;
+                            fi
+                            derDirectory="${delDvl%/*}"
+                            if [ -d "${derDirectory}" ]; then
+                              if [ -z "$(ls -A "${derDirectory}" 2>/dev/null)" ]; then
+                                rm -rf "${derDirectory}" &> /dev/null
+                                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Dvl workspace Repo directory ${derDirectory} deleted from project RC:$RC"
+                              fi
+                            fi
+                          fi
+                        popd &> /dev/null
+                      else
+                        pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+                          if [ -f "${delDvl}" ]; then
+                            rm -f "${SYS_DVL_IMPL_CWRK}${delDvl}" &> /dev/null
+                            derSeg="${delDvl##*/}";
+                            dervSegmt="${derSeg%.*}";
+                            derExt="${derSeg##*.}";
+                            if [ "${derExt}" == asm ] || [ "${derExt}" == sbt ] || [ "${derExt}" == c ] || [ "${derExt}" == cpp ] || [ "${derExt}" == mak ]; then
+                              find . -type f -iname "${dervSegmt}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+                            fi
+                            derDirectory="${delDvl%/*}"
+                            if [ -d "${derDirectory}" ]; then
+                              if [ -z "$(ls -A "${derDirectory}" 2>/dev/null)" ]; then
+                                rm -rf "${derDirectory}" &> /dev/null
+                                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Dvl workspace Sys directory ${derDirectory} deleted from project RC:$RC"
+                              fi
+                            fi
+                          fi
+                        popd &> /dev/null
+                      fi
+                    done
+                    unset IFS
+                  fi
+                  if [ "${updateSegs}" != "NULL" ]; then
+                    # update files
+                    IFS=',' read -r -a updateFiles <<< "${updateSegs[@]}";
+                    for updateDvl in "${updateFiles[@]}";
+                    do
+                      if [[ "${updateDvl%/*}" == +($DIR_TPF_APP) ]]; then
+                        pushd "${APP_DVL_IMPL_CWRK}" &> /dev/null
+                          if [ -f "${updateDvl}" ]; then
+                            cp -Rf "${tempDir}/${updateDvl}" "${APP_DVL_IMPL_CWRK}${updateDvl}" &> /dev/null
+                            derSeg="${updateDvl##*/}";
+                            dervSegmt="${derSeg%.*}";
+                            derExt="${derSeg##*.}";
+                            if [ "${derExt}" == asm ] || [ "${derExt}" == sbt ] || [ "${derExt}" == c ] || [ "${derExt}" == cpp ] || [ "${derExt}" == mak ]; then
+                              find . -type f -iname "${dervSegmt}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+                            fi
+                            if [ "${derExt}" == sbt ]; then
+                              find ./sbtasm -type f -iname "${dervSegmt}\.*" -exec rm -f {} \;
+                            fi
+                          else
+                            #copy new file assume and create directory
+                            nonibmDir="${updateDvl%/*}";
+                            if [ ! -d "${nonibmDir}" ]; then
+                              mkdir -p "${nonibmDir}";
+                            fi
+                            cp -Rf "${tempDir}/${updateDvl}" "${APP_DVL_IMPL_CWRK}${nonibmDir}/" &> /dev/null
+                          fi
+                        popd &> /dev/null
+                      else
+                        pushd "${SYS_DVL_IMPL_CWRK}" &> /dev/null
+                          if [ -f "${updateDvl}" ]; then
+                            cp -Rf "${tempDir}/${updateDvl}" "${SYS_DVL_IMPL_CWRK}${updateDvl}" &> /dev/null
+                            derSeg="${updateDvl##*/}";
+                            dervSegmt="${derSeg%.*}";
+                            derExt="${derSeg##*.}";
+                            if [ "${derExt}" == asm ] || [ "${derExt}" == sbt ] || [ "${derExt}" == c ] || [ "${derExt}" == cpp ] || [ "${derExt}" == mak ]; then
+                              find . -type f -iname "${dervSegmt}\.*" -not -name "*.asm" -not -name "*.mak" -not -name "*.c" -not -name "*.cpp" -not -name "*.sbt" -exec rm -f {} \;
+                            fi
+                          else
+                            #copy new file assume and create base directory
+                            ibmDir="${updateDvl%/*}";
+                            if [ ! -d "${ibmDir}" ]; then
+                              mkdir -p "${ibmDir}";
+                            fi
+                            cp -Rf "${tempDir}/${updateDvl}" "${SYS_DVL_IMPL_CWRK}${ibmDir}/" &> /dev/null
+                          fi
+                        popd &> /dev/null
+                      fi
+                    done
+                    unset IFS
+                  fi
+                  #Remove APP workspace if it's empty
+                  if [ ! "$(ls -A "${APP_DVL_IMPL_CWRK}" 2>/dev/null)" ]; then
+                    rm -Rf "${APP_DVL_IMPL_CWRK}";
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Removing ${APP_DVL_IMPL_CWRK} due to empty RC:$RC"
+                    if [ ! "$(ls -A "${DVL_TPF_APP}/${USR_IMPL_PLAN}" 2>/dev/null)" ]; then
+                      rm -Rf "${DVL_TPF_APP:?}/${USR_IMPL_PLAN}";
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Removing ${DVL_TPF_APP}/${USR_IMPL_PLAN} due to empty RC:$RC"
+                    fi
+                  fi
+                  #Remove SYS workspace if it's empty
+                  if [ ! "$(ls -A "${SYS_DVL_IMPL_CWRK}" 2>/dev/null)" ]; then
+                    rm -Rf "${SYS_DVL_IMPL_CWRK}";
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Removing ${SYS_DVL_IMPL_CWRK} due to empty RC:$RC"
+                    if [ ! "$(ls -A "${DVL_TPF_SYS}/${USR_IMPL_PLAN}" 2>/dev/null)" ]; then
+                      rm -Rf "${DVL_TPF_SYS:?}/${USR_IMPL_PLAN}";
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Removing ${DVL_TPF_SYS}/${USR_IMPL_PLAN} due to empty RC:$RC"
+                    fi
+                  fi
+                  if [ -d "${DVL_TPF_LOD}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}" ]; then
+                    rm -Rf "${DVL_TPF_LOD:?}/${USR_IMPL_PLAN}/${USR_IMPL_CORE}";
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Removing ${DVL_TPF_LOD}/${USR_IMPL_PLAN}/${USR_IMPL_CORE} due to ChangedFiles: ${updateSegs} RC:$RC"
+                  fi
+                popd &> /dev/null
+              fi
+            fi
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to reach remote repository. RC:$EC"
+          echo -e "ERROR: Unable to reach remote repository.\\n"; RC="$EC"; #CONSOLE
+        fi
+      else
+        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to build DVL workspace path. RC:$EC"
+        echo -e "ERROR: Unable to build DVL workspace path.\\n"; RC="$EC"; #CONSOLE
+      fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Requested service user invalid. RC:$EC"
+    echo -e "ERROR: Requested service user invalid.\\n"; RC="$EC";     #CONSOLE
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#echo ${compFile[@]}
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ProjectDir} ${LocalBranchName} ${LocalUserID} ${updateSegs} ${deletedSegs} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

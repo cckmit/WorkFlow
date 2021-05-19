@@ -1,0 +1,92 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpfcommoncode                                             #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to populate the source from Linux to Git SCM Repository         #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - list of segment names                                            #
+#      $2  -  plan number with system                                         #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   05122017    VINOTH   Created the script                                   #
+#   09062019    VINOTH   Updated for git based plan if failed sending error   #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=2;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+RemoteBranchName="$1";
+lstOfSeg="$2";
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${RemoteBranchName} ${lstOfSeg} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+    getParmFromBranch "${RemoteBranchName}" "USR"; RC=$?; #Get workspace parm
+    if [ -d "${USR_IMPL_CWRK}" ]; then
+      pushd "${USR_IMPL_CWRK}" &> /dev/null;
+        git status &> /dev/null; RC=$?;
+        if [ "${RC}" -eq 0 ]; then
+          localcomchk=( $(git status -s | grep -w M | grep -v ".git" | awk '{print $2}'| tr '\n' ',' | sed 's/,$/\n/') );
+          git status |grep -v ".gitref" | grep "modified:" &> /dev/null; RC=$?;
+          if [ "${RC}" -ne 0 ]; then
+            git branch | grep "\*" | grep "${USR_IMPL_ID}_${USR_IMPL_CORE}" &> /dev/null; RC=$?;
+            if [[ -n "${lstOfSeg[0]}" ]] && [[ "${RC}" -eq 0 ]]; then
+              IFS=',' read -r -a _lstOfSeg <<< "${lstOfSeg[@]}";
+              for segs in "${_lstOfSeg[@]}"
+              do
+                _segHash=( $(md5sum "${segs}") )
+                _outPutHash+=${segs}:${_segHash## *},
+              done
+               sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_outPutHash[*]%,*} RC:$RC"
+               echo -e "${_outPutHash[@]%,*}"
+              unset IFS
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Commit your local changes and try checkin again ${localcomchk[*]} in ${USR_IMPL_CORE^^} RC:$EC"
+            echo -e "ERROR: Check-in action detects uncommitted files ${localcomchk[*]} in ${USR_IMPL_CORE^^} project directory"
+            RC=${EC};
+          fi
+        else
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${USR_IMPL_CWRK} - Not a valid git project | Git local repository deleted possibly due to unintended user action on the .git folder. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:$EC"
+          echo -e "ERROR: Git local repository deleted possibly due to unintended user action on the .git folder. Please take a backup of your changes and use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}).";
+          RC=${EC};
+        fi
+      popd &> /dev/null
+    else
+       sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Workspace not found - ${USR_IMPL_CWRK} | Local workspace deleted possibly due to unintended user action on the project folder. Please use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}) RC:$EC"
+       echo -e "ERROR: Local workspace deleted possibly due to unintended user action on the project folder. Please use Restore action from the implementation summary line to revert the changes to an earlier point (${USR_IMPL_CORE^^}).";
+       RC="$EC";
+    fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${RemoteBranchName} ${lstOfSeg} RC:$RC"
+exit "$RC";
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

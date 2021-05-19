@@ -1,0 +1,12 @@
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(5,'VPRTSM01','QA_FUCTIONAL','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(5,'VPRTSM01','QA_REGRESSION','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(5,'VPRTSM01','PRE_PROD','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(5,'VPRTSM01','INTEGRATION','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(6,'VPOTSM01','QA_FUCTIONAL','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(6,'VPOTSM01','QA_REGRESSION','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(6,'VPOTSM01','PRE_PROD','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(6,'VPOTSM01','INTEGRATION','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(7,'VPAIRM01','QA_FUCTIONAL','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(7,'VPAIRM01','QA_REGRESSION','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(7,'VPAIRM01','PRE_PROD','Y','MTPService','2017-01-01 10:00:00', false,'N',false);
+INSERT INTO VPARS(system_id,name, type, active, created_by, created_dt, tss_deploy, default_cpu,qa_vpars) values(7,'VPAIRM01','INTEGRATION','Y','MTPService','2017-01-01 10:00:00', false,'N',false);

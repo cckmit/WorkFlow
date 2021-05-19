@@ -1,0 +1,337 @@
+<div>
+    <div class="row">
+        <div class="col-md-4" style="border-left:1px solid #eee;">
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Project Number</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.projectId.projectNumber}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Created By:</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.createdBy}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Load type</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.loadType}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Problem ticket no.</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6 word-wrap">
+                    <label>{{pObj.sdmTktNum}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Dev Manager</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.devManagerName}}</label>
+                </div>
+            </div>
+            <div class="row" ng-if="pObj.devManager!=pObj.delegateId && pObj.delegateId != null">
+                <div class="col-md-6">
+                    <span class="dataTitle">Delegated to</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.delegateName}}</label>
+                </div>
+            </div>
+            <div class="row" ng-if="pObj.devManager!=pObj.approver && pObj.approver != null">
+                <div class="col-md-6">
+                    <span class="dataTitle">Approved by</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.approverName}}</label>
+                </div>
+            </div>
+            <div class="row" ng-if="pObj.planStatus != 'ACTIVE' && pObj.planStatus != 'SUBMITTED'">
+                <div class="col-md-6">
+                    <span class="dataTitle">Approval Date/Time</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.devMgrApproveDateTime | formattedDateTimeWithoutSeconds}}</label>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4" style="border-left:1px solid #eee;">
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Description</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label class="work-break">{{pObj.planDesc}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Project name</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label class="work-break">{{pObj.projectId.projectName}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">LoB(Line of Business)</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label class="work-break">{{pObj.projectId.lineOfBusiness}}</label>
+                </div>
+            </div>
+            <div class="row" ng-if="pObj.projectId.isDelta">
+                <div class="col-md-6">
+                    <span class="dataTitle">Project manager name</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.projectId.managerName}}</label>
+                </div>
+            </div>
+            <div class="row" ng-if="!pObj.projectId.isDelta">
+                <div class="col-md-6">
+                    <span class="dataTitle">Project manager name</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.projectId.managerId}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Project Sponsor name</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.projectId.sponsorId}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Plan Status</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <span ng-if="pObj.planStatus" plan-status-to-display-label="{{pObj.planStatus}}"></span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4" style="border-left:1px solid #eee;">
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Dependencies</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.relatedPlans}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Development lead name</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.leadName}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Development lead phone number</span><span
+                        class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.leadContact}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Other phone number</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.othContact}}</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="dataTitle">Comments</span><span class="pull-right semiColon">:</span>
+                </div>
+                <div class="col-md-6">
+                    <label>{{pObj.mgmtComment}}</label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-12">
+            <fieldset ng-repeat="sObj in pObj.systemLoadList">
+                <legend class="padding-bottom-none w-100">
+                    <span class="fieldset_legend_left">
+                        <a ex-co data-toggle="collapse" data-target="#{{pObj.id}}_{{sObj.systemId.name}}"
+                            aria-label="#{{pObj.id}}_{{sObj.systemId.name}}">+</a> {{sObj.systemId.name}}
+                    </span>
+                    <span class="fieldset_legend_right">
+                        <label ng-if="sObj.prodLoadStatus | nCheck"
+                            class="label label-success systemLoadStatus">{{vm.loadset_status_list[sObj.prodLoadStatus]}}</label>
+                        <label ng-if="sObj.preProdLoadStatus | nCheck"
+                            class="label label-success systemLoadStatus">{{vm.loadset_status_list[sObj.preProdLoadStatus]}}</label>
+                    </span>
+                    <span class="fieldset_legend"></span>
+                </legend>
+                <div id="{{pObj.id}}_{{sObj.systemId.name}}" class="collapse padding-bottom-5">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">Load category</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.loadCategoryId.name}}
+                                        -
+                                        {{sObj.loadCategoryId.description}}</label>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">Load date/time</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.loadDateTime | formattedDateTimeWithoutSeconds}}</label>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <!--(Primary phone number)-->
+                                    <span class="dataTitle">Load attendee </span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.loadAttendee}}</label>
+                                </div>
+                            </div>
+                            <div class="row" ng-if="sObj.putLevelId.putLevel && sObj.putLevelId.putLevel != '-'">
+                                <div class="col-md-4">
+                                    <!--(Primary phone number)-->
+                                    <span class="dataTitle">zTPF Level Dependency </span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.putLevelId.putLevel}}</label>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">Load setname</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.loadSetName}}</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">Preload</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.preload}}</label>
+                                </div>
+                            </div>
+                            <div class="row" ng-if="sObj.preload=='Yes'">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">Code activated</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.preloadDesc}}</label>
+                                </div>
+                            </div>
+                            <div class="row" ng-if="sObj.preload=='Yes'">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">Preload justification</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.preloadJust}}</label>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">DBCR #</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span ng-repeat="dbcrObj in sObj.systemId.dbcrList">
+                                        <b ng-if="dbcrObj.mandatory == 'Y'">{{dbcrObj.dbcrName}} -
+                                            {{dbcrObj.environment}}</b>
+                                        <span ng-if="dbcrObj.mandatory != 'Y'">{{dbcrObj.dbcrName}} -
+                                            {{dbcrObj.environment}}</span>
+                                        <span ng-if="$index != (sObj.systemId.dbcrList.length-1)">, &nbsp;</span>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">Special Instructions for TSD</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.loadInstruction}}</label>
+                                </div>
+                            </div>
+                            <div class="row" ng-if="sObj.qaBypassStatus != null">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">QA Testing Status</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span
+                                        qa-status-label="{{getQAStatus(sObj.qaBypassStatus, sObj.qaFunctionalBypassComment, sObj.qaRegressionBypassComment)}}"></span>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">QA Functional Tester</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.qaFunctionalTesterName}}</label>
+                                </div>
+                            </div>
+                            <div class="row"
+                                ng-if="sObj.qaFunctionalBypassComment != '' && sObj.qaFunctionalBypassComment != null && sObj.qaFunctionalBypassComment.indexOf('*PASSED*') < 0">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">QA Functional Bypass Comment</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.qaFunctionalBypassComment}}</label>
+                                </div>
+                            </div>
+                            <div class="row"
+                                ng-if="sObj.qaRegressionBypassComment != '' && sObj.qaRegressionBypassComment != null && sObj.qaRegressionBypassComment.indexOf('*PASSED*') < 0">
+                                <div class="col-md-4">
+                                    <span class="dataTitle">QA Regression Bypass Comment</span>
+                                    <span class="pull-right semiColon">:</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <label>{{sObj.qaRegressionBypassComment}}</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </fieldset>
+        </div>
+    </div>
+</div>

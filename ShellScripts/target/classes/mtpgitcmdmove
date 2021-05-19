@@ -1,0 +1,512 @@
+#!/bin/bash
+# shellcheck disable=SC2206,SC2207,SC1117,SC2034,SC2179,SC2164
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcmdmove                                                #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to move git functional packages from one functional package to  #
+#      another repo                                                           #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation ID                                                #
+#      $2  - Core or system                                                   #
+#      $3  - Production path                                                  #
+#      $4  - Segment full path                                                #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   06282018    VINOTH  Moving segments from one functional package to another#
+#   12012018    VINOTH  remove-empty for file deleted history ignored         #
+#   12012019    VINOTH  GIT optimization                                      #
+#   04292019    GOWTHAM   Updated with logger support                         #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=5;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+
+Core="$1";                             #Read TPF system name
+SourceRepo="$2";                       #Sourceing repo to collect info ex:- tpf/tp/nonibm/nonibm_sys.git
+TargetRepo="$3";                       #Target repo to move functional package tpf/tp/nonibm/nonibm_fls.git
+Segments="$4";                         #Read segments for using comman seperator src/nazd.c
+UserId="$5";                           #Read user id
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${Core} ${SourceRepo} ${TargetRepo} ${Segments} ${UserId} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  source_remote="${DEV_SRC_RURL_SUSR}/${SourceRepo}"; # source repo
+  target_remote="${DEV_SRC_RURL_SUSR}/${TargetRepo}"; #Target repo
+  #---------------------------------derived part------------------------------#
+  DerivedSourgit="${SourceRepo%.*}"                   # Source tpf/tp/nonibm/nonibm_sys without .git
+  DerivedSournonibm="${DerivedSourgit%_*}" ;          # Source tpf/tp/nonibm/nonibm
+  DerivedSourFunc="${DerivedSourgit#*_}_BIN_$RANDOM"  # Source functional pack sys with RANDOM
+  DerivedremoteSour=${DerivedSourgit#*_}              # nonibm_sys
+  DerivedUrl="${DerivedSournonibm%/*}"                # source tpf/tp/nonibm
+  DerivedTagrgit="${TargetRepo%.*}"                   # Target tpf/tp/nonibm/nonibm_fls without .git
+  DerivedTagrnonibm="${DerivedTagrgit%_*}"            # Target tpf/tp/nonibm/nonibm
+  DerivedTagrFunc="${DerivedTagrgit#*_}_BIN_$RANDOM"  # Target functional pack fls
+  DerivedremoteTagr="${DerivedTagrgit#*_}";
+  createTagBranch="${DerivedTagrgit#*_}"              # Target repo with .git
+  #-----GIT Derived remote URL----------------------------------------------#
+  derived_source="${DEV_BIN_RURL_SUSR}/gitblit/r/${DerivedUrl}/derived_${DerivedremoteSour}.git";
+  derived_target="${DEV_BIN_RURL_SUSR}/gitblit/r/${DerivedUrl}/derived_${DerivedremoteTagr}.git";
+  #
+  if [[ "${Core}" == +($REF_T4_CORE) ]] || [[ "${Core}" == +($REF_WS_CORE) ]]; then
+    comPany=tp;
+  elif [[ "${Core}" == +($REF_DL_CORE) ]]; then
+    comPany=dl;
+  fi
+  mkdir -p "${HOME}/Moverepo/${comPany}/${Core}"
+  pushd "${HOME}/Moverepo/${comPany}/${Core}" &> /dev/null;
+    SourceClone="${SourceRepo##*/}"                 # nonibm_sys.git
+    SourceCloneGit="${SourceClone%.*}_SRC_$RANDOM"; # nonibm_sys
+    SourceremoteGit="${SourceClone%.*}"
+    TargetClone="${TargetRepo##*/}";                # Target repo
+    TargetCloneGit="${TargetClone%.*}_SRC_$RANDOM"; # Target nonibm_fls
+    #Source repo cloned
+    wsMessage="INFO: Git source repository preparing for migration..."
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+    echo -e "${wsMessage}";
+    GIT_SSL_NO_VERIFY=true git clone -b "master_${Core}" "${source_remote}" "${SourceCloneGit}" &>/dev/null; SRC=$?;
+    GIT_SSL_NO_VERIFY=true git ls-remote "${target_remote}"|grep "master_${Core}" &>/dev/null; TRC=$?;
+    if [ ${TRC} -ne 0 ]; then
+      bash "${MTP_ENV}"/mtpgitcreatebranch "${Core}" "${comPany}" "${createTagBranch}"
+    fi
+    GIT_SSL_NO_VERIFY=true git clone -b "master_${Core}" "${target_remote}" "${TargetCloneGit}" &>/dev/null; TRC=$?;
+    #
+    if [ ${SRC} -eq 0 ] && [ ${TRC} -eq 0 ]; then
+      wsMessage="INFO: Git source repositories cloned."
+      sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+      echo -e "${wsMessage}";
+      pushd "${SourceCloneGit}" &> /dev/null
+        GIT_SSL_NO_VERIFY=true git fetch --tags &>/dev/null;
+      popd &> /dev/null
+      pushd "${TargetCloneGit}" &> /dev/null
+        git remote add "${SourceremoteGit}" "${source_remote}" &>/dev/null; RC=$?;
+        GIT_SSL_NO_VERIFY=true git fetch "${SourceremoteGit}" --no-tags &>/dev/null;
+      popd &> /dev/null
+      if [ "${RC}" -eq 0 ]; then
+        wsMessage="INFO: Source segment migration in progress..."
+        sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+        echo -e "${wsMessage}";
+        pushd "${SourceCloneGit}" &> /dev/null
+        IFS=',' read -r -a _segments <<< "${Segments[@]}"; #Read source as array
+        for seg in "${_segments[@]}"
+        do
+          seg_commit=( $(git log --remove-empty --pretty=format:"%h %s" -- "${seg}"| sort -k 2 | awk '{print $1}'|tr '\n' ' ' ) );
+          for((i=0; i<${#seg_commit[@]}; i++));
+          do
+            if [ -n "${seg_commit[i]// /}" ]; then
+              commit_id=${seg_commit[i]}                           # commit id first version segment
+              commit_tag=$(git tag | grep "${commit_id}")          # tag status
+              planstatus=${commit_tag%-*}                          # corpped plan
+              tagstatus=${planstatus%-*}                           # online status
+              planName=${planstatus#*-}
+              commit_Mes=$(git show -s --format=%B "${commit_id}") # commit message
+              oldLoaddate=$(echo "${commit_Mes}"| awk -F ',' '{print$1}'|awk -F':' '{print$2}')
+              if [ -d "${HOME}/Moverepo/${comPany}/${Core}/${TargetCloneGit}" ]; then
+                pushd "${HOME}/Moverepo/${comPany}/${Core}/${TargetCloneGit}" &> /dev/null
+                  git checkout "${commit_id}" "${seg}" &>/dev/null; RC=$?;
+                  if [ "${RC}" -eq 0 ] && [[ "${tagstatus}" =~ 'online' ]] || [[ "${tagstatus}" =~ 'fallback' ]] || [[ "${tagstatus}" =~ 'pending' ]]; then
+                    git add "${seg}" &>/dev/null;
+                    git commit -am "${commit_Mes}" &>/dev/null;
+                    git tag -a "${planstatus}-$(git log -1 --pretty=%h)" -m "${planstatus}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                    getGitData "SRC" "${HOME}/Moverepo/${comPany}/${Core}/${TargetCloneGit}" "${planName}" "${oldLoaddate}" "false" ; RC=$?;
+                    if [ ${RC} -eq 0 ]; then
+                      sendGitData "${Core}" "false"; RC=$?
+                    fi
+                    GIT_SSL_NO_VERIFY=true git push origin "master_${Core}" --tags &>/dev/null; RC=$?;
+                    for j in {0..2}        #Retry if it's failed
+                    do
+                      if [ ${RC} -eq 0 ]; then
+                        break;
+                        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} success RC:$RC"
+                      elif [ "${RC}" -eq 128 ]; then
+                        sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} to remote re-try - $j RC:$_RC"
+                        echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                        sleep 3;
+                        RC="$EC";
+                      else
+                        RC="$EC";
+                        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} to remote re-try - $j RC:$_RC"
+                      fi
+                    done
+                    if [ "${RC}" -eq 0 ]; then
+                      wsMessage="INFO: Source segment migrated - ${seg}"
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+                      echo -e "${wsMessage}";
+                    else
+                      wsMessage="ERROR: Source segment migration failed - ${seg}"
+                      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+                      echo -e "${wsMessage}";
+                      RC="$EC"
+                    fi
+                  else
+                    wsMessage="ERROR: Git move failed from ${commit_id} to the segment ${seg}";
+                    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+                    echo -e "${wsMessage}";
+                    RC="$EC"
+                  fi
+                popd
+              fi
+            fi
+          done
+          if [ -f "${seg}" ]; then
+            planid="${planstatus#*-}"
+            planName=${planid}
+            oldLoaddate=$(echo "${commit_Mes}"| awk -F ',' '{print$1}'|awk -F':' '{print$2}')
+            rm -f "${seg}";
+            git commit -am "${commit_Mes}" &>/dev/null;
+            git tag -a "deleted-${planid}-$(git log -1 --pretty=%h)" -m "deleted-${planid}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+            getGitData "SRC" "${HOME}/Moverepo/${comPany}/${Core}/${SourceCloneGit}" "${planName}" "${oldLoaddate}" "false" ; RC=$?;
+            if [ ${RC} -eq 0 ]; then
+              sendGitData "${Core}" "false"; RC=$?
+            fi
+            GIT_SSL_NO_VERIFY=true git push origin "master_${Core}" --tags &>/dev/null; RC=$?;
+            for j in {0..2}            #Retry if it's failed
+              do
+              if [ ${RC} -eq 0 ]; then
+                break;
+                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} success RC:$RC"
+              elif [ "${RC}" -eq 128 ]; then
+                sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} to remote re-try - $j RC:$RC"
+                echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                sleep 3;
+                RC="$EC";
+              else
+                RC="$EC";
+                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} to remote re-try - $j RC:$_RC"
+              fi
+            done
+            if [ "${RC}" -eq 0 ]; then
+              wsMessage="INFO: Segment deleted from source repo ${DerivedremoteSour} - ${seg}";
+              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+              echo -e "${wsMessage}";
+            else
+              wsMessage="ERROR: Segment delete failed from source repo ${DerivedremoteSour} - ${seg}";
+              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage}. RC:$EC"
+              echo -e "${wsMessage}";
+              RC="$EC"
+            fi
+          fi
+        done
+        wsMessage="INFO: Source migration completed for ${DerivedremoteTagr} - ${_segments[*]}"
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+        echo -e "${wsMessage}";
+      popd &> /dev/null;
+    else
+      wsMessage="ERROR: Git remote add from current repo into the target repo failed"
+      sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage}. RC:$EC"
+      echo -e "${wsMessage}";
+      RC="$EC"
+    fi
+  else
+    wsMessage="ERROR: Failed to clone source remote repositories"
+    sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage}. RC:$EC"
+    echo -e "${wsMessage}";
+    RC=${EC};
+  fi
+  unset IFS;
+#-----------------------derived part-------------------------------------------#
+  if [ "${RC}" -eq 0 ]; then
+    IFS=' '  #read -r -a _dsegments <<< "${Segments[@]}"; #Read source as derived array
+    _dsegments="${_segments[*]}"
+    for dseg in "${_dsegments[@]}"
+    do
+    if [[ "${dseg}" =~ .asm ]] || [[ "${dseg}" =~ .c ]] || [[ "${dseg}" =~ .cpp ]] || [[ "${dseg}" =~ .mak ]] || [[ "${dseg}" =~ .sbt ]]; then
+      if [[ ! -d "derived_${DerivedSourFunc}" ]] && [[ ! -d "derived_${DerivedTagrFunc}" ]]; then
+        GIT_SSL_NO_VERIFY=true git clone -b "master_${Core}" "${derived_source}" "derived_${DerivedSourFunc}" &>/dev/null; SRC=$?;
+        GIT_SSL_NO_VERIFY=true git clone -b "master_${Core}" "${derived_target}" "derived_${DerivedTagrFunc}" &>/dev/null; TRC=$?;
+        if [ ${SRC} -eq 0 ] && [ ${TRC} -eq 0 ]; then
+          wsMessage="INFO: Git derived repositories cloned."
+          sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+          echo -e "${wsMessage}";
+          pushd "derived_${DerivedSourFunc}" &> /dev/null
+            GIT_SSL_NO_VERIFY=true git fetch --tags &>/dev/null;
+          popd &> /dev/null
+          pushd "derived_${DerivedTagrFunc}" &> /dev/null
+            git remote add "derived_${DerivedremoteSour}" "${derived_source}" &>/dev/null; RC=$?;
+            GIT_SSL_NO_VERIFY=true git fetch "derived_${DerivedremoteSour}" --no-tags &>/dev/null;
+          popd &> /dev/null
+          if [ "${RC}" -eq 0 ]; then
+            if [ -d "derived_${DerivedSourFunc}" ] && [ -d "derived_${DerivedTagrFunc}" ]; then
+              pushd "derived_${DerivedSourFunc}" &> /dev/null
+                segOnly=${dseg##*/}     # segment name bena.asm
+                segExte=${dseg##*.}     # segment extension
+                segName="${segOnly%.*}" # name of segment bena
+                if [ "${segExte}" == "asm" ] || [ "${segExte}" == "c" ] || [ "${segExte}" == "cpp" ]|| [ "${segExte}" == "sbt" ]; then
+                  dseghist=($(git log --remove-empty --pretty=format:"%h %s" -- "*${segName}.*" -i | sort -k 2 | awk '{print $1}'|tr '\n' ' ' ));
+                  if [ -n "${dseghist[0]// /}" ]; then
+                    for((i=0; i<${#dseghist[@]}; i++));
+                    do
+                      commit_id=${dseghist[i]}                             # commit id first version segment
+                      commit_tag=$(git tag | grep "${commit_id}")          # tag status
+                      planstatus=${commit_tag%-*}                          # corpped plan
+                      tagstatus=${planstatus%-*}                           # online status
+                      commit_Mes=$(git show -s --format=%B "${commit_id}") # commit message
+                      commit_seg=($(git show --pretty="format:" --name-only "${commit_id}" |grep -i "${segName}" | tr '\n' ' '))
+                      if [ -d "${HOME}/Moverepo/${comPany}/${Core}/derived_${DerivedTagrFunc}" ]; then
+                        pushd "${HOME}/Moverepo/${comPany}/${Core}/derived_${DerivedTagrFunc}" &> /dev/null
+                          git checkout "${commit_id}" "${commit_seg[@]}" &>/dev/null; RC=$?;
+                          if [ "${RC}" -eq 0 ] && [[ "${tagstatus}" =~ 'online' ]] || [[ "${tagstatus}" =~ 'fallback' ]] || [[ "${tagstatus}" =~ 'pending' ]]; then
+                            git add "${commit_seg[@]}" &>/dev/null;
+                            git commit -am "${commit_Mes}" &>/dev/null;
+                            git tag -a "${planstatus}-$(git log -1 --pretty=%h)" -m "${planstatus}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                            GIT_SSL_NO_VERIFY=true git push origin "master_${Core}" --tags &>/dev/null; RC=$?;
+                            for j in {0..2}        #Retry if it's failed
+                            do
+                              if [ ${RC} -eq 0 ]; then
+                                break;
+                                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} success RC:$RC"
+                              elif [ "${RC}" -eq 128 ]; then
+                                sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} to remote re-try - $j RC:$RC"
+                                echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                sleep 3;
+                                RC="$EC";
+                              else
+                                RC="$EC";
+                                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} to remote failed RC:$RC"
+                              fi
+                            done
+                            if [ "${RC}" -eq 0 ]; then
+                              wsMessage="INFO: Derived segments migrated to target repo - ${commit_seg[*]}"
+                              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+                              echo -e "${wsMessage}";
+                            else
+                              wsMessage="ERROR: Derived segments failed to migrate target repo - ${commit_seg[*]}"
+                              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+                              echo -e "${wsMessage}";
+                              RC="$EC"
+                            fi
+                          else
+                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+                            echo -e "${wsMessage}";
+                            RC="$EC"
+                          fi
+                        popd
+                      fi
+                      if [ -n "${commit_seg[0]// /}" ]; then
+                        planid="${planstatus#*-}"
+                        rm -f "${commit_seg[@]}" &>/dev/null
+                        git commit -am "${commit_Mes}" &>/dev/null
+                        #shellcheck disable=SC2046,SC2143
+                        if [ -z "$(git tag | grep $(git log -1 --pretty=%h))" ]; then
+                          git tag -a "deleted-${planid}-$(git log -1 --pretty=%h)" -m "deleted-${planid}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                          GIT_SSL_NO_VERIFY=true git push origin "master_${Core}" --tags &>/dev/null; RC=$?;
+                          for j in {0..2}        #Retry if it's failed
+                          do
+                            if [ ${RC} -eq 0 ]; then
+                              break;
+                              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} success RC:$RC"
+                            elif [ "${RC}" -eq 128 ]; then
+                              sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} to remote re-try - $j RC:$RC"
+                              echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                              sleep 3;
+                              RC="$EC";
+                            else
+                              RC="$EC";
+                              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} to remote failed RC:$RC"
+                            fi
+                          done
+                          if [ "${RC}" -eq 0 ]; then
+                            wsMessage="INFO: Derived segments deleted from Current repo - ${commit_seg[*]}"
+                            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+                            echo -e "${wsMessage}";
+                          else
+                            wsMessage="ERROR: Derived segments Failed to delete from current repo - ${commit_seg[*]}"
+                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+                            echo -e "${wsMessage}";
+                            RC="$RC"
+                          fi
+                        fi
+                      fi
+                    done
+                  else
+                    wsMessage="INFO: ${dseg} - No derived files are available in GIT for this segment";
+                    sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+                    echo -e "${wsMessage}";
+                  fi
+                elif [ "${segExte}" == "mak" ]; then
+                  dseghist=($(git log --remove-empty --pretty=format:"%h %s" -- "*${segName}.*"| sort -k 2 | awk '{print $1}'|tr '\n' ' ' ));
+                  if [ -n "${dseghist[0]// /}" ]; then
+                    for((i=0; i<${#dseghist[@]}; i++));
+                    do
+                      commit_id=${dseghist[i]}                             # commit id first version segment
+                      commit_tag=$(git tag | grep "${commit_id}")          # tag status
+                      planstatus=${commit_tag%-*}                          # corpped plan
+                      tagstatus=${planstatus%-*}                           # online status
+                      commit_Mes=$(git show -s --format=%B "${commit_id}") # commit message
+                      #shellcheck disable=2196
+                      commit_seg=($(git show --pretty="format:" --name-only "${commit_id}" |grep -i "${segName}" | egrep ".so|.map|.lst|.err"|tr '\n' ' '))
+                      if [ -d "${HOME}/Moverepo/${comPany}/${Core}/derived_${DerivedTagrFunc}" ]; then
+                        pushd "${HOME}/Moverepo/${comPany}/${Core}/derived_${DerivedTagrFunc}" &> /dev/null
+                          git checkout "${commit_id}" "${commit_seg[@]}" &>/dev/null; RC=$?;
+                          if [ "${RC}" -eq 0 ] && [[ "${tagstatus}" =~ 'online' ]] || [[ "${tagstatus}" =~ 'fallback' ]] || [[ "${tagstatus}" =~ 'pending' ]]; then
+                            git add "${commit_seg[@]}" &>/dev/null;
+                            git commit -am "${commit_Mes}" &>/dev/null
+                            git tag -a "${planstatus}-$(git log -1 --pretty=%h)" -m "${planstatus}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                            GIT_SSL_NO_VERIFY=true git push origin "master_${Core}" --tags &>/dev/null; RC=$?;
+                            for j in {0..2}        #Retry if it's failed
+                            do
+                              if [ ${RC} -eq 0 ]; then
+                                break;
+                                sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} success RC:$RC"
+                              elif [ "${RC}" -eq 128 ]; then
+                                sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} to remote re-try - $j RC:$RC"
+                                echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                                sleep 3;
+                                RC="$EC";
+                              else
+                                RC="$EC";
+                                sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} failed RC:$RC"
+                              fi
+                            done
+                            if [ "${RC}" -eq 0 ]; then
+                              wsMessage="INFO: Derived segment migrated - ${commit_seg[*]}"
+                              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+                              echo -e "${wsMessage}";
+                            else
+                              wsMessage="ERROR: Derived segment failed to migrate target repo- ${commit_seg[*]}"
+                              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+                              echo -e "${wsMessage}";
+                              RC="$EC"
+                            fi
+                          else
+                            wsMessage="ERROR: Git checkout failed ${commit_id} and the segment -${seg}";
+                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+                            echo -e "${wsMessage}";
+                            RC="$EC"
+                          fi
+                        popd
+                      fi
+                      if [ -n "${commit_seg[0]// /}" ]; then
+                        planid="${planstatus#*-}"
+                        rm -f "${commit_seg[@]}" &>/dev/null
+                        git commit -am "${commit_Mes}" &>/dev/null
+                        #shellcheck disable=2046,2143
+                        if [ -z "$(git tag | grep $(git log -1 --pretty=%h))" ]; then
+                          git tag -a "deleted-${planid}-$(git log -1 --pretty=%h)" -m "deleted-${planid}-$(git log -1 --pretty=%h)" "$(git log -1 --pretty=%h)" &>/dev/null;
+                          GIT_SSL_NO_VERIFY=true git push origin "master_${Core}" --tags &>/dev/null; RC=$?;
+                          for j in {0..2}        #Retry if it's failed
+                          do
+                            if [ ${RC} -eq 0 ]; then
+                              break;
+                              sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} success RC:$RC"
+                            elif [ "${RC}" -eq 128 ]; then
+                              sendLOG "WARN" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} to remote re-try - $j RC:$RC"
+                              echo -e "WARNING: git remote re-try - $j" &> /dev/null; #DEBUG
+                              sleep 3;
+                              RC="$EC";
+                            else
+                              RC="$EC";
+                              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git push origin master_${Core} failed RC:$RC"
+                            fi
+                          done
+                          if [ "${RC}" -eq 0 ]; then
+                            wsMessage="INFO: Derived segments deleted from Current repo - ${commit_seg[*]}"
+                            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+                            echo -e "${wsMessage}";
+                          else
+                            wsMessage="ERROR: Derived segments failed to delete from Current repo - ${commit_seg[*]}"
+                            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+                            echo -e "${wsMessage}";
+                            RC="$EC"
+                          fi
+                        fi
+                      fi
+                    done
+                  else
+                    wsMessage="INFO: ${dseg}- No derived files are available in GIT for this segment";
+                    sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+                    echo -e "${wsMessage}";
+                  fi
+                else
+                  wsMessage="INFO: ${dseg} - This extension has no derived files to migrate."
+                  sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+                  sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+                  echo -e "${wsMessage}";
+                fi
+              popd &> /dev/null
+            fi
+          else
+            wsMessage="ERROR: Git remote add from current repo into the target repo failed"
+            sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+            echo -e "${wsMessage}";
+            RC="$EC"
+          fi
+        else
+          wsMessage="ERROR: Failed to clone derived remote repositories"
+          sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+          echo -e "${wsMessage}";
+          RC="$EC"
+        fi
+      fi
+    fi
+    done
+    unset IFS
+  else
+    wsMessage="ERROR: GIT Failed to Push Current/Target remote repository"
+    sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$EC"
+    echo -e "${wsMessage}";
+    RC=${EC};
+  fi
+  popd &> /dev/null
+  if [ "${RC}" -eq 0 ]; then
+    wsMessage="INFO: Clean-up temp files and reference in progress.."
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+    echo -e "${wsMessage}";
+    if [ -d "${HOME}/Moverepo/${comPany}/${Core}/${SourceCloneGit}" ]; then
+      rm -rf "${HOME}/Moverepo/${comPany}/${Core}/${SourceCloneGit}";
+    fi
+    if [ -d "${HOME}/Moverepo/${comPany}/${Core}/${TargetCloneGit}" ]; then
+      rm -rf "${HOME}/Moverepo/${comPany}/${Core}/${TargetCloneGit}";
+    fi
+    if [ -d "${HOME}/Moverepo/${comPany}/${Core}/derived_${DerivedTagrFunc}" ]; then
+      rm -rf "${HOME}/Moverepo/${comPany}/${Core}/derived_${DerivedTagrFunc}";
+    fi
+    if [ -d "${HOME}/Moverepo/${comPany}/${Core}/derived_${DerivedSourFunc}" ]; then
+      rm -rf "${HOME}/Moverepo/${comPany}/${Core}/derived_${DerivedSourFunc}";
+    fi
+    wsMessage="INFO: Source Migration completed."
+    sendWSMSG "${wsMessage}" "${UserId}" "SH_PKG_MOVEMENT"
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${wsMessage} RC:$RC"
+    echo -e "${wsMessage}";
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${Core} ${SourceRepo} ${TargetRepo} ${Segments} ${UserId} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

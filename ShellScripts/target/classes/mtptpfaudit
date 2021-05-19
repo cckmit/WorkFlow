@@ -1,0 +1,170 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtptpfaudit                                                  #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Check load dates of secured current implementations in current         #
+#      process, so that source ccontentions are managed during migration      #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - System                                                           #
+#      $2  - Load date                                                        #
+#      $3  - Load time                                                        #
+#      $4  - programs list                                                    #
+#                                                                             #
+#   Example:                                                                  #
+#      mtptpfaudit wsp 20180723 1800 vors.c                                   #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT         COMMENT                                          #
+#   --------    ----------   -------------------------------------------------#
+#   06232017    NARASHIMAN   created the script                               #
+#   08232018    ARUL         UTILSEGM 256-Char limitation support added       #
+#   04252019    GOWTHAM   Updated with logger support                         #
+#   03042020    ARUL         2831-Data audit return code fix                  #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _MxIP=4;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+system="$1";                           #System/core
+loaddate="$2";                         #Plan load date
+loadtime="$3";                         #Plan Load time
+programlist="$4";                      #List of program from the plan
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_MxIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${system} ${loaddate} ${loadtime} ${programlist} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  mkdir -p "${TPF_SYS}/${system,,}/tools/dateaudit" &> /dev/null
+  if [ -d "${TPF_SYS}/${system,,}/tools/dateaudit" ]; then
+    programList="${programlist//\,/ }";
+    if [ "${#programList}" -lt 150 ]; then
+      #shellcheck disable=SC2124
+      programPath="${programList[@]}"
+    else
+      programPath="${TPF_SYS}/${system,,}/tools/dateaudit/${loaddate}${loadtime}$RANDOM.txt"
+      echo "${programList[@]}" > "${programPath}"
+    fi
+    declare -a resultData
+    SAVEIFS=$IFS
+    IFS=$'\n'
+    if [ -f "${SUP_PRD_AUD}" ]; then #Production path
+      #shellcheck disable=SC2207
+      Result=($(bash "${SUP_PRD_AUD}" "${system}" "${loaddate}" "${loadtime}" "${programPath}"))
+      RC=$?;
+      if [ ${#Result[@]} -gt 2 ]; then
+        for (( i=0; i<${#Result[@]}; i++ ))
+        do
+          resultData[$i]="${Result[i]}"
+          if [[ "${Result[i]}" =~ RXSNDIU ]]; then
+            response="${Result[i]%%from*}"
+            break;
+          fi
+        done
+      else
+        #shellcheck disable=SC2178
+        resultData="${Result[*]}"
+      fi
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${Result[*]} RC:$RC"
+    elif [ -f "${SUP_TST_AUD}" ]; then #Test path
+      #shellcheck disable=SC2207
+      Result=($(bash "${SUP_TST_AUD}" "${system}" "${loaddate}" "${loadtime}" "${programPath}"))
+      RC=$?;
+      if [ ${#Result[@]} -gt 2 ]; then
+        for (( i=0; i<${#Result[@]}; i++ ))
+        do
+          resultData[$i]="${Result[i]}"
+          if [[ "${Result[i]}" =~ RXSNDIU ]]; then
+            response="${Result[i]%%from*}"
+            break;
+          fi
+        done
+      else
+        #shellcheck disable=SC2124,SC2178
+        resultData=${Result[@]}
+      fi
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${Result[*]} RC:$RC"
+    else
+      #shellcheck disable=SC2207
+      Result=($(rexec -l "${NFM_DSL_USER}" -p "${NFM_DSL_SSAL}" "${NFM_DSL_HOST}" "${SUP_DSL_AUD}" "${system}" "${loaddate}" "${loadtime}" "${programPath}"))
+      RC=$?;
+      if [ ${#Result[@]} -gt 2 ]; then
+        for (( i=0; i<${#Result[@]}; i++ ))
+        do
+          resultData[$i]="${Result[i]}"
+          if [[ "${Result[i]}" =~ RXSNDIU ]]; then
+            response="${Result[i]%%from*}"
+            break;
+          fi
+        done
+      else
+        #shellcheck disable=SC2178,SC2124
+        resultData=${Result[@]}
+      fi
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${Result[*]} RC:$RC"
+    fi
+    IFS=$SAVEIFS
+    if [ "${RC}" == 0 ]; then
+      if [[ "${response}" =~ "return code 8" ]] || [[ "${resultData[*]}" =~ "return code 8" ]]; then
+        for (( i=0; i<${#resultData[@]}; i++ ))
+        do
+          echo -e "${resultData[i]}"
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${resultData[i]} RC:$RC"
+        done
+        RC="${EC}";
+      elif [[  "${response}" =~ "return code 1" ]] || [[  "${resultData[*]}" =~ "return code 1" ]]; then
+        for (( i=0; i<${#resultData[@]}; i++ ))
+        do
+          echo -e "${resultData[i]}"
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${resultData[i]} RC:$RC"
+        done
+        RC="${EC}";
+      else
+        for (( i=0; i<${#resultData[@]}; i++ ))
+        do
+          echo -e "${resultData[i]}"
+          sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${resultData[i]} RC:$RC"
+        done
+      fi
+    else
+      RC="${EC}";
+      #Don't change below the output format - Restricted
+      echo -e "\\n Error in ${SUP_DSL_AUD} execution\\n \\n"
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error in ${SUP_DSL_AUD} execution RC:$RC"
+    fi
+    rm -f "${programPath}"             #Clean-up file
+  else
+      RC="${EC}";
+      #Don't change below the output format - Restricted
+      echo -e "\\n Error in ${SUP_DSL_AUD} execution\\n \\n"
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Error in ${SUP_DSL_AUD} execution RC:$RC"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${system} ${loaddate} ${loadtime} ${programlist} RC:$RC"
+exit "${RC}"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

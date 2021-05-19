@@ -1,0 +1,1135 @@
+#!/bin/bash
+#shellcheck disable=SC2034,SC1117
+#*****************************************************************************#
+#   SCRIPT NAME: mtplibrary                                                   #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Library script for MTP related functions                               #
+#                                                                             #
+#   COMMANDS  :                                                               #
+#                                                                             #
+#   NOTE:                                                                     #
+#                                                                             #
+#   INPUT:                                                                    #
+#      function call with parms.                                              #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   29032017    ARUL    Code refactor as per new SCM structure                #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#shellcheck disable=SC1090
+source "${MTP_ENV:=$PWD}/.mtpconfig"
+#-----------------------------------------------------------------------------#
+RC=0;                                  #Return code for success
+export FC=1;                           #Return code for failure or partial
+export EC=8;                           #Return code for error or abort
+#-----------------------------------------------------------------------------#
+# REPLACE Support mail for DEV and other env servers
+if [[ ! "$(hostname)" =~ (vhlpn|valdr) ]]; then
+  MTP_FEED="DevOpsdevteam@travelport365.onmicrosoft.com"
+fi
+#-----------------------------------------------------------------------------#
+# BUILD GIRBLIT URL CONFIGURATION - RESTRICTED TO EDIT                        #
+#-----------------------------------------------------------------------------#
+#MTP_USER="${USER:-$MTP_SUSR}"         #Override MTP_SUSR with local user
+#MTP_USER="${MTP_SUSR}"                #Assign MTP_SUSR as MTP_USER
+#
+export PRD_SRC_RURL="${PRD_SRC_CHNL}://${MTP_SUSR}@${PRD_RHOST}:\
+${PRD_SRC_PORT}"                       #Prod source git repo remote URL for service user
+#
+export PRD_BIN_RURL="${PRD_BIN_CHNL}://${MTP_SUSR}@${PRD_RHOST}:\
+${PRD_BIN_PORT}"                       #Prod source git repo remote URL for service user
+#
+export PRD_SRC_RURL_GUSR="${PRD_SRC_CHNL}://${GIT_USER}@${PRD_RHOST}:\
+${PRD_SRC_PORT}"                       #Prod source git repo remote URL for user
+#
+export PRD_SRC_RURL_SMOD="${PRD_SRC_CHNL}://${PRD_RHOST}:\
+${PRD_SRC_PORT}"                       #Prod source git submodule remote URL
+#
+export PRD_BIN_RURL_GUSR="${PRD_BIN_CHNL}://${GIT_USER}@${PRD_RHOST}:\
+${PRD_BIN_PORT}"                       #Prod source git repo remote URL for user
+#
+export PRD_BIN_RURL_SMOD="${PRD_BIN_CHNL}://${PRD_RHOST}:\
+${PRD_BIN_PORT}"                       #Prod derived git submodule remote URL
+#-----------------------------------------------------------------------------#
+export PRD_API_RURL_SMOD="${PRD_API_CHNL}://${PRD_API_HOST}:\
+${PRD_API_PORT}"                       #Prod workflow API URL
+#
+export PRD_API_RURL_SMOD_USR="${PRD_API_CHNL}://${GIT_USER}@${PRD_API_HOST}:\
+${PRD_API_PORT}"                       #Prod WorkFlow API URL with USER
+
+export PRD_API_RURL_SMOD_JGIT="${PRD_API_CHNL}://${PRD_API_HOST}:\
+${PRD_BIN_PORT}"                       #Prod workflow API URL
+#-----------------------------------------------------------------------------#
+export DEV_SRC_RURL="${DEV_SRC_CHNL}://${GIT_USER}@${DEV_RHOST}:\
+${DEV_SRC_PORT}"                       #Dev source git remote URL for user
+#
+export DEV_BIN_RURL="${DEV_BIN_CHNL}://${GIT_USER}@${DEV_RHOST}:\
+${DEV_BIN_PORT}"                       #Dev source git remote URL for user
+#
+export DEV_SRC_RURL_SUSR="${DEV_SRC_CHNL}://${MTP_SUSR}@${DEV_RHOST}:\
+${DEV_SRC_PORT}"                       #Dev source git remote URL for service user
+#
+export DEV_SRC_RURL_SMOD="${DEV_SRC_CHNL}://${DEV_RHOST}:\
+${DEV_SRC_PORT}"                       #Dev source git submodule remote URL
+#
+export DEV_BIN_RURL_SUSR="${DEV_BIN_CHNL}://${MTP_SUSR}@${DEV_RHOST}:\
+${DEV_BIN_PORT}"                       #Dev derived git remote URL for service user
+#
+export DEV_BIN_RURL_SMOD="${DEV_BIN_CHNL}://${DEV_RHOST}:\
+${DEV_BIN_PORT}"                       #Dev derived git submodule remote URL
+#-----------------------------------------------------------------------------#
+# Function to load URL
+function loadGitURL {
+export PRD_SRC_RURL="${PRD_SRC_CHNL}://${MTP_SUSR}@${PRD_RHOST}:\
+${PRD_SRC_PORT}"                       #Prod source git repo remote URL for service user
+#
+export PRD_BIN_RURL="${PRD_BIN_CHNL}://${MTP_SUSR}@${PRD_RHOST}:\
+${PRD_BIN_PORT}/gitblit/r"             #Prod source git repo remote URL for service user
+#
+export PRD_SRC_RURL_GUSR="${PRD_SRC_CHNL}://${GIT_USER}@${PRD_RHOST}:\
+${PRD_SRC_PORT}"                       #Prod source git repo remote URL for user
+#
+export PRD_BIN_RURL_GUSR="${PRD_BIN_CHNL}://${GIT_USER}@${PRD_RHOST}:\
+${PRD_BIN_PORT}/gitblit/r"             #Prod source git repo remote URL for user
+#-----------------------------------------------------------------------------#
+export PRD_API_RURL_SMOD="${PRD_API_CHNL}://${PRD_API_HOST}:\
+${PRD_API_PORT}"                       #Prod workflow API URL
+#-----------------------------------------------------------------------------#
+export DEV_SRC_RURL="${DEV_SRC_CHNL}://${GIT_USER}@${DEV_RHOST}:\
+${DEV_SRC_PORT}"                       #Dev source git remote URL for user(DUPLICATE)
+#
+export DEV_SRC_RURL_GUSR="${DEV_SRC_CHNL}://${GIT_USER}@${DEV_RHOST}:\
+${DEV_SRC_PORT}"                       #Dev source git remote URL for user
+#
+export DEV_BIN_RURL="${DEV_BIN_CHNL}://${GIT_USER}@${DEV_RHOST}:\
+${DEV_BIN_PORT}/gitblit/r"             #Dev derived git remote URL for user(DUPLICATE)
+#
+export DEV_BIN_RURL_GUSR="${DEV_BIN_CHNL}://${GIT_USER}@${DEV_RHOST}:\
+${DEV_BIN_PORT}/gitblit/r"             #Dev derived git remote URL for user
+#
+export DEV_SRC_RURL_SUSR="${DEV_SRC_CHNL}://${MTP_SUSR}@${DEV_RHOST}:\
+${DEV_SRC_PORT}"                       #Dev source git remote URL for service user
+#
+export DEV_SRC_RURL_SMOD="${DEV_SRC_CHNL}://${DEV_RHOST}:\
+${DEV_SRC_PORT}"                       #Dev source git remote URL for service user
+#
+export DEV_BIN_RURL_SUSR="${DEV_BIN_CHNL}://${MTP_SUSR}@${DEV_RHOST}:\
+${DEV_BIN_PORT}/gitblit/r"             #Dev derived git remote URL for service user
+#
+export DEV_BIN_RURL_SMOD="${DEV_BIN_CHNL}://${DEV_RHOST}:\
+${DEV_BIN_PORT}/gitblit/r"             #Dev derived git submodule remote URL
+}
+#
+#-----------------------------------------------------------------------------#
+function loadTPFDIR {
+  #Table to map repsoitory code Structure for software types #
+  SRC_DIR_NAME="src macro include dataset command cp system_config other unknown oco"
+  #File extension in src #
+  SRC_FILE_TYPE[0]="*.asm *.bak *.c *.cbl *.cms *.cpp *.for *.htm *.oco *.sbt *.scr *.java *.pl1 *.mak"
+  #File extension in macro #
+  SRC_FILE_TYPE[1]="*.cpy *.mac"
+  #File extension in include #
+  SRC_FILE_TYPE[2]="*.h *.hpp *.inc *.dfdl"
+  #File extension in dataset #
+  SRC_FILE_TYPE[3]="*.dat"
+  #File extension in command #
+  SRC_FILE_TYPE[4]=""
+  #File extension in cp #
+  SRC_FILE_TYPE[5]=""
+  #File extension in system_config #
+  SRC_FILE_TYPE[6]="*.bsc *.dbc *.hfs *.jcl *.job"
+  #File extension in other #
+  SRC_FILE_TYPE[7]=""
+  #File extension in unknown #
+  SRC_FILE_TYPE[8]="*.200 *.201 *.ans *.ass *.lis *.loa *.log *.lsc *.oth *.pil *.rt *.tok *.uns *.vis"
+  #File extension in oco
+  SRC_FILE_TYPE[9]="*.so"
+  #Table to map repsoitory code Structure for software types #
+  BIN_DIR_NAME="build lib load lst obj derived/lib derived/load derived/lst derived/obj derived/sbtasm derived/tpfarc oco/load/ pddds/sabrincl tpfarc"
+  #File extension in build
+  BIN_FILE_TYPE[0]="*.out *.out1"
+  #File extension in lib
+  BIN_FILE_TYPE[1]="lib*.so"
+  #File extension in load
+  BIN_FILE_TYPE[2]="*.so"
+  #File extension in lst
+  BIN_FILE_TYPE[3]="*.lst *.map *.sbtlst"
+  #File extension in obj
+  BIN_FILE_TYPE[4]="*.o *.ztpfgivi"
+  #File extension in derived/lib
+  BIN_FILE_TYPE[5]="lib*.o"
+  #File extension in derived/load
+  BIN_FILE_TYPE[6]="*.o"
+  #File extension in derived/lst
+  BIN_FILE_TYPE[7]="*.lst *.map *..sbtlst"
+  #File extension in derived/obj
+  BIN_FILE_TYPE[8]="*.o *.ztpfgivi"
+  #File extension in derived/sbtasm
+  BIN_FILE_TYPE[9]="*.asm"
+  #File extension in derived/tpfarc
+  BIN_FILE_TYPE[10]="*.c"
+  #File extension in oco/load
+  BIN_FILE_TYPE[11]="*.so"
+  #File extension in pddds/sabrincl
+  BIN_FILE_TYPE[12]="*.incaf"
+  #File extension in tpfarc
+  BIN_FILE_TYPE[10]="*.c"
+}
+#-----------------------------------------------------------------------------#
+# TPF Build Warning Exclude segments list
+function warningExclude {
+BLD_EXCL_ASM="aci1.asm|aci2.asm|aci3.asm|aci4.asm|aci6.asm|acia.asm|acit.asm|aciu.asm|acm1.asm|acm2.asm|acm3.asm|acm4.asm|acm5.asm|acma.asm|acmb.asm|acmc.asm|acmd.asm|acme.asm|acmp.asm|acmr.asm|d1u0.asm|eucs.asm|fctb.asm|lnao.asm|lnb4.asm|lod0.asm|lofr.asm|logd.asm|losj.asm|lou8.asm|loup.asm|uaa3.asm|uaa5.asm|uba6.asm|ubb9.asm|ubh1.asm|ubh2.asm|ubh8.asm|ubz2.asm|ubz3.asm|ubz4.asm|ubz5.asm|ufb2.asm|ufbm.asm|ufgr.asm|vdtq.asm|zgks.asm"
+BLD_EXCL_CPP="qmqz00.cpp|qmqz01.cpp|qmqz02.cpp|qmqz03.cpp|qmqz04.cpp|qmqz05.cpp|qmqz06.cpp|qmqz07.cpp|qmqzc.c|tkpdrv.c"
+BLD_EXCL_MAK="fctb.mak|tk4q.mak|qmqz.mak"
+BLD_EXCL_H="qmqzc.h"
+ERR_EXCL="FCTB.err|TK4Q.err|QMQZ.err|UBH1.err|UBH2.err"
+}
+#-----------------------------------------------------------------------------#
+# TPF PROJECT DEVELOPMENT RESERVED DIRECTORY CONFIGURATION for NON-IBM
+#
+DIR_TPF_APP="src|macro|include|dataset|command|cp|system_config|other|unknown|tpf-fdes|oco"
+DIR_TPF_OUT="lib|load|exp|obj|lst"
+EXT_TPF_APP="\.asm|\.bak|\.c|\.cbl|\.cms|\.cpp|\.for|\.htm|\.oco|\.sbt|\.scr|\.java|\.pl1|\.mak|\.cpy|\.mac|\.h|\.hpp|\.inc|\.dfdl|\.dat|\.bsc|\.dbc|\.hfs|\.jcl|\.job|\.200|\.201|\.ans|\.ass|\.lis|\.loa|\.log|\.lsc|\.oth|\.pil|\.rt|\.tok|\.uns|\.vis|\.xml|\.xsd"
+#-----------------------------------------------------------------------------#
+# TPF PROJECT DEVELOPMENT RESERVED CORE for COMPANY
+#
+REF_DL_CORE="air|res|oss"
+REF_WS_CORE="wsp"
+REF_T4_CORE="apo|pgr|pre"
+#
+#-----------------------------------------------------------------------------#
+#PRD_TPF_APP=$(readlink -f /ztpfsys/prod/)
+#PRD_TPF_SYS=$(readlink -f /ztpfsys/prod/)
+#PRD_TPF_IBM=$(readlink -f /ztpf/ibm/prod/)
+#*****************************************************************************#
+#
+#-----------------------------------------------------------------------------#
+# This function used to validate minimum input parms
+#
+function minInputValidation {
+  # $1 - Expected input
+  # $2 - Received input
+  local x;
+  local _RC=0;
+  if [ "$2" -lt "$1" ]; then
+    echo "ERROR: Missing inputs"; _RC=$EC;
+  elif [ "$2" -gt "$1" ]; then
+    echo "ERROR: Unexpected no of arguments - $2"; _RC=$EC;
+  else
+    for x; do
+      if [ -z "$x" ]; then
+        echo "ERROR: Verify input arguments some of item is empty"; _RC=$EC;
+      fi
+    done
+  fi
+  return "$_RC"
+}
+#-----------------------------------------------------------------------------#
+# This function used to validate repository URL
+#
+function repoUrlValidation {
+  # $1 - Repository path
+  local _RC=0;
+  local i;
+  for i in {0..2}                      #Retry if it's failed
+  do
+    git ls-remote "${DEV_SRC_RURL}$1.git" &>/dev/null; _RC=$?;
+    if [ "${_RC}" -eq 0 ]; then
+      break;
+    elif [ "${_RC}" -eq 128 ]; then
+      echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+      sleep 3;
+      _RC="$EC";
+    else
+      _RC="$EC";
+    fi
+  done
+  if [ "$_RC" -eq 0 ]; then _RC="$RC"; else _RC="$EC"; fi
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+# This function used to validate repository URL
+#
+function getRepoUrlStatus {
+  # $1 - Git Repository URL
+  local _RC=0;
+  local i;
+  if [[ "$1" =~ ssh ]]; then
+    for i in {0..2}                    #Retry if it's failed
+    do
+      git ls-remote "$1" &>/dev/null; _RC=$?;
+      if [ "${_RC}" -eq 0 ]; then
+        break;
+      elif [ "${_RC}" -eq 128 ]; then
+        echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+        sleep 3;
+        _RC="$EC";
+      else
+        _RC="$EC";
+      fi
+    done
+  elif [[ "$1" =~ https ]]; then
+    for i in {0..2}                    #Retry if it's failed
+    do
+      GIT_SSL_NO_VERIFY=true git ls-remote "$1" &>/dev/null; _RC=$?;
+      if [ "${_RC}" -eq 0 ]; then
+        break;
+      elif [ "${_RC}" -eq 128 ]; then
+        echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+        sleep 3;
+        _RC="$EC";
+      else
+        _RC="$EC";
+      fi
+    done
+  else
+    for i in {0..2}                    #Retry if it's failed
+    do
+      git ls-remote "$1" &>/dev/null; _RC=$?;
+      if [ "${_RC}" -eq 0 ]; then
+        break;
+      elif [ "${_RC}" -eq 128 ]; then
+        echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+        sleep 3;
+        _RC="$EC";
+      else
+        _RC="$EC";
+      fi
+    done
+  fi
+  if [ "$_RC" -eq 0 ]; then
+    _RC="$RC";
+  else
+    echo -e "\nERROR: Git repository not accessible.";
+    _RC="$EC";
+  fi
+  return "$_RC";
+}
+#-----------------------------------------------------------------------------#
+# This function used to validate repository branch
+#
+function getRepoBranchStatus {
+  # $1 - Git Repository URL
+  # $2 - Git Repository branch name
+  local _RC=0;
+  local i;
+  for i in {0..2}                      #Retry if it's failed
+  do
+    git ls-remote "$1" | grep "$2" &>/dev/null; _RC=$?;
+    if [ "${_RC}" -eq 0 ]; then
+      break;
+    elif [ "${_RC}" -eq 128 ]; then
+      echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+      sleep 3;
+      _RC="$EC";
+    else
+      _RC="$EC";
+    fi
+  done
+  if [ "$_RC" -eq 0 ]; then _RC="$RC"; else _RC="$EC"; fi
+  return "$_RC"
+}
+
+#-----------------------------------------------------------------------------#
+# This function used to validate repository branch
+#
+function repoBranchValidation {
+  # $1 - Repository path
+  # $2 - Branch name
+  local _RC=0;
+  local i;
+  for i in {0..2}                      #Retry if it's failed
+  do
+    git ls-remote "${DEV_SRC_RURL}$1.git" | grep "$2" &>/dev/null; _RC=$?;
+    if [ "${_RC}" -eq 0 ]; then
+      break;
+    elif [ "${_RC}" -eq 128 ]; then
+      echo -e "WARNING: git remote re-try - $i" &> /dev/null; #DEBUG
+      sleep 3;
+      _RC="$EC";
+    else
+      _RC="$EC";
+    fi
+  done
+  if [ "$_RC" -eq 0 ]; then _RC="$RC"; else _RC="$EC"; fi
+  return "$_RC"
+}
+#-----------------------------------------------------------------------------#
+# This function used to form user TPF Project workspace with core reference
+#
+function getParmFromBranch {
+  # $1 - Branch name
+  # $2 - For which space usre or devl?
+  local _RC;
+  local _core;
+  local _impl;
+  export USR_IMPL_PLAN;
+  export USR_IMPL_ID;
+  export USR_IMPL_CORE;
+  export USR_PLAN_CORE;
+  export USR_MASTER_CORE;
+  export PRD_TPF_APP;
+  export PRD_TPF_SYS;
+  export PRD_ORIGIN_APP;
+  export PRD_ORIGIN_CAP;
+  export PRD_ORIGIN_SYS;
+  export PRD_ORIGIN_CSY;
+  export PRD_ORIGIN_IBM;
+  export DEV_GIT_SRC;
+  export DEV_GIT_BIN;
+  export REF_COMPANY;
+  _RC=0;
+  _impl="${1%_*}";                     #Get implementation from the input
+  _core="${1##*_}";                    #Get core from the input
+  USR_IMPL_PLAN="${_impl%_*}";         #Assign implementation plan name
+  USR_IMPL_ID="${_impl}";              #Assign implementation name
+  USR_IMPL_CORE="${_core}";            #Assign implementation core
+  USR_PLAN_CORE="${USR_IMPL_PLAN}_${_core}" #Assign master core branch
+  USR_MASTER_CORE="master_${_core}"    #Assign master core branch
+  PRD_TPF_APP="${TPF_APP}/${_core}"    #Assign production path NON-IBM
+  PRD_TPF_SYS="${TPF_SYS}/${_core}"    #Assign production path IBM modify
+  PRD_ORIGIN_APP="${TPF_APP}/${USR_IMPL_CORE}" #Receive IBM PROD PATH
+  PRD_ORIGIN_CAP=$(readlink -f "${TPF_APP}"/common/prod/) #Receive IBM PROD PATH
+  PRD_ORIGIN_SYS=$(readlink -f "${TPF_SYS}"/"${USR_IMPL_CORE}"/prod/) #Receive IBM PROD PATH
+  PRD_ORIGIN_CSY=$(readlink -f "${TPF_SYS}"/common/prod/) #Receive IBM PROD PATH
+  PRD_ORIGIN_IBM=$(readlink -f "${PRD_TPF_IBM}") #Receive IBM PROD PATH
+  if [[ "${USR_IMPL_PLAN}" =~ "t" ]]; then
+    DEV_GIT_SRC="tpf/tp/source/${USR_IMPL_PLAN}.git"
+    DEV_GIT_BIN="tpf/tp/derived/${USR_IMPL_PLAN}.git"
+    REF_COMPANY="tp"
+  elif [[ "${USR_IMPL_PLAN}" =~ "d" ]]; then
+    DEV_GIT_SRC="tpf/dl/source/${USR_IMPL_PLAN}.git"
+    DEV_GIT_BIN="tpf/dl/derived/${USR_IMPL_PLAN}.git"
+    REF_COMPANY="dl"
+  fi
+  if [ "$2" == "USR" ]; then
+    export USR_IMPL_WRK;
+    export USR_IMPL_CWRK;
+    USR_IMPL_WRK="${USR_TPF_PROJ}/${_impl}/"; #Form workspace path
+    USR_IMPL_CWRK="${USR_TPF_PROJ}/${_impl}/${_core}"; #Form workspace path
+    if [ -d "${USR_IMPL_CWRK}" ]; then _RC="$RC"; else _RC="$EC"; fi
+  elif [ "$2" == "DVL" ]; then
+    export APP_DVL_IMPL_WRK;
+    export APP_DVL_IMPL_CWRK;
+    export SYS_DVL_IMPL_WRK;
+    export SYS_DVL_IMPL_CWRK;
+    #shellcheck disable=SC2153
+    APP_DVL_IMPL_WRK="${DVL_TPF_APP}/${USR_IMPL_PLAN}/"; #Form devl app path
+    APP_DVL_IMPL_CWRK="${DVL_TPF_APP}/${USR_IMPL_PLAN}/${_core}/"; #Form devl app path
+    if [ -d "${APP_DVL_IMPL_CWRK}" ]; then _RC="$RC"; else _RC="$EC"; fi
+    SYS_DVL_IMPL_WRK="${DVL_TPF_SYS}/${USR_IMPL_PLAN}/"; #Form devl sys path
+    SYS_DVL_IMPL_CWRK="${DVL_TPF_SYS}/${USR_IMPL_PLAN}/${_core}/"; #Form devl sys path
+    if [ -d "${SYS_DVL_IMPL_CWRK}" ]; then _RC="$RC"; else _RC="$EC"; fi
+  elif [ "$2" == "STG" ]; then
+    export APP_STG_IMPL_WRK;
+    export APP_STG_IMPL_CWRK;
+    export SYS_STG_IMPL_WRK;
+    export SYS_STG_IMPL_CWRK;
+    APP_STG_IMPL_WRK="${STG_TPF_APP}/${USR_IMPL_PLAN}/"; #Form devl app path
+    APP_STG_IMPL_CWRK="${STG_TPF_APP}/${USR_IMPL_PLAN}/${_core}/"; #Form devl app path
+    if [ -d "${APP_STG_IMPL_CWRK}" ]; then _RC="$RC"; else _RC="$EC"; fi
+    SYS_STG_IMPL_WRK="${STG_TPF_SYS}/${USR_IMPL_PLAN}/"; #Form devl sys path
+    SYS_STG_IMPL_CWRK="${STG_TPF_SYS}/${USR_IMPL_PLAN}/${_core}/"; #Form devl sys path
+    if [ -d "${SYS_STG_IMPL_CWRK}" ]; then _RC="$RC"; else _RC="$EC"; fi
+  fi
+  return "$_RC"
+}
+#-----------------------------------------------------------------------------#
+# This function used to get all repo url from user TPF Project workspace
+#
+function getRepoList {
+  local _RC=0;
+  export USR_ORIG_REPO;
+  export USR_ACT_REPO;
+  USR_ORIG_REPO=$( ( git remote -v | grep origin | grep fetch | \
+                     awk '{print $2}') 2> /dev/null );
+  USR_ACT_REPO=$( ( git remote -v | grep "$1 " | grep fetch | \
+                     awk '{print $2}') 2> /dev/null );
+  if [ -n "${USR_ORIG_REPO// /}" ] && [ -n "${USR_ACT_REPO// /}" ]; then
+    _RC="$RC";
+  else
+    _RC="$EC";
+  fi
+}
+#-----------------------------------------------------------------------------#
+# This function used to get Origin repo url from user TPF Project workspace
+#
+function getOriginRepo {
+  local _RC=0;
+  export USR_ORIG_REPO;
+  USR_ORIG_REPO=$( ( git remote -v | grep origin | grep fetch | \
+                     awk '{print $2}') 2> /dev/null );
+  if [ -n "${USR_ORIG_REPO// /}" ]; then _RC="$RC"; else _RC="$EC"; fi
+  return "$_RC"
+}
+#-----------------------------------------------------------------------------#
+# This function used to get available repo url from user TPF Project workspace
+#
+function getActiveRepo {
+  # $1 - repo name
+  local _RC=0;
+  export USR_ACT_REPO;
+  USR_ACT_REPO=$( ( git remote -v | grep "$1 " | grep fetch | \
+                     awk '{print $2}') 2> /dev/null );
+  if [ -n "${USR_ACT_REPO// /}" ]; then _RC="$RC"; else _RC="$EC"; fi
+  return "$_RC"
+}
+#-----------------------------------------------------------------------------#
+# This function used to get Active Branch for the active location
+#
+function getActiveBranch {
+  local _RC=0;
+  export USR_ACT_BRANCH;
+  #shellcheck disable=SC2197
+  USR_ACT_BRANCH=$( ( git branch | fgrep -F '*' | cut -d ' ' -f2 ) );
+  if [ "${USR_ACT_BRANCH}" == "${USR_ACT_BRANCH/ /}" ]; then
+    _RC="$RC";                          #Return error if branch contain space
+  else
+    _RC="$EC";
+  fi
+  return "$_RC"
+}
+#-----------------------------------------------------------------------------#
+# This function used to get Active Branch for the active location
+#
+function getGitStatus {
+  local _RC=0;
+  git status -s &> /dev/null; _RC=$?
+  if [ "${_RC}" -ne 0 ]; then
+    _RC="$EC";
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function used to send mail to support team
+#
+function sendEMMSG {
+  local _RC=0;
+  local _subject="$1";
+  local _message="$2"
+  echo "$2" | mail -s "$1" "${MTP_FEED}"
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# Send mail to support group
+function sendMail {
+  local _RC=0;
+  local _key="${1^^}";              #It's system/core name
+  local _systemName="${2^^}";       #It's true or false
+  local _info="${3}";               #
+  curl -k -s -X POST -H 'Content-Type: application/json' -d "{ \"key\": \"${_key}\", \"systemName\": \"${_systemName}\", \"info\": \"${_info}\" }" "${PRD_API_CHNL}://${PRD_API_HOST}:${PRD_API_PORT}/${PRD_API_EML}"
+  if [ "${_RC}" -ne 0 ]; then
+    _RC="$EC";
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function used to send mail to Dev Center team
+#
+function sendNFMError {
+  local _RC=0;
+  local _loadset="$1";
+  local _vparSys="$2"
+  local _pathErr="$3"
+  echo -e "There was as error while generating the concatenated loadset for ${_vparSys} as indicated by the error report\n\n    ${_pathErr}.\n\nAs a corrective measure the loadset section for ${_loadset} was removed from the file ${_vparSys}.load and the concatenated loadset regenerated.\nPlease investigate the cause of the error and take corrective actions." | mail -s "Loadset ${_loadset} was removed from the concatenated loadset ${_vparSys}" "${DCT_FEED}"
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function used to get Active Branch for the active location
+#
+function sendWSMSG {
+  local _RC=0;
+  local _message="$1";
+  local _userId="$2";
+  local _topic="$3"
+  curl -k -s -G --data-urlencode "message=${_message}" --request GET --url "${PRD_API_CHNL}://${PRD_API_HOST}:${PRD_API_PORT}/${PRD_API_WKF}/common/publishMessage?topic=${_topic}&userId=${_userId}"; _RC=$?
+  if [ "${_RC}" -ne 0 ]; then
+    _RC="$EC";
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function used to get Build run time status to USER
+#
+function sendBLDWSMSG {
+  local _RC=0;
+  local _message="$1";
+  local _planId="$2";
+  local _topic="$3"
+  curl -k -s -G --data-urlencode "message=${_message}" --request GET --url "${PRD_API_CHNL}://${PRD_API_HOST}:${PRD_API_PORT}/${PRD_API_WKF}/common/publishMessage?topic=${_topic}&planId=${_planId}"; _RC=$?
+  if [ "${_RC}" -ne 0 ]; then
+    _RC="$EC";
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function used to log scripts related sctiviti
+#
+function sendLOG {
+  local _RC=0;
+  local _flag="$1"
+  local _procId="$2"
+  local _message="$3"
+  logger -i -p local5."${_flag}" "${_procId} ${_message}"; _RC=$?;
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function used to re-try command
+#  mtpgitpushbinary - script needs to update
+function retryCMD {
+  local _RC;
+  local _exeCMD="${1}";                #Input to execute code
+  local _exeRMI="${2}";                #Default-N Optional input to remove instructions
+  local _exeOUT="${3}";                #Default-N Optional input to print output
+  local _exeDGC="${4}";                #Default-N Optional input to print output
+  local i="";
+  for i in {0..2}                      #Retry if it's failed
+  do
+    if [[ "${_exeOUT}" == Y ]]; then
+      bash -c "${_exeCMD}"; _RC=$?;
+    else
+      bash -c "${_exeCMD}" &> /dev/null; _RC=$?;
+    fi
+    if [ "${_RC}" -eq 0 ]; then
+      break;
+    elif [ "${_RC}" -eq 128 ]; then
+      echo -e "WARNING: Re-try command to succeed - $i" &> /dev/null; #DEBUG
+      if [[ "${_exeRMI:=N}" != N ]]; then
+        rm -rf "${_exeRMI}" &> /dev/null
+      fi
+      IFS="," read -r -a _nodes <<< "${PRD_LBH_NODE[*]}"
+      for _envNod in "${_nodes[@]}"
+      do
+        curl -k -s --request GET --url "${PRD_BIN_CHNL}://${_envNod}.${PRD_LBH_SUFX}:${PRD_LBH_PORT}/${PRD_API_GIT}/doGC?p${_exeDGC}"|grep 'true' &>/dev/null;
+        sleep 2;
+      done
+      _RC="$EC";
+    else
+      _RC="$EC";
+    fi
+  done
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# Progress bar support for migration
+function ProgressBar {
+  local _RC=0;
+  local _progress;
+  local _done;
+  local _left;
+  local _fill;
+  local _empty;
+  let _progress=(${1}*100/${2}*100)/100
+  let _done=(${_progress})
+  let _left=100-${_done}
+  _fill=$(printf "%${_done}s")
+  _empty=$(printf "%${_left}s")
+  printf "\rProgress: [${_fill// /\#}${_empty// /\-}] ${_progress}%%\t- Files: ${1}/${2}-${3}\n"
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# Get git data
+function sendGitData {
+  local _RC=0;
+  local _isCore="${1,,}";              #It's system/core name
+  local _isModify="${2}";              #It's true or false
+  curl -k -s "${PRD_API_CHNL}://${PRD_API_HOST}:${PRD_API_PORT}/${PRD_API_GDB}?ref_plan=${SRC_RECNT_PLAN}&ref_status=${SRC_RECNT_TAGS}&ref_load_date_time=${SRC_RECNT_DATE}&source_commit_id=${SRC_RECNT_HASH}&source_commit_date=${SRC_RECNT_HSDT}&derived_commit_id=${BIN_RECNT_HASH}&derived_commit_date=${BIN_RECNT_HSDT}&source_repo=${SRC_ORIGIN_URL}&file_name=${SRC_FILE}&target_system=${_isCore}&isModify=${_isModify}" &> /dev/null;
+  if [ "${_RC}" -ne 0 ]; then
+    _RC="$EC";
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# Get git data
+function getGitData {
+  local _RC=0;
+  local _gitType="$1";                 #Type SRC or BIN
+  local _gitPath="$2";                 #Repository path
+  local _gitPlan="$3";                 #Plan number
+  local _gitDate="$4";                 #Plan loaddate
+  local _isModify="$5";                #status for True/false
+  local _SRC_RECNT_DATA;
+  local _BIN_RECNT_DATA;
+  local _SRC_RECNT_COMMIT;
+  local _SRC_PREVI_COMMIT;
+  local _MAST_BRNC_RESET;
+  local _BIN_RECNT_COMMIT;
+  local _SRF;
+  SRC_FILE='';  # to avoid duplicate of creating commit id.
+  if [ -d "${_gitPath}" ]; then
+    # shellcheck disable=SC2164
+    pushd "${_gitPath}" &> /dev/null
+    if [[ "${_gitType}" == SRC ]]; then
+      if [[ "${_isModify}" == "false" ]]; then
+        _SRC_RECNT_COMMIT=$(git log -1 --pretty=%H,%ci,%s --decorate=full | grep "Date:${_gitDate}" | grep -i "${_gitPlan}")
+      else
+        if [ "${PROD_MRG_SCRP}" == FALLBACK_ACCEPT ]; then
+          _SRC_RECNT_COMMIT=$(git log --pretty=%H,%ci,%s --decorate=full | grep "Date:${_gitDate}" | grep -i "${_gitPlan}" | grep "online"| head -1)
+        else
+          _SRC_RECNT_COMMIT=$(git log --pretty=%H,%ci,%s --decorate=full | grep "Date:${_gitDate}" | grep -i "${_gitPlan}" | head -1)
+        fi
+      fi
+      _SRC_RECNT_COMMIT="${_SRC_RECNT_COMMIT// /}"
+      if [[ -n "${_SRC_RECNT_COMMIT// /}" ]]; then
+        IFS=',' read -r -a _SRC_RECNT_DATA <<< "${_SRC_RECNT_COMMIT}"
+          SRC_RECNT_HASH="${_SRC_RECNT_DATA[0]}"
+          SRC_RECNT_HSTG="$(git describe --tags "${SRC_RECNT_HASH}")"
+          SRC_RECNT_HSDT="${_SRC_RECNT_DATA[1]}"
+          SRC_RECNT_HSDT="${SRC_RECNT_HSDT%%+*}"
+          SRC_RECNT_HSDT="${SRC_RECNT_HSDT//-/}"
+          SRC_RECNT_HSDT="${SRC_RECNT_HSDT//:/}" #Format commit date
+          SRC_RECNT_TAGS="${SRC_RECNT_HSTG}"
+          SRC_RECNT_TAGS="${SRC_RECNT_TAGS%%-*}" #Format only status form the tag
+          SRC_RECNT_TAGS="${SRC_RECNT_TAGS^}"    #Format to make upper case for first char
+          SRC_RECNT_DATE="${_SRC_RECNT_DATA[2]}"
+          SRC_RECNT_DATE="${SRC_RECNT_DATE##*:}" #Format to remove date lable
+          SRC_RECNT_TYPE="${_SRC_RECNT_DATA[3]}"
+          SRC_RECNT_PLAN="${_SRC_RECNT_DATA[4]}"
+          SRC_RECNT_PLAN="${SRC_RECNT_PLAN##*:}" #Format to remove plan lable
+          SRC_RECNT_PLAN="${SRC_RECNT_PLAN^^}"   #Format to convert to upper case
+        unset IFS
+        if [[ "${_isModify}" == "false" ]]; then
+          _SRC_PREVI_COMMIT=$(git log -1 --skip=1 --oneline --pretty=%H)
+        else
+          _SRC_PREVI_COMMIT=$(git log --pretty=%P -n 1 "${SRC_RECNT_HASH}")
+        fi
+        SRC_ORIGIN_URL=$( ( git remote -v | grep origin | grep fetch | awk '{print $2}') 2> /dev/null );
+        SRC_ORIGIN_URL="tpf${SRC_ORIGIN_URL##*tpf}"
+        _SRC_RECNT_FILE=$( ( git diff --name-only "${SRC_RECNT_HASH}" "${_SRC_PREVI_COMMIT}" ) );
+        if [[ "${_isModify}" == "false" ]]; then
+          for _SRF in ${_SRC_RECNT_FILE[*]}
+          do
+            SRC_FILE="$(git hash-object -- "${_SRF}"),${_SRF},${SRC_FILE}"
+          done
+        else
+          _MAST_BRNC_RESET=$(git rev-parse --abbrev-ref HEAD)
+          for _SRF in ${_SRC_RECNT_FILE[*]}
+          do
+            git checkout "${SRC_RECNT_HASH}" &> /dev/null;
+            SRC_FILE="$(git hash-object -- "${_SRF}"),${_SRF},${SRC_FILE}"
+          done
+          git checkout "${_MAST_BRNC_RESET}" &> /dev/null;
+        fi
+        SRC_FILE="${SRC_FILE%*,}" #Format to remove tail char
+      else
+        _RC="$EC"
+      fi
+    elif [[ "${_gitType}" == BIN ]]; then
+      #TO-DO: verify before use
+      if [[ "${_isModify}" == "false" ]]; then
+        _BIN_RECNT_COMMIT=$(git log -1 --pretty=%H,%ci,%s --decorate=full | grep "Date:${_gitDate}" | grep -i "${_gitPlan}")
+      else
+        _BIN_RECNT_COMMIT=$(git log --pretty=%H,%ci,%s --decorate=full | grep "Date:${_gitDate}" | grep -i "${_gitPlan}" | head -1)
+      fi
+      _BIN_RECNT_COMMIT="${_BIN_RECNT_COMMIT// /}"
+      IFS=',' read -r -a _BIN_RECNT_DATA <<< "${_BIN_RECNT_COMMIT}"
+        BIN_RECNT_HASH="${_BIN_RECNT_DATA[0]}"
+        BIN_RECNT_HSTG="$(git describe --tags "${BIN_RECNT_HASH}")"
+        BIN_RECNT_HSDT="${_BIN_RECNT_DATA[1]}"
+        BIN_RECNT_HSDT="${BIN_RECNT_HSDT%%+*}"
+        BIN_RECNT_HSDT="${BIN_RECNT_HSDT//-/}"
+        BIN_RECNT_HSDT="${BIN_RECNT_HSDT//:/}" #Format commit date
+      unset IFS
+    fi
+    # shellcheck disable=SC2164
+    popd &> /dev/null
+  else
+    _RC="$EC"
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function is used to update comment by automatically
+# This is used by mtpgitcmdchkout.
+function extBasedCmt {
+  local _RC=0;
+  local _commentMSG;
+  local _chkSegm="$1";
+  local _newPlan="$2";
+  local _produOrNon="$3";
+  local _oldPlansts="$4";
+  local _oldPlanNam="$5";
+  local optionsLine;
+  local optionsNo;
+  local optionCmd;
+  local _timeFrame;
+  _timeFrame=$(date +%D);
+  if [[ "${_oldPlanNam}" == "_NO_PLAN_NAME_" ]]; then
+    _oldPlanNam=Legacy
+  fi
+  if [[ "${_produOrNon}" == Prod ]]; then
+    case "${_chkSegm}" in
+      *\.c|*\.cpp|*\.h|*\.hpp|*\.ypp|*\.l)
+        _commentMSG="// Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlansts^} ${_oldPlanNam} on ${_timeFrame}";
+        ;;
+      *\.mak)
+        _commentMSG="#  Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlansts^} ${_oldPlanNam} on ${_timeFrame}";
+        ;;
+      *\.sbt|*\.inc)
+        if [[ "${_oldPlansts}" == "fallback" ]]; then
+          _oldPlansts=fallbk
+        fi
+        _commentMSG=" /*Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlansts^} ${_oldPlanNam} on ${_timeFrame}*/";
+        ;;
+      *\.asm|*\.mac|*\.cpy)
+        _commentMSG="*  Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlansts^} ${_oldPlanNam} on ${_timeFrame}";
+        ;;
+      *\.xml|*\.xsd)
+        _commentMSG="<!--Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlansts^} ${_oldPlanNam} on ${_timeFrame}-->";
+        ;;
+      *\.pli)
+        if [[ "${_oldPlansts}" == "fallback" ]]; then
+          _oldPlansts=fallbk
+        fi
+        _commentMSG=" /*Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlansts^} ${_oldPlanNam} on ${_timeFrame}*/";
+        ;;
+    esac
+  elif [[ "${_produOrNon}" == Non-prod ]]; then
+    case "${_chkSegm}" in
+      *\.c|*\.cpp|*\.h|*\.hpp|*\.ypp|*\.l)
+        _commentMSG="// Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlanNam} on ${_timeFrame}";
+        ;;
+      *\.mak)
+        _commentMSG="#  Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlanNam} on ${_timeFrame}";
+        ;;
+      *\.sbt|*\.inc)
+        if [[ "${_oldPlansts}" == "fallback" ]]; then
+          _oldPlansts=fallbk
+        fi
+        _commentMSG=" /*Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlanNam} on ${_timeFrame}*/";
+        ;;
+      *\.asm|*\.mac|*\.cpy)
+        _commentMSG="*  Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlanNam} on ${_timeFrame}";
+        ;;
+      *\.xml|*\.xsd)
+        _commentMSG="<!--Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlanNam} on ${_timeFrame}-->";
+        ;;
+      *\.pli)
+        if [[ "${_oldPlansts}" == "fallback" ]]; then
+          _oldPlansts=fallbk
+        fi
+        _commentMSG=" /*Checked out to ${_newPlan^} from ${_produOrNon} ${_oldPlanNam} on ${_timeFrame}*/";
+        ;;
+    esac
+  fi
+  if [[ "${_chkSegm}" =~ \.sbt ]]; then
+    optionsLine=$(grep -n "^OPTIONS=" "${_chkSegm}" | tail -1);
+    if [ -n "${optionsLine// /}" ]; then
+      optionsNo=${optionsLine%%:*};
+      optionCmd=$((${optionsNo%%:*}+1));
+    else
+      optionCmd=1;
+    fi
+    sed -i "${optionCmd}i\\${_commentMSG}" "${_chkSegm// /}"; _RC=$?;
+  elif [[ "${_chkSegm}" =~ \.xml|\.xsd ]]; then
+    sed -i "2i\\${_commentMSG}" "${_chkSegm// /}"; _RC=$?;
+  else
+    sed -i "1i\\${_commentMSG}" "${_chkSegm// /}"; _RC=$?;
+  fi
+  if [ "${_RC}" -eq 0 ]; then
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Auto-comment added to ${_chkSegm// /} file RC:${_RC}"
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Auto-comment failed due to ${_chkSegm// /} file read error RC:${_RC}"
+    _RC="$EC"
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function is used to update comment by automatically
+# This is used by mtpgitcmdchkout.
+function buildVerify {
+  local _RC=0;
+  local _FC=0;
+  local _buildPath="${1%*/}";          #Trim trailing slash to avoid false return
+  local _fx;
+  local _findMAK;
+  local _fm;
+  local _fileName;
+  local _fileObje;
+  local _errFile;
+  pushd "${_buildPath}" &> /dev/null
+    for _fx in mak sbt asm cpp c
+    do
+      _findMAK=( $(find -type f -iname "*\.${_fx}") )
+      for _fm in "${_findMAK[@]}"
+      do
+        _fileName="${_fm##*/}"
+        _fileObje="${_fileName%%.*}"
+        if [[ "${_fx}" == mak ]]; then
+          find -type f -name "${_fileObje^^}\.so" -not -name "lib*" -not -path "*/lib/*" | grep "${_fileObje^^}\.so" &> /dev/null; _RC=$?;
+          if [ "${_RC}" -ne 0 ]; then
+            find -type f -name "${_fileObje^^}\.kpt" | grep "${_fileObje^^}\.kpt" &> /dev/null; _RC=$?;
+            if [ "${_RC}" -ne 0 ]; then
+              _errFile="${_fileName},${_errFile}"
+              _FC="$EC"
+            fi
+          fi
+        elif [[ "${_fx}" == sbt ]]; then
+          find -type f -name "${_fileObje}\.asm" | grep "sbtasm/${_fileObje}\.asm" &> /dev/null; _RC=$?;
+          if [ "${_RC}" -eq 0 ]; then
+            find -type f -name "${_fileObje}\.o" | grep "${_fileObje}\.o" &> /dev/null; _RC=$?;
+            if [ "${_RC}" -eq 0 ]; then
+              find -type f -name "${_fileObje^^}\.so" -not -name "lib*" -not -path "*/lib/*" | grep "${_fileObje^^}\.so" &> /dev/null; _RC=$?;
+              if [ "${_RC}" -ne 0 ]; then
+                find -type f -name "${_fileObje^^}\.kpt" | grep "${_fileObje^^}\.kpt" &> /dev/null; _RC=$?;
+                if [ "${_RC}" -ne 0 ]; then
+                  _errFile="${_fileName},${_errFile}"
+                  _FC="$EC"
+                fi
+              fi
+            else
+              _errFile="${_fileName},${_errFile}"
+              _FC="$EC"
+            fi
+          else
+            _errFile="${_fileName},${_errFile}"
+            _FC="$EC"
+          fi
+        else
+          _fileName="${_fm##*/}"
+          _fileObje="${_fileName%%.*}"
+          find -type f -name "${_fileObje}\.o" | grep "${_fileObje}\.o" &> /dev/null; _RC=$?;
+          if [ "${_RC}" -eq 0 ]; then
+            _fileResp=$(bash ${MTP_ENV}/mtpgitcmdchkmak ${_fileName} ${_buildPath##*/} ${_buildPath})
+            if [[ -z "${_fileResp// /}" ]] || [[ "${_fileResp}" == GENERIC ]]; then
+              find -type f -name "${_fileObje^^}\.so" -not -name "lib*" -not -path "*/lib/*" | grep "${_fileObje^^}\.so" &> /dev/null; _RC=$?;
+              if [ "${_RC}" -ne 0 ]; then
+                find -type f -name "${_fileObje^^}\.kpt" | grep "${_fileObje^^}\.kpt" &> /dev/null; _RC=$?;
+                if [ "${_RC}" -ne 0 ]; then
+                  _errFile="${_fileName},${_errFile}"
+                  _FC="$EC"
+                fi
+              fi
+            else
+              _fileObje="${_fileResp%%.*}"
+              find -type f -name "${_fileObje^^}\.so" -not -name "lib*" -not -path "*/lib/*" | grep "${_fileObje^^}\.so" &> /dev/null; _RC=$?;
+              if [ "${_RC}" -ne 0 ]; then
+                find -type f -name "${_fileObje^^}\.kpt" | grep "${_fileObje^^}\.kpt" &> /dev/null; _RC=$?;
+                if [ "${_RC}" -ne 0 ]; then
+                  _errFile="${_fileName},${_errFile}"
+                  _FC="$EC"
+                fi
+              fi
+            fi
+          else
+            _errFile="${_fileName},${_errFile}"
+            _FC="$EC"
+          fi
+        fi
+      done
+    done
+  popd &> /dev/null
+  if [ "${_FC}" -ne 0 ]; then
+    _RC="$EC"
+    echo -e "${_errFile%,*}"
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function is used to update comment by automatically in .mak file
+# This is used by developer workspace
+function makAutoComment {
+  local _RC=0
+  local _makFile;
+  local _mf;
+  local _segSrc;
+  local _sSegFile;
+  local _grepFile;
+  local _grFile;
+  local _gF;
+  local _replString;
+  local _grepString;
+  local _grepLine;
+  local _grepTemp;
+  local _findFile;
+  local _implSrc;
+  local _isrc;
+  local _imak;
+  local _ilno;
+  local _ptmp;
+  local _psrc;
+  local _impl;
+  local _rLine;
+  local _implPlan;
+  if [ -d "${USR_IMPL_CWRK}" ]; then
+    pushd "${USR_IMPL_CWRK}" &> /dev/null
+    _implPlan="${USR_IMPL_CWRK%/*}"
+    _implPlan="${_implPlan##*/}"
+    _implPlan="${_implPlan%_*}"
+    _segSrc=( $(find src/ -type f \( -name "*.c" -o -name "*.cpp" -o -name "*.asm" \) -not -path "./.git*") )
+    _RC=$?
+    if [ -n "${_segSrc[*]// /}" ] && [ "${_RC}" -eq 0 ]; then
+      _makFile=( $(find src/ -type f -name '*.mak' | grep -v '.gitref' | sort -u) )
+      _RC=$?
+      if [ -n "${_makFile[*]// /}" ] && [ "${_RC}" -eq 0 ]; then
+        sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_makFile[*]} RC:${_RC}"
+        for _mF in "${_makFile[@]}"
+        do
+          for _sSegFile in "${_segSrc[@]}"
+          do
+            git ls-files | grep -v ".git" | grep -w "${_sSegFile}" &> /dev/null; _RC=$?;
+            if [ "${_RC}" -eq 0 ]; then
+              _grepFile=$(grep -nP '^(?!#)' "${_mF}"| grep -Fw ${_sSegFile##*/})
+              _RC=$?
+              if [ -n "${_grepFile[*]// /}" ] && [ "${_RC}" -eq 0 ] && [[ ! "${_grepFile:62}" == "${USR_IMPL_PLAN}" ]]; then
+                #sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_grepFile[*]// / } RC:${_RC}"
+                IFS=$'\n' read -r -a _grFile <<< "${_grepFile[*]}"
+                for _gF in "${_grFile[@]}"
+                do
+                  if [[ "${_gF}" =~ SRC ]]; then
+                    _replString="${_gF#*:}"
+                    _replString="${_replString%#*}"
+                    _replString=$(printf "%-61s%-0s#${_implPlan,,}\n" "${_replString}")
+                    _grepString="${_gF// /}"
+                    _grepLine="${_grepString%%:*}"
+                    _grepTemp="${_grepString#*=}"
+                    _grepPlan="${_grepTemp#*\#}"
+                    _grepTemp="${_grepTemp%#*}"
+                    _grepTemp="${_grepTemp}"
+                    if [[ "${_grepTemp}" =~ \.asm ]]; then
+                      _grepTemp="${_grepTemp%.asm*}.asm"
+                    elif [[ "${_grepTemp}" =~ \.cpp ]]; then
+                      _grepTemp="${_grepTemp%.cpp*}.cpp"
+                    elif [[ "${_grepTemp}" =~ \.c ]]; then
+                      _grepTemp="${_grepTemp%.c*}.c"
+                    fi
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:${_grepTemp} RC:${_RC}"
+                    _findFile=$(find . -type f -name "${_grepTemp}" | grep -v '.gitref' | sort -u)
+                    # shellcheck disable=SC2076
+                    if [ -n "${_findFile// /}" ] && [[ "${_findFile}" =~ "${_grepTemp}" ]]; then
+                      sed -i "${_grepLine}d" "${_mF}"
+                      sed -i "${_grepLine}i ${_replString}" "${_mF}"
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Updated line number ${_grepLine} in ${_mF} file RC:${_RC}"
+                    fi
+                  fi
+                done
+              fi
+            fi
+          done
+        done
+      fi
+      _implSrc=( $(find . -type f -iname "*.mak" -exec egrep -n "\#${_implPlan,,}" {} + | tr -d ' ') )
+      _RC=$?
+      if [ -n "${_implSrc[*]// /}" ] && [ "${_RC}" -eq 0 ]; then
+        for _isrc in "${_implSrc[@]}"
+        do
+          _isrc="${_isrc//\#/:}"
+          _imak="$(awk -F ':' '{print $1}' <<< ${_isrc})"
+          _imak="${_imak#*/}"
+          _ilno="$(awk -F ':' '{print $2}' <<< ${_isrc})"
+          _ptmp="$(awk -F '=' '{print $2}' <<< ${_isrc})"
+          _psrc="${_ptmp%:*}"
+          _impl="${_ptmp#*:}"
+          if [ ! -f "./src/${_psrc}" ]; then
+            _rLine=$(git log --format=format:%H ${_imak} | xargs -L 1 git blame ${_imak} | grep -w "${_psrc}" | tail -1)
+            _rLine="${_rLine#*\) }"
+            sed -i "${_ilno}d" "./${_imak}"
+            sed -i "${_ilno}i ${_rLine}" "./${_imak}"
+            sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Restored line number ${_ilno} in ${_mF} file RC:${_RC}"
+          fi
+        done
+      fi
+      git commit -m "Auto comments has been added by automation" *.mak &> /dev/null
+    fi
+    popd &> /dev/null
+    _RC="${RC}"
+  fi
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function is used to restore comment by automatically in .mak file
+# This is used by developer workspace
+function makRestoreComment {
+  local _RC=0;
+  local _resData="$1";              #src/asae.mak:29:CXX_SRC:=asae.cpp#d1900288
+  local _makFile="${_resData%%:*}"; #src/asae.mak
+  local _makData="${_resData#*:}";  #29:CXX_SRC:=asae.cpp#d1900288
+  local _imak;
+  local _ilno;
+  local _ptmp;
+  local _psrc;
+  _resData="${_resData//\#/:}";     #src/asae.mak:29:CXX_SRC:=asae.cpp:d1900288
+  _imak="$(awk -F ':' '{print $1}' <<< ${_resData})"; #src/asae.mak
+  _makFile="${_imak#*/}";           #asae.mak
+  _ilno="$(awk -F ':' '{print $2}' <<< ${_resData})"; #29
+  _ptmp="$(awk -F '=' '{print $2}' <<< ${_resData})"; #asae.cpp:d1900288
+  _psrc="${_ptmp%:*}";              #asae.cpp
+  if [[ "${_psrc}" =~ \.asm ]]; then
+    _psrc="${_psrc%.asm*}.asm"
+  elif [[ "${_psrc}" =~ \.cpp ]]; then
+    _psrc="${_psrc%.cpp*}.cpp";     #asae.cpp
+  elif [[ "${_psrc}" =~ \.c ]]; then
+    _psrc="${_psrc%.c*}.c"
+  fi
+  _impl="${_ptmp#*:}";              #d1900288
+  if [ ! -f "src/${_psrc}" ]; then
+    _rLine=$(git log --format=format:%H ${_imak} | xargs -L 1 git blame ${_imak} | grep -w "${_psrc}" | tail -1)
+    _rLine="${_rLine#*\) }"
+    sed -i "${_ilno}d" "./${_imak}"
+    sed -i "${_ilno}i ${_rLine}" "./${_imak}"
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Restored line number ${_ilno} in ${_makFile} file RC:${_RC}"
+  fi
+  git commit -m "${USR_ACT_BRANCH} - Auto comments has been restored by automation" "${_imak}" &> /dev/null
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# This function is used to auto-comment by automatically in .mak file
+# This is used by developer workspace
+function makAutoComment {
+  local _RC=0;
+  local _resData="${1}";            #src/asae.mak:29:CXX_SRC:=asae.cpp  #d1900288
+  local _makFile="${_resData%%:*}"; #src/asae.mak
+  local _makData="${_resData#*:}";  #29:CXX_SRC:=asae.cpp#d1900288
+  local _imak;
+  local _ilno;
+  local _ptmp;
+  local _psrc;
+  #_imak="$(awk -F ':' '{print $1}' <<< ${_resData})"; #src/asae.mak
+  _imak="${_resData%%:*}"
+  _makFile="${_imak#*/}";           #asae.mak
+  _resData="${_resData#*:}"
+  #_ilno="$(awk -F ':' '{print $2}' <<< ${_resData})"; #29
+  _ilno="${_resData%%:*}"
+  _resData="${_resData#*:}"
+  #_resData="$(awk -F ':' '{print $3}' <<< ${_resData})"; #CXX_SRC:=asae.cpp  #d1900288
+  _padData="${_resData}";
+  _ptmp="$(awk -F '=' '{print $2}' <<< ${_resData})"; #asae.cpp:d1900288
+  _psrc="${_ptmp%:*}";              #asae.cpp
+  if [[ "${_psrc}" =~ \.asm ]]; then
+    _psrc="${_psrc%.asm*}.asm"
+    _psrc="${_psrc// /}"
+  elif [[ "${_psrc}" =~ \.cpp ]]; then
+    _psrc="${_psrc%.cpp*}.cpp";     #asae.cpp
+    _psrc="${_psrc// /}"
+  elif [[ "${_psrc}" =~ \.c ]]; then
+    _psrc="${_psrc%.c*}.c"
+    _psrc="${_psrc// /}"
+  fi
+  _impl="${_ptmp#*:}";              #d1900288-May not required this line
+  if [ -f "src/${_psrc}" ]; then
+    #_rLine="$(printf "%-61s%-0s#${USR_IMPL_PLAN}\n" "$(grep ${_resData}")"
+    #_rLine=$(printf "%-61s%-0s#${USR_IMPL_PLAN}\n" "$(grep -vnP '^(?|#)' "./${_imak}" | grep -w "${_resData}" | grep -Fw ${_psrc})")
+    #_rLine=$(grep -vnP '^(?|#)' "./${_imak}" | grep -w "${_resData}" | grep -Fw ${_psrc})
+    #_rLine="${_rLine#*\) }"
+    sed -i "${_ilno}d" "./${_imak}"
+    sed -i "${_ilno}i $(printf "%-70s" ${_padData})" "./${_imak}"
+    sed -i "${_ilno}s/^\(.\{61\}\).\(.*\)/\1\#${USR_IMPL_PLAN}/" "./${_imak}";
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Updated line number ${_ilno} in ${_makFile} file RC:${_RC}"
+  fi
+  git commit -m "${USR_ACT_BRANCH} - Auto comments has been added by automation" "${_imak}" &> /dev/null
+  return "${_RC}"
+}
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

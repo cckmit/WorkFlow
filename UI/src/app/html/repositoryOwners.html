@@ -1,0 +1,131 @@
+<section class="content-header">
+    </section>
+    <style>
+        td {
+            overflow: hidden;
+            /* this is what fixes the expansion */
+            text-overflow: ellipsis;
+            /* not supported in all browsers, but I accepted the tradeoff */
+            white-space: nowrap;
+            max-width: 200px;
+        }
+    </style>
+    <!-- Main content -->
+    <section class="content scrollingFunction" id="scroll_function">
+        <div class="col-md-12 animated slideInLeft ">
+            <div class="row">
+                <div class="well well-sm" style="background-color:#fff;min-height:400px">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <button type="button" class="btn refreshButton" ng-click="refresh()"
+                                aria-label="refreshFreezeDate"><i class="fa fa-refresh"></i>
+                                Refresh
+                            </button>
+                        </div>
+                        <div class="col-md-6" ng-if="repoTableList.length > 0">
+                            <div class="col-md-12 leadTotalCount">
+                                <span > Total number of items: <span class="templateCountSize"> {{vm.totalNumberOfItem}}</span> </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row" style="margin: 10px 0px;" ng-if="repoTableList.length !== 0">
+                        <div class="col-md-12">
+                            <div ng-if="repoTableList.length !== 0" class="row">
+                                <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                                <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}" ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePaginationRepo">
+                                    </dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div ng-if="repoTableList.length == 0"
+                                style="background-color:#fff;text-align:center;font-size:20px;padding:100px 0px;">
+                                <b>No data found</b>
+                            </div>
+                            <table id="repositoryOwnersTable" class="table" ng-if="repoTableList.length > 0"
+                                style="border-color:rgba(187, 187, 187, 0.17);">
+                                <thead>
+                                    <tr class="tableHeader alignText">
+                                        <th>Platform</th>
+                                        <th>Functional Package</th>
+                                        <th>Description</th>
+                                        <th>Functional Package Owners</th>
+                                        <th ng-if="showAction()">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="repoOwner">
+                                    <!--ng-repeat="iList in vm.implList[impPlan.planid]"-->
+    
+                                    <tr dir-paginate="repoObj in repoTableList | filter: q | itemsPerPage: tableConfig.pageSize"
+                                        total-items="tableConfig.totalItems" current-page="tableConfig.currentPage"
+                                        pagination-id="tablePaginationRepo" class="hoverCurrentRow"
+                                        style="text-align:center;">
+                                        <td>{{repoObj.repository.trimmedName.split('/')[1] == 'DL' ? 'Delta' : 'Travelport'}}
+                                        </td>
+                                        <!-- <td ng-if="showAction()">{{repoObj.repository.trimmedName | getRepoName}}</td> -->
+                                        <td><a><span
+                                                    ng-click="openModelrepoName($event, repoObj)">{{repoObj.repository.trimmedName | getRepoName}}</span><a>
+                                        </td>
+                                        <td>{{repoObj.repository.description}}</td>
+                                        <td>
+                                            <span ng-repeat="ownerId in repoObj.repository.owners">
+                                                <span ng-if="repoOwnersMapList[ownerId]">
+                                                    {{repoOwnersMapList[ownerId].displayName}}
+                                                </span><span class="text-danger" ng-if="!repoOwnersMapList[ownerId]">
+                                                    {{ownerId}}
+                                                </span><span ng-if="(repoObj.repository.owners.length-1) != $index">,</span>
+                                            </span>
+                                        </td>
+                                        <td ng-if="showAction()">
+                                            <button type="button" class="btn btn-default btn-sm themeButton"
+                                                ng-click="updateRepoInfo($event,repoObj)" aria-label="updateRepoInfo">
+                                                <i class="fa fa-edit"></i>
+                                                <md-tooltip md-direction='top'>Edit</md-tooltip>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+    
+                    <div class="row" style="margin: 10px 0px;" ng-if="repoTableList.length !== 0">
+                        <div class="col-md-12">
+                            <div ng-if="repoTableList.length !== 0" class="row">
+                                <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem < pageSizeList[0]"></div>
+                                <div class="col-md-3" style="display: inline-flex;" ng-show="vm.totalNumberOfItem >= pageSizeList[0]">
+                                    <span style="padding: 10px;">Show</span>
+                                    <select class="form-control" style="padding:10px;width: 40%;"
+                                        ng-change="switchPageSize()" ng-model="tableConfig.pageSize">
+                                        <option value="{{psVal}}" ng-selected="{{psVal==tableConfig.pageSize}}" ng-repeat="psVal in pageSizeList">{{psVal}}</option>
+                                    </select>
+                                    <span style="padding:10px">entries</span>
+                                </div>
+                                <div class="col-md-3"></div>
+                                <div class="col-md-6">
+                                    <dir-pagination-controls boundary-links="true"
+                                        on-page-change="pageChangeHandler(newPageNumber)"
+                                        pagination-id="tablePaginationRepo">
+                                    </dir-pagination-controls>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>

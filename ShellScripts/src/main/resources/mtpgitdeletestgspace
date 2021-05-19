@@ -1,0 +1,78 @@
+#!/bin/bash
+# shellcheck disable=SC1090,SC2115
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitdeletestgspace                                         #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to archive and delete STG workspace on rejection                #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Implementation plan name with core                               #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   07032018    ARUL    Created the script                                    #
+#   04222019    ARUL    Updated with logger support                           #
+#*****************************************************************************#
+#unset MTP_ENV                          #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=1;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+ImplPlanId="$1";                       #Read implementation plan id
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${ImplPlanId} RC:$RC"
+#-----------------------------------------------------------------------------#
+#
+#-----------------------------------------------------------------------------#
+#Start main execution if validation success
+if [ "$RC" -eq 0 ]; then
+  if [ -d "${STG_TPF_APP}/${ImplPlanId}" ]; then #NON-IBM STG Workspace
+    [ -d "${ARC_STG_APP}/${ImplPlanId}/" ] && rm -rf "${ARC_STG_APP}/${ImplPlanId}/" &> /dev/null
+    mkdir -p "${ARC_STG_APP}" &> /dev/null
+    cp -fr --preserve=all "${STG_TPF_APP}/${ImplPlanId}/" "${ARC_STG_APP}/" &> /dev/null
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:NON-IBM archive ${ARC_STG_APP}/${ImplPlanId}/ RC:$?"
+    rm -rf "${STG_TPF_APP}/${ImplPlanId}/" &> /dev/null
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:NON-IBM workspace deleted RC:$?"
+  fi
+  if [ -d "${STG_TPF_SYS}/${ImplPlanId}" ]; then #IBM STG Workspace
+    [ -d "${ARC_STG_SYS}/${ImplPlanId}/" ] && rm -rf "${ARC_STG_SYS}/${ImplPlanId}/" &> /dev/null
+    mkdir -p "${ARC_STG_SYS}" &> /dev/null
+    cp -fr --preserve=all "${STG_TPF_SYS}/${ImplPlanId}/" "${ARC_STG_SYS}/" &> /dev/null
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:IBM archive ${ARC_STG_SYS}/${ImplPlanId}/ RC:$?"
+    rm -rf "${STG_TPF_SYS}/${ImplPlanId}/" &> /dev/null
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:IBM workspace deleted RC:$?"
+  fi
+  if [ -d "${STG_TPF_LOD}/${ImplPlanId}" ]; then #Loadset STG Workspace
+    [ -d "${ARC_STG_LOD}/${ImplPlanId}/" ] && rm -rf "${ARC_STG_LOD}/${ImplPlanId}/" &> /dev/null
+    mkdir -p "${ARC_STG_LOD}" &> /dev/null
+    cp -fr --preserve=all "${STG_TPF_LOD}/${ImplPlanId}/" "${ARC_STG_LOD}/" &> /dev/null
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Loadsets archive ${ARC_STG_LOD}/${ImplPlanId}/ RC:$?"
+    rm -rf "${STG_TPF_LOD}/${ImplPlanId}/" &> /dev/null
+    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Loadsets workspace deleted RC:$?"
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${ImplPlanId} RC:$RC"
+exit "$RC"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

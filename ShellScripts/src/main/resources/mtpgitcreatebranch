@@ -1,0 +1,249 @@
+#!/bin/bash
+#*****************************************************************************#
+#   SCRIPT NAME: mtpgitcreatebranches                                         #
+#                                                                             #
+#   DESCRIPTION:                                                              #
+#      Script to create branches for production repositories at gitblit       #
+#                                                                             #
+#   NOTE: Don't alter CONSOLE messages                                        #
+#                                                                             #
+#   INPUT:                                                                    #
+#      $1  - Branch Name with comma seprator (Ex: WSP,APO,AIR)                #
+#                                                                             #
+#   OUTPUT:                                                                   #
+#      exit with 0, successfull process                                       #
+#      exit with 8, error message                                             #
+#                                                                             #
+#*****************************************************************************#
+#*****************************************************************************#
+#                                                                             #
+#                            M A I N T E N A N C E                            #
+#                                                                             #
+#-----------------------------------------------------------------------------#
+#   MMDDYYYY    INIT    COMMENT                                               #
+#   --------    ----    ------------------------------------------------------#
+#   09082018    VINOTH  Branch Creation for Repositories                      #
+#   09302018    VINOTH  SSL verify fix                                        #
+#*****************************************************************************#
+#unset MTP_ENV                         #DEBUG
+#source "${MTP_ENV:=$PWD}/.mtpconfig"
+# shellcheck disable=1090,SC2164
+source "${MTP_ENV:=$PWD}/mtplibrary"
+#-----------------------------------------------------------------------------#
+declare -i _ExIP=3;                    #Expected number of input parms
+declare -i _ReIP="$#";                 #Received number of input parms
+#
+BranchName="$1"                        #Read branch names for Prod Repo
+CompShortCode="$2";                    #Read company short code from input
+PackageName="$3";                      #Read package name from input
+#
+SPID=$$; #To get process id of the script
+SPNM=$0; #To get script name
+minInputValidation "${_ExIP}" "${_ReIP}"; RC="$?";
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Start ${BranchName} ${CompShortCode} ${PackageName} RC:$RC"
+#
+#-----------------------------------------------------------------------------#
+SrcRepoName="nonibm_${PackageName}.git";
+BinRepoName="derived_${PackageName}.git";
+SrcProdRepo="tpf/${CompShortCode}/nonibm/${SrcRepoName}";
+BinProdRepo="tpf/${CompShortCode}/nonibm/${BinRepoName}";
+#------------------SOURCE BRANCH CREATION-------------------------------------#
+function gitSourcebranch {
+  if [ -n "${BranchName[0]// /}" ]; then # GIT branch creation for source repo
+    if [ ! -d "/home/mtpservice/BRANCHADD/${CompShortCode}" ]; then
+      mkdir -p "/home/mtpservice/BRANCHADD/${CompShortCode}"
+    fi
+    if [ "${CompShortCode}" == tp ] || [ "${CompShortCode}" == dl ]; then
+      pushd "/home/mtpservice/BRANCHADD/${CompShortCode}" &> /dev/null
+        if [[ "${SrcProdRepo}" =~ "nonibm_" ]]; then
+          GIT_SSL_NO_VERIFY=true git clone "${PRD_BIN_RURL}/gitblit/r/${SrcProdRepo}" "${SrcRepoName}"; _RC=$?;
+          if [ "${_RC}" -eq 0 ]; then
+            pushd "${SrcRepoName}" &> /dev/null
+              IFS=',' read -r -a _cores <<< "${BranchName[@]}"
+              for SourceCore in "${_cores[@]}";
+              do
+                if [[ "${SourceCore}" == +($REF_T4_CORE) ]] || [[ "${SourceCore}" == +($REF_WS_CORE) ]] || [[ "${SourceCore}" == +($REF_DL_CORE) ]] ; then
+                  git branch -a | grep "master_${SourceCore}" ; _RC=$?;
+                  if [ "${_RC}" -ne 0 ]; then
+                    git branch -a | grep master | grep -v master_ ; _RC=$?
+                    if [ "${_RC}" -ne 0 ]; then
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:PROD REPOSITORY INITIALIZED > README.md RC:$_RC"
+                      echo "PROD REPOSITORY INITIALIZED" > README.md
+                      git init -q
+                      git add --all
+                      git commit -am "PROD REPOSITORY INITIALIZED"
+                      GIT_SSL_NO_VERIFY=true git push -u origin "master" --tags; _RC=$?;
+                        if [ "${_RC}" -eq 0 ]; then
+                          git checkout -b "master_${SourceCore}";
+                          mkdir "src" "macro" "include" "dataset" "command" "cp" "system_config" "other" "unknown"
+                          touch src/.gitignore macro/.gitignore include/.gitignore dataset/.gitignore command/.gitignore cp/.gitignore
+                          touch system_config/.gitignore other/.gitignore unknown/.gitignore
+                          git add --all
+                          git commit -am "SOURCE DIRECTORY INITIALIZED"
+                          GIT_SSL_NO_VERIFY=true git push -u origin "master_${SourceCore}" --tags &> /dev/null; _RC=$?;
+                            if [ "${_RC}" -ne 0 ]; then
+                              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to push master_${SourceCore} branch to remote url RC:$EC"
+                              echo -e "\\nERROR: Unable to push master_${SourceCore} branch to remote url."
+                              _RC="${EC}";
+                            fi
+                        else
+                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to push master branch to remote url RC:$EC"
+                          echo -e "\\nERROR: Unable to push master branch to remote url."
+                          _RC="${EC}";
+                        fi
+                    else
+                      git checkout -b "master_${SourceCore}";
+                      mkdir "src" "macro" "include" "dataset" "command" "cp" "system_config" "other" "unknown"
+                      touch src/.gitignore macro/.gitignore include/.gitignore dataset/.gitignore command/.gitignore cp/.gitignore
+                      touch system_config/.gitignore other/.gitignore unknown/.gitignore
+                      git add --all
+                      git commit -am "SOURCE DIRECTORY INITIALIZED"
+                      GIT_SSL_NO_VERIFY=true git push -u origin "master_${SourceCore}" &> /dev/null; _RC=$?;
+                      if [ "${_RC}" -ne 0 ]; then
+                        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to push master_${SourceCore} branch to remote url RC:$EC"
+                        echo -e "\\nERROR: Unable to push master_${SourceCore} branch to remote url."
+                        _RC="${EC}";
+                      fi
+                    fi
+                  else
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Branch already present in git repository RC:$RC"
+                    echo -e "INFO: Branch already present in git repository"
+                    GIT_SSL_NO_VERIFY=true git pull -u origin "master_${SourceCore}" &> /dev/null; _RC=$?;
+                    GIT_SSL_NO_VERIFY=true git push -u origin "master_${SourceCore}" --tags &> /dev/null; _RC=$?;
+                  fi
+                else
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invaild Target system selected to create branch - ${SourceCore} RC:$EC"
+                  echo -e "ERROR: Invaild Target system selected to create branch - ${SourceCore}"
+                  _RC="${EC}";
+                fi
+              done
+              unset IFS
+            popd &> /dev/null
+            if [ -d "${SrcRepoName}" ]; then
+              rm -rf "${SrcRepoName}";
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git clone Failed for ${SrcProdRepo} RC:$EC"
+            echo -e "ERROR: Git clone Failed for ${SrcProdRepo}" ;_RC=${EC};
+          fi
+        fi
+      popd &> /dev/null
+    else
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Invaild Company Short code while creation Branch RC:$RC"
+      echo -e "INFO: Invaild Company Short code while creation Branch"
+    fi
+  fi
+  return "$_RC";
+}
+#---------------------------DERIVED GIT BRANCH CREATE #
+function gitDerivedBranch {
+  if [ -n "${BranchName// /}" ]; then # GIT branch creation for derived repo
+    if [ ! -d "/home/mtpservice/BRANCHADD/${CompShortCode}" ]; then
+      mkdir -p "/home/mtpservice/BRANCHADD/${CompShortCode}"
+    fi
+    if [ "${CompShortCode}" == tp ] || [ "${CompShortCode}" == dl ]; then
+      pushd "/home/mtpservice/BRANCHADD/${CompShortCode}" &> /dev/null
+        if [[ "${BinProdRepo}" =~ "derived_" ]]; then
+          GIT_SSL_NO_VERIFY=true git clone "${PRD_BIN_RURL}/gitblit/r/${BinProdRepo}" "${BinRepoName}"; _RC=$?;
+          if [ "${_RC}" -eq 0 ]; then
+            pushd "${BinRepoName}" &> /dev/null
+              IFS=',' read -r -a _cores <<< "${BranchName[@]}"
+              for SourceCore in "${_cores[@]}";
+              do
+                if [[ "${SourceCore}" == +($REF_T4_CORE) ]] || [[ "${SourceCore}" == +($REF_WS_CORE) ]] || [[ "${SourceCore}" == +($REF_DL_CORE) ]] ; then
+                  git branch -a | grep "master_${SourceCore}" ; _RC=$?;
+                  if [ "${_RC}" -ne 0 ]; then
+                    git branch -a | grep master | grep -v master_ ; _RC=$?
+                    if [ "${_RC}" -ne 0 ]; then
+                      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:PROD REPOSITORY INITIALIZED > README.md RC:$_RC"
+                      echo "PROD REPOSITORY INITIALIZED" > README.md
+                      git init -q
+                      git add --all
+                      git commit -am "PROD REPOSITORY INITIALIZED"
+                      GIT_SSL_NO_VERIFY=true git push -u origin "master" --tags; _RC=$?;
+                        if [ "${_RC}" -eq 0 ]; then
+                          git checkout -b "master_${SourceCore}";
+                          mkdir -p build lib load lst obj derived/lib derived/load derived/lst derived/obj derived/sbtasm derived/tpfarc
+                          touch build/.gitignore lib/.gitignore load/.gitignore lst/.gitignore obj/.gitignore derived/.gitignore derived/lib/.gitignore
+                          touch derived/load/.gitignore derived/lst/.gitignore derived/obj/.gitignore derived/sbtasm/.gitignore derived/tpfarc/.gitignore
+                          git add --all
+                          git commit -am "DERIVED DIRECTORY INITIALIZED"
+                          GIT_SSL_NO_VERIFY=true git push -u origin "master_${SourceCore}" --tags &> /dev/null; _RC=$?;
+                            if [ "${_RC}" -ne 0 ]; then
+                              sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to push master_${SourceCore} branch to remote url RC:$EC"
+                              echo -e "\\nERROR: Unable to push master_${SourceCore} branch to remote url."
+                              _RC="${EC}";
+                            fi
+                        else
+                          sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to push master branch to remote url RC:$EC"
+                          echo -e "\\nERROR: Unable to push master branch to remote url."
+                          _RC="${EC}";
+                        fi
+                    else
+                      git checkout -b "master_${SourceCore}";
+                      mkdir -p build lib load lst obj derived/lib derived/load derived/lst derived/obj derived/sbtasm derived/tpfarc
+                      touch build/.gitignore lib/.gitignore load/.gitignore lst/.gitignore obj/.gitignore derived/.gitignore derived/lib/.gitignore
+                      touch derived/load/.gitignore derived/lst/.gitignore derived/obj/.gitignore derived/sbtasm/.gitignore derived/tpfarc/.gitignore
+                      git add --all
+                      git commit -am "DERIVED DIRECTORY INITIALIZED"
+                      GIT_SSL_NO_VERIFY=true git push -u origin "master_${SourceCore}" &> /dev/null; _RC=$?;
+                      if [ "${_RC}" -ne 0 ]; then
+                        sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Unable to push master_${SourceCore} branch to remote url. RC:$EC"
+                        echo -e "\\nERROR: Unable to push master_${SourceCore} branch to remote url."
+                        _RC="${EC}";
+                      fi
+                    fi
+                  else
+                    sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Branch already present in git repository RC:$RC"
+                    echo -e "INFO: Branch already present in git repository"
+                    GIT_SSL_NO_VERIFY=true git pull -u origin "master_${SourceCore}" &> /dev/null; _RC=$?;
+                    GIT_SSL_NO_VERIFY=true git push -u origin "master_${SourceCore}" --tags &> /dev/null; _RC=$?;
+                  fi
+                else
+                  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invaild Target system selected to create branch - ${SourceCore} RC:$EC"
+                  echo -e "ERROR: Invaild Target system selected to create branch - ${SourceCore}"
+                  _RC="${EC}";
+                fi
+              done
+              unset IFS
+            popd &> /dev/null
+            if [ -d "${BinRepoName}" ]; then
+              rm -rf "${BinRepoName}"
+            fi
+          else
+            sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Git clone Failed for ${BinProdRepo} RC:$EC"
+            echo -e "ERROR: Git clone Failed for ${BinProdRepo}" ;_RC=${EC};
+          fi
+        fi
+      popd &> /dev/null
+    else
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:Invaild Company Short code while creation Branch RC:$RC"
+      echo -e "INFO: Invaild Company Short code while creation Branch"
+    fi
+  fi
+}
+#------------------------------MAIN PROGRAM-----------------------------------#
+#Start main execution if validation success
+if [ "${RC}" -eq 0 ]; then
+  gitSourcebranch; RC=$?;
+  if [ "${RC}" -eq 0 ]; then
+    gitDerivedBranch; RC=$?
+    if [ "${RC}" -ne 0 ]; then
+      sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:GIT Derived Branch creation failed. RC:$EC"
+      echo -e "ERROR: GIT Derived Branch creation failed."
+    elif [ "${RC}" -eq 0 ]; then
+      sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:GIT Derived Branch creation success RC:$RC"
+      echo -e "INFO: GIT Derived Branch creation success."
+    fi
+  else
+    sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:GIT Source Branch creation failed RC:$EC"
+    echo -e "ERROR: GIT Source Branch creation failed."
+  fi
+else
+  sendLOG "ERROR" "pid[${SPID}]" "${SPNM##*/}:Invalid inputs RC:$RC"
+fi
+#-----------------------------------------------------------------------------#
+sendLOG "INFO" "pid[${SPID}]" "${SPNM##*/}:END ${BranchName} ${CompShortCode} ${PackageName} RC:$RC"
+exit "${RC}"
+#-----------------------------------------------------------------------------#
+# vim: filetype=bash

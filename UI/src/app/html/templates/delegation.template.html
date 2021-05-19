@@ -1,0 +1,56 @@
+<md-dialog aria-label="dbcr" style="width:30%">
+    <form ng-cloak>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2 style="color:#fff;">
+                    <i class="fa fa-share"></i> Delegation Settings
+                </h2>
+                <span flex></span>
+            </div>
+        </md-toolbar>
+
+        <md-dialog-content>
+            <div class="md-dialog-content padding-bottom-none">
+                <div class="row">
+                    <div class="col-md-4">
+                        <label style="padding: 10px 0px;"> Delegate to </label>
+                    </div>
+                    <div class="col-md-8">
+                        <select name="delegateUsersList" ng-disabled="dl.delegation_disabled" ng-model="dl.delegateUser" id="delegateUsersList" class="form-control" aria-label="delegateUsersList">
+                                    <option value="{{dulObj.id}}"
+                                            ng-repeat="dulObj in dl.delegateUsersList"
+                                            ng-selected="dulObj.id == dl.delegateUser">
+                                        {{ dulObj.displayName }}
+                                    </option>
+                                </select>
+                    </div>
+                </div>
+                <br/>
+                <div class="row">
+                    <div class="col-md-4">
+                        <label> Status </label>
+                    </div>
+                    <div class="col-md-8">
+                        <md-radio-group ng-model="dl.delegateStatus" layout="row">
+                            <md-radio-button value="1" class="md-primary">On</md-radio-button>
+                            <md-radio-button value="0"> Off </md-radio-button>
+                        </md-radio-group>
+                    </div>
+                </div>
+                <br/>
+            </div>
+        </md-dialog-content>
+
+        <md-dialog-actions layout="row">
+            <!-- <div class="flex-2" style="justify-content: flex-start">
+                <p style="color:#aaa;">*Note</p>
+            </div> -->
+            <md-button ng-click="cancel('useful')">
+                Close
+            </md-button>
+            <md-button class="md-primary" ng-click="saveDelegation()">
+                Save Changes
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>
